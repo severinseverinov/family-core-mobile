@@ -1,30 +1,32 @@
 {
   "expo": {
-    "name": "FamilyCoreMobile",
-    "slug": "FamilyCoreMobile",
+    "name": "FamilyCore",
+    "slug": "familycoremobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.familycore.mobile",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "package": "com.familycore.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "scheme": "familycore"
   }
 }

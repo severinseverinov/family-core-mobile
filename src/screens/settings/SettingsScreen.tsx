@@ -1,0 +1,33 @@
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
+
+export default function SettingsScreen() {
+  const { t } = useTranslation();
+  
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>{t('Settings.title')}</Text>
+      <Text style={styles.subtitle}>{t('Common.comingSoon') || 'Coming soon...'}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+  },
+});
+
