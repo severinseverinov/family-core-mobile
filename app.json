@@ -11,10 +11,12 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.familycore.mobile",
+      "bundleIdentifier": "com.sevginserbest.familycoremobile",
       "usesAppleSignIn": true
     },
     "android": {
@@ -22,11 +24,16 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.familycore.mobile"
+      "package": "com.sevginserbest.familycoremobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "familycore"
+    "scheme": "familycore",
+    "extra": {
+      "eas": {
+        "projectId": "17d349dd-a015-4f47-84fe-e436082dbf22"
+      }
+    }
   }
 }

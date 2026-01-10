@@ -171,9 +171,7 @@ export async function signInWithApple() {
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
         AppleAuthentication.AppleAuthenticationScope.EMAIL,
       ],
-    });
-
-    if (!credential.identityToken) {
+    });    if (!credential.identityToken) {
       return { error: "Apple Sign In failed - no identity token" };
     }
 
@@ -199,9 +197,7 @@ export async function signInWithApple() {
           },
         });
       }
-    }
-
-    return { data, error: null };
+    }    return { data, error: null };
   } catch (error: any) {
     if (error.code === "ERR_CANCELED") {
       return { error: "Apple Sign In was cancelled" };
