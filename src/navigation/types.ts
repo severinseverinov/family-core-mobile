@@ -2,6 +2,7 @@ export type RootStackParamList = {
   Auth: undefined;
   Login: undefined;
   SignUp: undefined;
+  JoinFamily: undefined;
   Join: { token?: string };
   Main: undefined;
   Dashboard: undefined;
@@ -18,4 +19,3 @@ export type MainTabParamList = {
   Pets: undefined;
   Kitchen: undefined;
 };
-

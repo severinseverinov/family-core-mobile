@@ -1,104 +1,166 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
+  TextInput,
+  TouchableOpacity,
   StyleSheet,
   Alert,
   ActivityIndicator,
-} from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
-import { useTranslation } from 'react-i18next';
-import { RootStackParamList } from '../../navigation/types';
-import { supabase } from '../../services/supabase';
-
-type JoinScreenRouteProp = RouteProp<RootStackParamList, 'Join'>;
-type JoinScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Join'>;
+} from "react-native";
+import { useTheme } from "../../contexts/ThemeContext"; // Temanızı kullanıyoruz
+import { createFamily, getUserFamilyProfile } from "../../services/family";
+import { supabase } from "../../services/supabase";
 
 export default function JoinScreen() {
-  const { t } = useTranslation();
-  const route = useRoute<JoinScreenRouteProp>();
-  const navigation = useNavigation<JoinScreenNavigationProp>();
-  const [loading, setLoading] = useState(true);
-  const token = route.params?.token;
+  const { colors } = useTheme();
+  const [familyName, setFamilyName] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!token) {
-      Alert.alert(t('Common.error'), t('Common.invalidToken') || 'Invalid token');
-      navigation.navigate('Login');
+  const handleCreateFamily = async () => {
+    if (!familyName) {
+      Alert.alert("Hata", "Lütfen bir aile ismi giriniz.");
       return;
     }
 
-    handleJoinFamily();
-  }, [token]);
+    setLoading(true);
+    const { error } = await createFamily(familyName);
 
-  const handleJoinFamily = async () => {
-    try {
-      const { data: invitation, error: inviteError } = await supabase.rpc(
-        'get_invitation_by_token',
-        { token_input: token }
-      );
-
-      if (inviteError || !invitation || invitation.length === 0) {
-        Alert.alert(t('Common.error'), t('Common.invalidInvitation') || 'Invalid invitation');
-        navigation.navigate('Login');
-        return;
-      }
-
-      const invite = invitation[0];
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        Alert.alert(t('Common.error'), t('Common.pleaseLogin') || 'Please login first');
-        navigation.navigate('Login');
-        return;
-      }
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          family_id: invite.family_id,
-          role: invite.role || 'member',
-        })
-        .eq('id', user.id);
-
-      if (updateError) {
-        Alert.alert(t('Common.error'), updateError.message);
-        return;
-      }
-
-      await supabase.rpc('mark_invitation_accepted', { invite_id: invite.id });
-      Alert.alert(t('Common.success'), t('Common.joinedFamily') || 'Successfully joined family!');
-    } catch (error: any) {
-      Alert.alert(t('Common.error'), error.message);
-    } finally {
+    if (error) {
+      Alert.alert("Hata", error);
       setLoading(false);
+    } else {
+      // Başarılı! AppNavigator zaten auth state değişimini dinliyor olabilir,
+      // ama family_id değişikliğini tetiklemek gerekebilir.
+      // En garantisi sayfayı yenilemek veya auth listener'ı tetiklemektir.
+      Alert.alert("Başarılı", "Aileniz oluşturuldu!", [
+        {
+          text: "Tamam",
+          onPress: () => {
+            // Basit bir trick: Session'ı yenileyerek AppNavigator'ın tekrar kontrol etmesini sağlarız
+            supabase.auth.refreshSession();
+          },
+        },
+      ]);
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>{t('Common.loading')}</Text>
-      </View>
-    );
-  }
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
-  return null;
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.text }]}>Aile Kurulumu</Text>
+      <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+        Devam etmek için bir aile oluşturun veya size gönderilen davetiyeyi
+        kullanın.
+      </Text>
+
+      <View style={styles.form}>
+        <Text style={[styles.label, { color: colors.text }]}>Aile İsmi</Text>
+        <TextInput
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.inputBackground,
+              color: colors.inputText,
+              borderColor: colors.inputBorder,
+            },
+          ]}
+          placeholder="Örn: Yılmaz Ailesi"
+          placeholderTextColor={colors.inputPlaceholder}
+          value={familyName}
+          onChangeText={setFamilyName}
+        />
+
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: colors.primary }]}
+          onPress={handleCreateFamily}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Aile Oluştur</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.footer}>
+        <Text
+          style={{
+            color: colors.textMuted,
+            textAlign: "center",
+            marginBottom: 10,
+          }}
+        >
+          Bir davetiyeniz mi var?
+        </Text>
+        <Text
+          style={{ color: colors.textMuted, textAlign: "center", fontSize: 12 }}
+        >
+          Web üzerinden size gelen e-postadaki linke tıklayarak veya QR kodu
+          taratarak katılabilirsiniz. (Bu özellik yakında eklenecek)
+        </Text>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={{ color: colors.error }}>Çıkış Yap</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    padding: 20,
+    justifyContent: "center",
   },
-  loadingText: {
-    marginTop: 20,
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  subtitle: {
     fontSize: 16,
+    textAlign: "center",
+    marginBottom: 40,
+    lineHeight: 22,
+  },
+  form: {
+    marginBottom: 30,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 15,
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  button: {
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  footer: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  logoutButton: {
+    marginTop: 30,
+    padding: 10,
   },
 });
-

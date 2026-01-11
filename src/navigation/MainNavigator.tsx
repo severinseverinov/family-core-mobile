@@ -1,46 +1,53 @@
-import React from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { RootStackParamList, MainTabParamList } from './types';
-import DashboardScreen from '../screens/dashboard/DashboardScreen';
-import SettingsScreen from '../screens/settings/SettingsScreen';
-import VaultScreen from '../screens/dashboard/VaultScreen';
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import {
+  Home,
+  PawPrint,
+  CheckSquare,
+  ShoppingCart,
+  Lock,
+} from "lucide-react-native";
+import DashboardScreen from "../screens/dashboard/DashboardScreen";
+import PetScreen from "../screens/pets/PetScreen";
+import TaskScreen from "../screens/task/TaskScreen";
+import KitchenScreen from "../screens/kitchen/KitchenScreen";
+import VaultScreen from "../screens/dashboard/VaultScreen";
 
-const Stack = createStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<MainTabParamList>();
-
-function MainTabs() {
-  return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#8E8E93',
-      }}
-    >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Calendar" component={DashboardScreen} />
-      <Tab.Screen name="Tasks" component={DashboardScreen} />
-      <Tab.Screen name="Pets" component={DashboardScreen} />
-      <Tab.Screen name="Kitchen" component={DashboardScreen} />
-    </Tab.Navigator>
-  );
-}
+const Tab = createBottomTabNavigator();
 
 export default function MainNavigator() {
   return (
-      <Stack.Navigator
+    <Tab.Navigator
       screenOptions={{
-        headerShown: false,
-        animationEnabled: false,
-        gestureEnabled: false,
-        detachInactiveScreens: false,
+        headerShown: false, // TÜM EKRANLARDAKİ ÜST ÇUBUĞU KALDIRDIK
+        tabBarActiveTintColor: "#6366f1",
+        tabBarStyle: { borderTopWidth: 0, elevation: 10 },
       }}
     >
-      <Stack.Screen name="Main" component={MainTabs} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen name="Vault" component={VaultScreen} />
-    </Stack.Navigator>
+      <Tab.Screen
+        name="Home"
+        component={DashboardScreen}
+        options={{ tabBarIcon: ({ color }) => <Home color={color} /> }}
+      />
+      <Tab.Screen
+        name="Görevler"
+        component={TaskScreen}
+        options={{ tabBarIcon: ({ color }) => <CheckSquare color={color} /> }}
+      />
+      <Tab.Screen
+        name="Evcil Hayvan"
+        component={PetScreen}
+        options={{ tabBarIcon: ({ color }) => <PawPrint color={color} /> }}
+      />
+      <Tab.Screen
+        name="Mutfak"
+        component={KitchenScreen}
+        options={{ tabBarIcon: ({ color }) => <ShoppingCart color={color} /> }}
+      />
+      <Tab.Screen
+        name="Kasa"
+        component={VaultScreen}
+        options={{ tabBarIcon: ({ color }) => <Lock color={color} /> }}
+      />
+    </Tab.Navigator>
   );
 }
-
