@@ -20,6 +20,7 @@ interface ThemeContextType {
   themeMode: ThemeMode;
   colors: ThemeColors;
   setThemeMode: (mode: ThemeMode) => void;
+  toggleTheme: () => void;
   isLoaded: boolean;
 }
 
@@ -74,6 +75,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeModeState(mode);
   };
 
+  const toggleTheme = () => {
+    const modes: ThemeMode[] = ["light", "dark", "colorful"];
+    const currentIndex = modes.indexOf(themeMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setThemeModeState(modes[nextIndex]);
+  };
+
   // Sizin renklerinizi React Native Paper temasına dönüştüren adaptör
   const getPaperTheme = (): MD3Theme => {
     const baseTheme = themeMode === "dark" ? MD3DarkTheme : MD3LightTheme;
@@ -97,7 +105,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider
-      value={{ themeMode, colors, setThemeMode, isLoaded }}
+      value={{ themeMode, colors, setThemeMode, toggleTheme, isLoaded }}
     >
       <PaperProvider theme={getPaperTheme()}>{children}</PaperProvider>
     </ThemeContext.Provider>

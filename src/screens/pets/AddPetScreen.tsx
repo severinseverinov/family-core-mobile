@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Image } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  Image,
+  StyleSheet,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../../contexts/ThemeContext";
 import { createPet } from "../../services/pets";
 
@@ -7,41 +16,72 @@ export default function AddPetScreen({ navigation }: any) {
   const { colors } = useTheme();
   const [name, setName] = useState("");
   const [type, setType] = useState("");
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageUri, setImageUri] = useState<string | undefined>();
 
-  const handleAddPet = async () => {
-    const res = await createPet({
-      name,
-      type,
-      imageUri: imageUri || undefined,
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
     });
-    if (res.data && !res.error) {
-      navigation.goBack();
-    }
+    if (!result.canceled) setImageUri(result.assets[0].uri);
+  };
+
+  const handleSave = async () => {
+    // createPet(petData: { name, type, color?, gender?, imageUri? })
+    const res = await createPet({ name, type, imageUri });
+
+    if (res.error) Alert.alert("Hata", res.error);
+    else navigation.goBack();
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, padding: 20 }}>
-      <Text style={{ color: colors.text }}>Dostumuzun Adı</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
+        {imageUri ? (
+          <Image source={{ uri: imageUri }} style={styles.preview} />
+        ) : (
+          <Text>Fotoğraf Ekle</Text>
+        )}
+      </TouchableOpacity>
       <TextInput
-        style={{ backgroundColor: colors.card, padding: 10, borderRadius: 8 }}
+        style={[styles.input, { backgroundColor: colors.card }]}
+        placeholder="İsim"
         value={name}
         onChangeText={setName}
       />
-      {/* Diğer alanlar ve resim seçici... */}
+      <TextInput
+        style={[styles.input, { backgroundColor: colors.card }]}
+        placeholder="Tür (Kedi, Köpek vb.)"
+        value={type}
+        onChangeText={setType}
+      />
       <TouchableOpacity
-        onPress={handleAddPet}
-        style={{
-          backgroundColor: colors.primary,
-          padding: 15,
-          borderRadius: 10,
-          marginTop: 20,
-        }}
+        style={[styles.btn, { backgroundColor: colors.primary }]}
+        onPress={handleSave}
       >
-        <Text style={{ color: "#fff", textAlign: "center" }}>
-          Dostumuzu Ekle
-        </Text>
+        <Text style={styles.btnText}>Dostumuzu Kaydet</Text>
       </TouchableOpacity>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20 },
+  input: { padding: 12, borderRadius: 8, marginBottom: 15 },
+  imagePicker: {
+    height: 150,
+    width: 150,
+    borderRadius: 75,
+    alignSelf: "center",
+    marginBottom: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    borderStyle: "dashed",
+    borderWidth: 1,
+  },
+  preview: { width: 150, height: 150, borderRadius: 75 },
+  btn: { padding: 15, borderRadius: 10, alignItems: "center" },
+  btnText: { color: "#fff", fontWeight: "bold" },
+});

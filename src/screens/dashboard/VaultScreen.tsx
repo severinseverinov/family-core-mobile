@@ -11,6 +11,7 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { WebView } from "react-native-webview";
 import {
   Lock,
@@ -24,6 +25,7 @@ import {
   ShieldCheck,
   ImageIcon,
   FileIcon,
+  Plus,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getVaultItems, revealSecret, getFileUrl } from "../../services/vault";
@@ -31,6 +33,7 @@ import QRCode from "react-native-qrcode-svg";
 
 export default function VaultScreen() {
   const { colors } = useTheme();
+  const navigation = useNavigation<any>();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [revealedId, setRevealedId] = useState<string | null>(null);
@@ -125,6 +128,12 @@ export default function VaultScreen() {
           </View>
         )}
       />
+      <TouchableOpacity
+        style={[styles.floatingAddButton, { backgroundColor: colors.primary }]}
+        onPress={() => navigation.navigate("AddVaultItem")}
+      >
+        <Plus size={24} color="#fff" strokeWidth={3} />
+      </TouchableOpacity>
 
       {/* Preview Modal */}
       <Modal visible={isPreviewOpen} animationType="slide">
@@ -199,5 +208,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 15,
     alignItems: "center",
+  },
+  floatingAddButton: {
+    position: "absolute",
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#4A90E2", // brandColors.primary
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 8,
   },
 });

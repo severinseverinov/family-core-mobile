@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { Plus } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useDashboardData } from "../../hooks/useDashboardData";
@@ -15,6 +16,7 @@ import PetWidget from "../../components/widgets/PetWidget";
 export default function PetScreen() {
   const { colors } = useTheme();
   const { data } = useDashboardData();
+  const navigation = useNavigation<any>();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -33,6 +35,7 @@ export default function PetScreen() {
           </View>
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.primary }]}
+            onPress={() => navigation.navigate("AddPet")} // Navigasyon eklendi
           >
             <Plus size={24} color="#fff" strokeWidth={3} />
           </TouchableOpacity>

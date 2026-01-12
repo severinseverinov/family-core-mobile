@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../services/supabase";
+import { registerForPushNotificationsAsync } from "../services/notifications";
 
 type AuthContextType = {
   session: Session | null;
@@ -70,6 +71,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     await supabase.auth.signOut();
   };
+
+  useEffect(() => {
+    if (session?.user) {
+      registerForPushNotificationsAsync();
+    }
+  }, [session?.user]);
 
   return (
     <AuthContext.Provider

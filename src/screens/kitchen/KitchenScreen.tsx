@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { Plus } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useDashboardData } from "../../hooks/useDashboardData";
@@ -15,6 +16,7 @@ import KitchenWidget from "../../components/widgets/KitchenWidget";
 export default function KitchenScreen() {
   const { colors } = useTheme();
   const { data } = useDashboardData();
+  const navigation = useNavigation<any>();
   const kitchen = data?.kitchen;
 
   return (
@@ -34,6 +36,7 @@ export default function KitchenScreen() {
           </View>
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.primary }]}
+            onPress={() => navigation.navigate("AddKitchenItem")}
           >
             <Plus size={24} color="#fff" strokeWidth={3} />
           </TouchableOpacity>

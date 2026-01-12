@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity } from "react-native";
+import {
+  View,
+  TextInput,
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  Alert,
+} from "react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { addVaultItem } from "../../services/vault";
 
@@ -7,9 +14,10 @@ export default function AddVaultItemScreen({ navigation }: any) {
   const { colors } = useTheme();
   const [title, setTitle] = useState("");
   const [value, setValue] = useState("");
-  const [visibility, setVisibility] = useState("parents"); //
+  const [visibility, setVisibility] = useState("parents");
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
+    // addVaultItem(itemData: { title, category, type, visibility, value?, file?, assignedTo? })
     const res = await addVaultItem({
       title,
       category: "password",
@@ -17,25 +25,39 @@ export default function AddVaultItemScreen({ navigation }: any) {
       visibility,
       value,
     });
+
     if (res.success) navigation.goBack();
+    else Alert.alert("Hata", res.error);
   };
 
   return (
-    <View style={{ padding: 20 }}>
-      <TextInput placeholder="Başlık" value={title} onChangeText={setTitle} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <TextInput
-        placeholder="Şifre/Veri"
+        style={[styles.input, { backgroundColor: colors.card }]}
+        placeholder="Başlık (örn: Wi-Fi Şifresi)"
+        value={title}
+        onChangeText={setTitle}
+      />
+      <TextInput
+        style={[styles.input, { backgroundColor: colors.card }]}
+        placeholder="Gizli Veri"
         value={value}
         onChangeText={setValue}
         secureTextEntry
       />
-      {/* Görünürlük Seçici (Parents, Family, Member) */}
       <TouchableOpacity
-        onPress={handleAdd}
-        style={{ backgroundColor: colors.primary }}
+        style={[styles.btn, { backgroundColor: colors.primary }]}
+        onPress={handleSave}
       >
-        <Text>Şifrele ve Kaydet</Text>
+        <Text style={styles.btnText}>Güvenli Kaydet</Text>
       </TouchableOpacity>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20 },
+  input: { padding: 12, borderRadius: 8, marginBottom: 15 },
+  btn: { padding: 15, borderRadius: 10, alignItems: "center" },
+  btnText: { color: "#fff", fontWeight: "bold" },
+});
