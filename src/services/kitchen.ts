@@ -44,3 +44,40 @@ export async function getInventoryAndBudget() {
     currency: profile.preferred_currency || "TL",
   };
 }
+
+export async function addInventoryItem(itemData: {
+  product_name: string;
+  quantity: string;
+  price: string;
+  category?: string;
+  unit?: string;
+}) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile?.family_id) return { error: "No family" };
+
+  const { data, error } = await supabase
+    .from("inventory")
+    .insert({
+      family_id: profile.family_id,
+      product_name: itemData.product_name,
+      quantity: parseFloat(itemData.quantity) || 1,
+      price: parseFloat(itemData.price) || 0,
+      category: itemData.category || "Genel",
+      unit: itemData.unit || "adet",
+    })
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+  return { success: true, data };
+}
