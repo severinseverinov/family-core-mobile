@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,57 +7,66 @@ import {
   TouchableOpacity,
   Image,
   SafeAreaView,
-  Alert,
+  Modal,
 } from "react-native";
 import {
   Lock,
   Settings,
   Users,
   ChevronRight,
-  ShieldCheck,
-  Palette,
-  Languages,
+  ShieldAlert,
+  X,
+  Share2,
 } from "lucide-react-native";
+import QRCode from "react-native-qrcode-svg"; //
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
-import { useDashboardData } from "../../hooks/useDashboardData";
 
 export default function ProfileHubScreen({ navigation }: any) {
   const { colors, themeMode, toggleTheme } = useTheme();
   const { profile } = useAuth();
-  const { data } = useDashboardData();
+  const [qrVisible, setQrVisible] = useState(false);
 
-  // Avatar Seçim Mantığı
-  const getAvatarUri = () => {
-    if (profile?.avatar_url) return profile.avatar_url;
-    const gender = profile?.gender || "other";
-    if (gender === "female")
-      return "https://api.dicebear.com/7.x/avataaars/png?seed=Aneka&gender=female";
-    if (gender === "male")
-      return "https://api.dicebear.com/7.x/avataaars/png?seed=Felix&gender=male";
-    return "https://api.dicebear.com/7.x/avataaars/png?seed=Coco";
-  };
+  // vCard formatında Acil Durum Bilgileri
+  const vCardData = `BEGIN:VCARD
+VERSION:3.0
+FN:ACIL - ${profile?.full_name || "Kullanıcı"}
+TEL;TYPE=CELL:${profile?.phone || ""}
+NOTE:Kan Grubu: ${profile?.blood_type || "Bilinmiyor"}\\nAlerjiler: ${
+    profile?.allergies || "Yok"
+  }\\nKronik: ${profile?.chronic_diseases || "Yok"}
+END:VCARD`;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={styles.container}>
         {/* ÜST PROFİL BÖLÜMÜ */}
         <View style={styles.profileHeader}>
-          <Image
-            source={{ uri: getAvatarUri() }}
-            style={[styles.mainAvatar, { borderColor: colors.primary }]}
-          />
+          <View style={styles.avatarContainer}>
+            <Image
+              source={{
+                uri:
+                  profile?.avatar_url ||
+                  `https://api.dicebear.com/7.x/avataaars/png?seed=${profile?.id}`,
+              }}
+              style={[styles.mainAvatar, { borderColor: colors.primary }]}
+            />
+            {/* HIZLI QR BUTONU */}
+            <TouchableOpacity
+              style={[styles.qrShortcut, { backgroundColor: colors.primary }]}
+              onPress={() => setQrVisible(true)}
+            >
+              <ShieldAlert size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
           <Text style={[styles.userName, { color: colors.text }]}>
-            {profile?.full_name || "Kullanıcı"}
-          </Text>
-          <Text style={[styles.userSub, { color: colors.textMuted }]}>
-            {profile?.role === "owner" ? "Aile Reisi" : "Aile Üyesi"}
+            {profile?.full_name}
           </Text>
         </View>
 
-        {/* İKİYE BÖLÜNMÜŞ ANA PANEL (Hub Yapısı) */}
+        {/* HUB GRID (Kasa & Ayarlar) */}
         <View style={styles.hubGrid}>
-          {/* Sol: Kasa Bölümü */}
           <TouchableOpacity
             style={[styles.hubCard, { backgroundColor: colors.card }]}
             onPress={() => navigation.navigate("Vault")}
@@ -73,12 +82,8 @@ export default function ProfileHubScreen({ navigation }: any) {
             <Text style={[styles.hubTitle, { color: colors.text }]}>
               Aile Kasası
             </Text>
-            <Text style={[styles.hubDesc, { color: colors.textMuted }]}>
-              Şifreler & Belgeler
-            </Text>
           </TouchableOpacity>
 
-          {/* Sağ: Ayarlar Bölümü */}
           <TouchableOpacity
             style={[styles.hubCard, { backgroundColor: colors.card }]}
             onPress={() => navigation.navigate("Settings")}
@@ -89,37 +94,55 @@ export default function ProfileHubScreen({ navigation }: any) {
             <Text style={[styles.hubTitle, { color: colors.text }]}>
               Ayarlar
             </Text>
-            <Text style={[styles.hubDesc, { color: colors.textMuted }]}>
-              Dil, Tema & Para
-            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* ALT BÖLÜM: HIZLI AYARLAR VE AİLE */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
-            HIZLI ERİŞİM
-          </Text>
-          <View style={[styles.listCard, { backgroundColor: colors.card }]}>
-            <TouchableOpacity style={styles.listItem} onPress={toggleTheme}>
-              <Palette size={20} color={colors.primary} />
-              <Text style={[styles.listText, { color: colors.text }]}>
-                Temayı Değiştir ({themeMode})
-              </Text>
-              <ChevronRight size={18} color={colors.border} />
-            </TouchableOpacity>
-            <View
-              style={[styles.divider, { backgroundColor: colors.border }]}
-            />
-            <TouchableOpacity style={styles.listItem}>
-              <Users size={20} color={colors.primary} />
-              <Text style={[styles.listText, { color: colors.text }]}>
-                Aile Üyelerini Yönet
-              </Text>
-              <ChevronRight size={18} color={colors.border} />
-            </TouchableOpacity>
-          </View>
+        {/* DİĞER LİSTE ÖĞELERİ */}
+        <View style={[styles.listCard, { backgroundColor: colors.card }]}>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => navigation.navigate("FamilyManagement")}
+          >
+            <Users size={20} color={colors.primary} />
+            <Text style={[styles.listText, { color: colors.text }]}>
+              Aile Üyelerini Yönet
+            </Text>
+            <ChevronRight size={18} color={colors.border} />
+          </TouchableOpacity>
         </View>
+
+        {/* ACİL DURUM QR MODAL */}
+        <Modal visible={qrVisible} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.qrModal, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  Acil Durum Kartı
+                </Text>
+                <TouchableOpacity onPress={() => setQrVisible(false)}>
+                  <X color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.qrContainer}>
+                <QRCode
+                  value={vCardData}
+                  size={220}
+                  backgroundColor="white"
+                  color="black"
+                />
+              </View>
+
+              <Text style={[styles.qrInfo, { color: colors.text }]}>
+                {profile?.full_name}
+              </Text>
+              <Text style={[styles.qrDesc, { color: colors.textMuted }]}>
+                Acil bir durumda bu kod taranarak kan grubunuza, alerjilerinize
+                ve iletişim bilgilerinize ulaşılabilir.
+              </Text>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -128,37 +151,68 @@ export default function ProfileHubScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { padding: 20 },
   profileHeader: { alignItems: "center", marginVertical: 30 },
-  mainAvatar: { width: 110, height: 110, borderRadius: 55, borderWidth: 4 },
-  userName: { fontSize: 24, fontWeight: "900", marginTop: 15 },
-  userSub: { fontSize: 14, fontWeight: "600", marginTop: 4 },
-  hubGrid: { flexDirection: "row", gap: 15, marginBottom: 30 },
-  hubCard: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 24,
-    alignItems: "center",
-    elevation: 2,
-    shadowOpacity: 0.05,
-  },
-  iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  avatarContainer: { position: "relative" },
+  mainAvatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 4 },
+  qrShortcut: {
+    position: "absolute",
+    bottom: 0,
+    right: 5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
+    borderWidth: 3,
+    borderColor: "#fff",
   },
-  hubTitle: { fontSize: 16, fontWeight: "bold" },
-  hubDesc: { fontSize: 12, marginTop: 4 },
-  section: { marginTop: 10 },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    marginLeft: 10,
-    marginBottom: 8,
+  userName: { fontSize: 24, fontWeight: "900", marginTop: 15 },
+  hubGrid: { flexDirection: "row", gap: 15, marginBottom: 20 },
+  hubCard: { flex: 1, padding: 20, borderRadius: 24, alignItems: "center" },
+  iconCircle: {
+    width: 55,
+    height: 55,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
   },
+  hubTitle: { fontSize: 15, fontWeight: "bold" },
   listCard: { borderRadius: 20, overflow: "hidden" },
-  listItem: { flexDirection: "row", alignItems: "center", padding: 16 },
-  listText: { flex: 1, marginLeft: 12, fontSize: 15, fontWeight: "600" },
-  divider: { height: 1, width: "100%", opacity: 0.5 },
+  listItem: { flexDirection: "row", alignItems: "center", padding: 18 },
+  listText: { flex: 1, marginLeft: 12, fontSize: 16, fontWeight: "600" },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  qrModal: {
+    width: "100%",
+    borderRadius: 35,
+    padding: 30,
+    alignItems: "center",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 25,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "800" },
+  qrContainer: { padding: 15, backgroundColor: "#fff", borderRadius: 20 },
+  qrInfo: { fontSize: 18, fontWeight: "bold", marginTop: 20 },
+  qrDesc: { textAlign: "center", marginTop: 10, fontSize: 14, lineHeight: 20 },
+  shareBtn: {
+    flexDirection: "row",
+    marginTop: 25,
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 15,
+    gap: 10,
+    alignItems: "center",
+  },
+  shareBtnText: { color: "#fff", fontWeight: "bold" },
 });

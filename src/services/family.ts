@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 
+// src/services/family.ts içindeki interface güncellemesi
 export interface FamilyMember {
   id: string;
   full_name: string;
@@ -10,6 +11,15 @@ export interface FamilyMember {
   birth_date?: string;
   blood_type?: string;
   allergies?: string;
+  gender?: string;
+  // Yeni Alanlar:
+  school?: string;
+  height?: string;
+  weight?: string;
+  chronic_diseases?: string;
+  surgeries?: string;
+  past_illnesses?: string;
+  vaccinations?: string;
 }
 
 export interface Family {

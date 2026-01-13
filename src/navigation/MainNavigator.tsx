@@ -1,7 +1,13 @@
 import React from "react";
 import { View, Image, StyleSheet, Platform } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Home, CheckSquare, PawPrint, ShoppingCart } from "lucide-react-native";
+import {
+  Home,
+  CheckSquare,
+  PawPrint,
+  ShoppingCart,
+  Wallet,
+} from "lucide-react-native";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -10,6 +16,7 @@ import DashboardScreen from "../screens/dashboard/DashboardScreen";
 import TaskScreen from "../screens/task/TaskScreen";
 import PetScreen from "../screens/pets/PetScreen";
 import KitchenScreen from "../screens/kitchen/KitchenScreen";
+import FinanceScreen from "../screens/finance/FinanceScreen";
 import ProfileHubScreen from "../screens/profile/ProfileHubScreen";
 
 const Tab = createBottomTabNavigator();
@@ -66,11 +73,11 @@ export default function MainNavigator() {
         }}
       />
       <Tab.Screen
-        name="Görevler"
-        component={TaskScreen}
+        name="Mutfak"
+        component={KitchenScreen}
         options={{
-          tabBarLabel: "Görevler",
-          tabBarIcon: ({ color }) => <CheckSquare color={color} size={24} />,
+          tabBarLabel: "Mutfak",
+          tabBarIcon: ({ color }) => <ShoppingCart color={color} size={24} />,
         }}
       />
       <Tab.Screen
@@ -82,11 +89,11 @@ export default function MainNavigator() {
         }}
       />
       <Tab.Screen
-        name="Mutfak"
-        component={KitchenScreen}
+        name="Finance"
+        component={FinanceScreen}
         options={{
-          tabBarLabel: "Mutfak",
-          tabBarIcon: ({ color }) => <ShoppingCart color={color} size={24} />,
+          tabBarLabel: "Finans",
+          tabBarIcon: ({ color }) => <Wallet color={color} size={24} />,
         }}
       />
       <Tab.Screen

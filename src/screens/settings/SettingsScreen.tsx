@@ -8,28 +8,21 @@ import {
   Alert,
   SafeAreaView,
 } from "react-native";
-import {
-  Languages,
-  Coins,
-  Palette,
-  User2,
-  LogOut,
-  Save,
-} from "lucide-react-native";
+import { LogOut, Save } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
-import ModernInput from "../../components/ui/ModernInput";
 import { getPreferences, updatePreferences } from "../../services/settings";
+import SelectionGroup from "../../components/ui/SelectionGroup";
 
 export default function SettingsScreen() {
-  const { colors, themeMode, toggleTheme } = useTheme();
+  const { colors, themeMode, setThemeMode } = useTheme();
   const { profile, signOut } = useAuth();
 
   // Web'deki settings.ts yapısına uygun state'ler
   const [lang, setLang] = useState("tr");
   const [currency, setCurrency] = useState("TL");
   const [themeColor, setThemeColor] = useState("blue");
-  const [gender, setGender] = useState("male");
+
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -42,7 +35,6 @@ export default function SettingsScreen() {
       setLang(prefs.preferred_language || "tr");
       setCurrency(prefs.preferred_currency || "TL");
       setThemeColor(prefs.theme_color || "blue");
-      setGender(prefs.gender || "male");
     }
   };
 
@@ -52,64 +44,48 @@ export default function SettingsScreen() {
       language: lang,
       currency,
       themeColor,
-      gender,
     });
     setLoading(false);
     if (res.success) Alert.alert("Başarılı", "Tercihleriniz güncellendi.");
   };
-
-  const SettingCard = ({ title, children }: any) => (
-    <View style={[styles.card, { backgroundColor: colors.card }]}>
-      <Text style={[styles.cardTitle, { color: colors.primary }]}>{title}</Text>
-      {children}
-    </View>
-  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={[styles.mainTitle, { color: colors.text }]}>Ayarlar</Text>
 
-        <SettingCard title="Kişisel Tercihler">
-          <ModernInput
-            label="Para Birimi (TL, USD, EUR)"
-            value={currency}
-            onChangeText={setCurrency}
-          />
-          <ModernInput
-            label="Cinsiyet (male, female)"
-            value={gender}
-            onChangeText={setGender}
-          />
-        </SettingCard>
+        <SelectionGroup
+          label="Uygulama Dili"
+          options={[
+            { label: "Türkçe", value: "tr" },
+            { label: "English", value: "en" },
+            { label: "Deutsch", value: "de" },
+          ]}
+          selectedValue={lang}
+          onSelect={setLang}
+        />
 
-        <SettingCard title="Görünüm ve Dil">
-          <ModernInput
-            label="Uygulama Dili (tr, en, de)"
-            value={lang}
-            onChangeText={setLang}
-          />
-          <ModernInput
-            label="Tema Rengi (blue, purple, green)"
-            value={themeColor}
-            onChangeText={setThemeColor}
-          />
+        <SelectionGroup
+          label="Para Birimi"
+          options={[
+            { label: "₺ TL", value: "TL" },
+            { label: "$ USD", value: "USD" },
+            { label: "€ EUR", value: "EUR" },
+          ]}
+          selectedValue={currency}
+          onSelect={setCurrency}
+        />
 
-          <TouchableOpacity
-            style={[styles.themeToggle, { backgroundColor: colors.background }]}
-            onPress={toggleTheme}
-          >
-            <Palette size={20} color={colors.primary} />
-            <Text style={{ color: colors.text, marginLeft: 10 }}>
-              Mod:{" "}
-              {themeMode === "dark"
-                ? "Karanlık"
-                : themeMode === "colorful"
-                ? "Renkli"
-                : "Aydınlık"}
-            </Text>
-          </TouchableOpacity>
-        </SettingCard>
+        <SelectionGroup
+          label="Görünüm Modu"
+          options={[
+            { label: "Aydınlık", value: "light" },
+            { label: "Karanlık", value: "dark" },
+            { label: "Renkli", value: "colorful" },
+          ]}
+          selectedValue={themeMode}
+          onSelect={(val: any) => setThemeMode(val)}
+        />
 
         <TouchableOpacity
           style={[styles.saveBtn, { backgroundColor: colors.primary }]}
@@ -137,20 +113,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "900",
     marginBottom: 20,
-    marginTop: 10,
-  },
-  card: { padding: 16, borderRadius: 20, marginBottom: 20, elevation: 2 },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: "bold",
-    textTransform: "uppercase",
-    marginBottom: 15,
-  },
-  themeToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 15,
-    borderRadius: 12,
     marginTop: 10,
   },
   saveBtn: {

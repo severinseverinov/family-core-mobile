@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   View,
+  Text,
   StyleSheet,
 } from "react-native";
 // 1. Hook'u import ediyoruz
@@ -14,7 +15,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useTheme } from "../../contexts/ThemeContext";
 import FamilyWidget from "../../components/widgets/FamilyWidget";
 import CalendarWidget from "../../components/widgets/CalendarWidget";
-
+import TasksWidget from "../../components/widgets/TasksWidget"; // Görevler artık burada
 import WeatherWidget from "../../components/widgets/WeatherWidget";
 
 export default function DashboardScreen() {
@@ -43,6 +44,7 @@ export default function DashboardScreen() {
   const family = data?.family?.family ?? null;
   const members = data?.members?.members || [];
   const userRole = profile?.role || "member";
+  const taskItems = events.filter((item: any) => item.type === "task");
 
   return (
     <View
@@ -64,8 +66,19 @@ export default function DashboardScreen() {
           userAvatarUrl={profile?.avatar_url}
         />
         <WeatherWidget />
-
         <CalendarWidget events={events} />
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Günlük Görevler
+            </Text>
+          </View>
+          <TasksWidget
+            initialItems={taskItems.slice(0, 5)}
+            hideHeader={true}
+            userRole={userRole}
+          />
+        </View>
       </ScrollView>
     </View>
   );
@@ -79,4 +92,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#f5f5f5",
   },
+  section: { paddingHorizontal: 20, marginTop: 25 },
+  sectionHeader: { marginBottom: 15 },
+  sectionTitle: { fontSize: 20, fontWeight: "800", letterSpacing: -0.5 },
 });

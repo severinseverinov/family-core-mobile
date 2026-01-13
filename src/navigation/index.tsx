@@ -17,6 +17,9 @@ import AddKitchenItemScreen from "../screens/kitchen/AddKitchenItemScreen";
 import AddVaultItemScreen from "../screens/dashboard/AddVaultItemScreen";
 import VaultScreen from "../screens/dashboard/VaultScreen";
 import SettingsScreen from "../screens/settings/SettingsScreen";
+import FamilyManagementScreen from "../screens/family/FamilyManagementScreen";
+import MemberDetailScreen from "../screens/family/MemberDetailScreen";
+import ReceiptConfirmScreen from "../screens/kitchen/ReceiptConfirmScreen";
 
 const Stack = createStackNavigator();
 
@@ -80,7 +83,22 @@ export default function AppNavigator() {
               component={SettingsScreen}
               options={{ headerShown: true, title: "Ayarlar" }}
             />
+            <Stack.Screen
+              name="FamilyManagement"
+              component={FamilyManagementScreen}
+              options={{ headerShown: true, title: "Üyeleri Yönet" }}
+            />
+            <Stack.Screen
+              name="MemberDetail"
+              component={MemberDetailScreen}
+              options={{ headerShown: true, title: "Kişi Detayı" }}
+            />
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
+            <Stack.Screen
+              name="ReceiptConfirm"
+              component={ReceiptConfirmScreen}
+              options={{ headerShown: true, title: "Fiş Detaylarını Onayla" }}
+            />
           </>
         )}
       </Stack.Navigator>
