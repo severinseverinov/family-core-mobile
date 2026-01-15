@@ -16,12 +16,14 @@ export async function getExpenses(monthKey?: string) {
     .select("family_id")
     .eq("id", user.id)
     .single();
+  if (!profile?.family_id) return { data: [], error: "Aile yok" };
 
   if (!profile?.family_id) return { data: [], error: "Aile bulunamadı" };
 
   let query = supabase
     .from("expenses")
-    .select(`*, profiles (full_name)`)
+    // profiles tablosunu 'expenses_user_id_fkey' kuralını kullanarak bağla diyoruz:
+    .select("*, profiles (full_name)")
     .eq("family_id", profile.family_id)
     .order("created_at", { ascending: false });
 
@@ -30,12 +32,14 @@ export async function getExpenses(monthKey?: string) {
     const start = new Date(`${monthKey}-01T00:00:00.000Z`);
     const next = new Date(start);
     next.setMonth(next.getMonth() + 1);
+
     query = query
       .gte("created_at", start.toISOString())
       .lt("created_at", next.toISOString());
   }
 
   const { data, error } = await query;
+
   return { data: data || [], error: error?.message };
 }
 
@@ -99,6 +103,54 @@ export async function addExpense(
 
   return { success: true };
 }
+export async function deleteExpense(expenseId: string) {
+  // 1. Önce silinecek harcamanın detaylarını al (Tutar ve kategori lazım)
+  const { data: expense, error: fetchError } = await supabase
+    .from("expenses")
+    .select("*")
+    .eq("id", expenseId)
+    .single();
+
+  if (fetchError || !expense)
+    return { success: false, error: "Harcama bulunamadı" };
+
+  // 2. Harcamayı sil
+  const { error: deleteError } = await supabase
+    .from("expenses")
+    .delete()
+    .eq("id", expenseId);
+
+  if (deleteError) return { success: false, error: deleteError.message };
+
+  // 3. Eğer Mutfak harcamasıysa, harcanan tutarı bütçeden geri düş
+  if (expense.category === "Mutfak") {
+    const monthKey = new Date(expense.created_at).toISOString().slice(0, 7);
+
+    // Mevcut bütçeyi çek
+    const { data: currentBudget } = await supabase
+      .from("kitchen_budgets")
+      .select("spent_amount")
+      .eq("family_id", expense.family_id)
+      .eq("month_key", monthKey)
+      .maybeSingle();
+
+    if (currentBudget) {
+      const newSpent = Math.max(0, currentBudget.spent_amount - expense.amount);
+
+      await supabase.from("kitchen_budgets").upsert(
+        {
+          family_id: expense.family_id,
+          month_key: monthKey,
+          spent_amount: newSpent,
+        },
+        { onConflict: "family_id, month_key" }
+      );
+    }
+  }
+
+  return { success: true };
+}
+
 export async function getMonthlyFinanceData(monthKey: string) {
   const {
     data: { user },
@@ -137,6 +189,81 @@ export async function getMonthlyFinanceData(monthKey: string) {
     configs: configs.data || [],
     role: profile.role,
   };
+}
+
+async function updateKitchenBudgetHelper(
+  familyId: string,
+  monthKey: string,
+  amountToAdd: number
+) {
+  const { data: currentBudget } = await supabase
+    .from("kitchen_budgets")
+    .select("spent_amount")
+    .eq("family_id", familyId)
+    .eq("month_key", monthKey)
+    .maybeSingle();
+
+  const newSpent = Math.max(
+    0,
+    (currentBudget?.spent_amount || 0) + amountToAdd
+  );
+
+  await supabase.from("kitchen_budgets").upsert(
+    {
+      family_id: familyId,
+      month_key: monthKey,
+      spent_amount: newSpent,
+    },
+    { onConflict: "family_id, month_key" }
+  );
+}
+
+export async function updateExpense(
+  id: string,
+  amount: number,
+  category: string,
+  description: string
+) {
+  // 1. Eski veriyi çek (Bütçe hesabı için lazım)
+  const { data: oldExpense, error: fetchError } = await supabase
+    .from("expenses")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (fetchError || !oldExpense)
+    return { success: false, error: "Harcama bulunamadı" };
+
+  // 2. Harcamayı güncelle
+  const { error: updateError } = await supabase
+    .from("expenses")
+    .update({ amount, category, description })
+    .eq("id", id);
+
+  if (updateError) return { success: false, error: updateError.message };
+
+  // 3. Mutfak Bütçesini Düzelt (Karmaşık Mantık)
+  const monthKey = new Date(oldExpense.created_at).toISOString().slice(0, 7);
+  let budgetDiff = 0;
+
+  // Senaryo A: Mutfak'tı, hala Mutfak (Tutar değişmiş olabilir)
+  if (oldExpense.category === "Mutfak" && category === "Mutfak") {
+    budgetDiff = amount - oldExpense.amount;
+  }
+  // Senaryo B: Mutfak'tı, artık değil (Eski tutarı iade et)
+  else if (oldExpense.category === "Mutfak" && category !== "Mutfak") {
+    budgetDiff = -oldExpense.amount;
+  }
+  // Senaryo C: Değildi, şimdi Mutfak oldu (Yeni tutarı ekle)
+  else if (oldExpense.category !== "Mutfak" && category === "Mutfak") {
+    budgetDiff = amount;
+  }
+
+  if (budgetDiff !== 0) {
+    await updateKitchenBudgetHelper(oldExpense.family_id, monthKey, budgetDiff);
+  }
+
+  return { success: true };
 }
 
 // Çocuk harcaması: Kendi bakiyesinden düşer
@@ -230,4 +357,135 @@ export async function upsertMonthlyConfig(
   );
 
   return { success: !error, error: error?.message };
+}
+
+/**
+ * Yıllık Gelir/Gider Raporunu Getirir
+ */
+export async function getAnnualStats(year: number) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { data: [], error: "Oturum yok" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile?.family_id) return { data: [], error: "Aile yok" };
+
+  const startOfYear = `${year}-01-01`;
+  const endOfYear = `${year}-12-31`;
+
+  // 1. Giderleri Çek
+  const { data: expenses } = await supabase
+    .from("expenses")
+    .select("amount, created_at")
+    .eq("family_id", profile.family_id)
+    .gte("created_at", startOfYear)
+    .lte("created_at", endOfYear);
+
+  // 2. Gelirleri (Config tablosundan) Çek
+  const { data: incomes } = await supabase
+    .from("monthly_config")
+    .select("amount, month_key")
+    .eq("family_id", profile.family_id)
+    .eq("type", "income")
+    .gte("month_key", `${year}-01`)
+    .lte("month_key", `${year}-12`);
+
+  // Aylara göre grupla (0-11 index)
+  const monthlyStats = Array(12)
+    .fill(0)
+    .map(() => ({ income: 0, expense: 0 }));
+
+  expenses?.forEach((exp: any) => {
+    const month = new Date(exp.created_at).getMonth();
+    monthlyStats[month].expense += Number(exp.amount);
+  });
+
+  incomes?.forEach((inc: any) => {
+    const month = new Date(inc.month_key + "-01").getMonth();
+    monthlyStats[month].income += Number(inc.amount);
+  });
+
+  return { data: monthlyStats };
+}
+
+/**
+ * Ay bazlı kim ne kadar harcamış?
+ */
+export async function getSpendingByUser(monthKey: string) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { data: [], error: "Oturum yok" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile?.family_id) return { data: [], error: "Aile yok" };
+
+  // Harcamaları kullanıcı bilgisiyle çek
+  const { data: expenses } = await supabase
+    .from("expenses")
+    .select(`amount, profiles (full_name, avatar_url)`)
+    .eq("family_id", profile.family_id)
+    .gte("created_at", `${monthKey}-01`)
+    .lt(
+      "created_at",
+      new Date(
+        new Date(`${monthKey}-01`).setMonth(
+          new Date(`${monthKey}-01`).getMonth() + 1
+        )
+      ).toISOString()
+    );
+
+  // Kullanıcı bazlı topla
+  const userTotals: any = {};
+
+  expenses?.forEach((item: any) => {
+    const name = item.profiles?.full_name || "Bilinmeyen";
+    const amount = Number(item.amount);
+
+    if (!userTotals[name]) {
+      userTotals[name] = { name, amount: 0, avatar: item.profiles?.avatar_url };
+    }
+    userTotals[name].amount += amount;
+  });
+
+  return Object.values(userTotals).sort(
+    (a: any, b: any) => b.amount - a.amount
+  );
+}
+
+/**
+ * Çocuğun harçlık limitini günceller
+ */
+export async function updateChildAllowance(childId: string, allowance: number) {
+  return await supabase
+    .from("profiles")
+    .update({ monthly_allowance: allowance })
+    .eq("id", childId);
+}
+
+/**
+ * Kalan harçlığı kumbaraya aktarır (Manuel tetikleme veya ay sonu işlemi için)
+ */
+export async function transferToPiggyBank(childId: string, amount: number) {
+  // Önce mevcut kumbarayı al
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("piggy_bank")
+    .eq("id", childId)
+    .single();
+  const current = profile?.piggy_bank || 0;
+
+  return await supabase
+    .from("profiles")
+    .update({ piggy_bank: current + amount })
+    .eq("id", childId);
 }

@@ -8,15 +8,11 @@ import {
   TouchableOpacity,
   Alert,
   SafeAreaView,
-  ScrollView,
   Modal,
   ActivityIndicator,
 } from "react-native";
 import {
-  Users,
-  UserMinus,
   UserPlus,
-  Mail,
   Shield,
   Heart,
   Droplet,
@@ -24,6 +20,8 @@ import {
   X,
   Trash2,
   Settings,
+  Landmark, // İkon eklendi
+  PieChart, // İkon eklendi
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -37,18 +35,16 @@ import {
 } from "../../services/family";
 
 export default function FamilyManagementScreen({ navigation }: any) {
-  const { colors, themeMode } = useTheme();
+  const { colors } = useTheme();
   const { profile: myProfile } = useAuth();
 
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [family, setFamily] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Davet State
+  // Davet & Modal State'leri
   const [inviteEmail, setInviteEmail] = useState("");
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-
-  // Üye Detay Modal State
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(
     null
   );
@@ -71,15 +67,11 @@ export default function FamilyManagementScreen({ navigation }: any) {
   };
 
   const handleInvite = async () => {
-    if (!inviteEmail.includes("@")) {
-      return Alert.alert("Hata", "Geçerli bir e-posta adresi giriniz.");
-    }
+    if (!inviteEmail.includes("@"))
+      return Alert.alert("Hata", "Geçerli e-posta girin.");
     const res = await createInvitation(inviteEmail, "member");
     if (res.success) {
-      Alert.alert(
-        "Başarılı",
-        `Davet kodu oluşturuldu: ${res.token}\nBu kodu aile üyenize iletebilirsiniz.`
-      );
+      Alert.alert("Başarılı", `Davet kodu: ${res.token}`);
       setInviteEmail("");
       setIsInviteModalOpen(false);
     } else {
@@ -89,28 +81,33 @@ export default function FamilyManagementScreen({ navigation }: any) {
 
   const handleRemove = (member: FamilyMember) => {
     if (member.id === myProfile?.id) return;
-
-    Alert.alert(
-      "Üyeyi Çıkar",
-      `${member.full_name} ailenizden çıkarılacak. Emin misiniz?`,
-      [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Evet, Çıkar",
-          style: "destructive",
-          onPress: async () => {
-            const res = await removeMember(member.id);
-            if (res.success) {
-              loadData();
-              setSelectedMember(null);
-            } else {
-              Alert.alert("Hata", res.error);
-            }
-          },
+    Alert.alert("Üyeyi Çıkar", "Emin misiniz?", [
+      { text: "Vazgeç", style: "cancel" },
+      {
+        text: "Çıkar",
+        style: "destructive",
+        onPress: async () => {
+          const res = await removeMember(member.id);
+          if (res.success) {
+            loadData();
+            setSelectedMember(null);
+          } else Alert.alert("Hata", res.error);
         },
-      ]
-    );
+      },
+    ]);
   };
+
+  // HEADER KISMI (ListHeaderComponent olarak kullanılacak)
+  const ListHeader = () => (
+    <View style={styles.listHeader}>
+      {/* YENİ EKLENEN FİNANS MERKEZİ BUTONU */}
+
+      {/* Liste Başlığı */}
+      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+        AİLE ÜYELERİ ({members.length})
+      </Text>
+    </View>
+  );
 
   const renderMember = ({ item }: { item: FamilyMember }) => (
     <TouchableOpacity
@@ -151,15 +148,6 @@ export default function FamilyManagementScreen({ navigation }: any) {
           </Text>
         </View>
       </View>
-      <TouchableOpacity
-        onPress={e => {
-          e.stopPropagation();
-          navigation.navigate("MemberDetail", { member: item });
-        }}
-        style={styles.settingsButton}
-      >
-        <Settings size={20} color={colors.textMuted} />
-      </TouchableOpacity>
       <ChevronRight size={20} color={colors.textMuted} />
     </TouchableOpacity>
   );
@@ -175,7 +163,7 @@ export default function FamilyManagementScreen({ navigation }: any) {
             {family?.name || "Ailem"}
           </Text>
           <Text style={[styles.subTitle, { color: colors.textMuted }]}>
-            {members.length} Aile Üyesi
+            Yönetim Paneli
           </Text>
         </View>
         {isAdmin && (
@@ -194,6 +182,7 @@ export default function FamilyManagementScreen({ navigation }: any) {
         keyExtractor={item => item.id}
         contentContainerStyle={{ padding: 20 }}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={ListHeader} // Header buraya eklendi
       />
 
       {/* DAVET MODALI */}
@@ -225,7 +214,7 @@ export default function FamilyManagementScreen({ navigation }: any) {
         </View>
       </Modal>
 
-      {/* ÜYE DETAY MODALI (Sağlık Bilgileri vb.) */}
+      {/* ÜYE DETAY MODALI */}
       <Modal visible={!!selectedMember} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.detailModal, { backgroundColor: colors.card }]}>
@@ -320,6 +309,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 4,
   },
+
+  // YENİ STİLLER (Header ve Finans Kartı)
+  listHeader: { marginBottom: 10 },
+  financeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 20,
+    borderRadius: 24,
+    marginBottom: 25,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  financeContent: { flexDirection: "row", alignItems: "center" },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  financeTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  financeSub: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 10,
+    letterSpacing: 1,
+  },
+
   memberCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -333,10 +359,7 @@ const styles = StyleSheet.create({
   memberName: { fontSize: 17, fontWeight: "700" },
   roleTag: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   roleText: { fontSize: 12, fontWeight: "700" },
-  settingsButton: {
-    padding: 8,
-    marginRight: 8,
-  },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -358,6 +381,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   btnText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+
   detailModal: { padding: 30, borderRadius: 35, alignItems: "center" },
   closeDetail: { position: "absolute", top: 20, right: 20 },
   largeAvatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 15 },

@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+// src/screens/dashboard/DashboardScreen.tsx
+
+import React from "react";
 import {
   View,
   Text,
@@ -21,13 +23,15 @@ export default function DashboardScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { profile, user } = useAuth();
   const { data } = useDashboardData();
+
+  // Verileri güvenli bir şekilde alalım
   const events = data?.events?.items || [];
   const family = data?.family?.family ?? null;
   const members = data?.members?.members || [];
   const userName = profile?.full_name || user?.email || "Üye";
 
-  // TasksWidget için başlangıç verisi (Hata almamak için boş dizi ile başlatıyoruz)
-  const [tasks, setTasks] = useState([]);
+  // DÜZELTME: Tasks verisi artık doğrudan gelen veriden filtreleniyor
+  const tasks = events.filter((item: any) => item.type === "task") || [];
 
   return (
     <SafeAreaView
@@ -53,7 +57,8 @@ export default function DashboardScreen({ navigation }: any) {
 
         {/* 2. TAKVİM WIDGET (GENİŞ) */}
         <View style={styles.fullWidthWidget}>
-          <CalendarWidget events={events} />
+          {/* Varsayılan ülke kodunu TR olarak kullanacak */}
+          <CalendarWidget events={events} countryCode="TR" />
         </View>
 
         {/* 4. GÜNLÜK GÖREVLER BÖLÜMÜ */}
@@ -62,7 +67,15 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Günlük Görevler
             </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Tasks")}>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate("MainTabs", {
+                  screen: "Home",
+                  params: { screen: "Tasks" },
+                })
+              }
+            >
+              {/* Not: Navigasyon yapınıza göre burası TaskScreen'e gitmeli, genellikle Stack içinde tanımlı olmalı */}
               <Text
                 style={{
                   color: colors.primary,
@@ -75,19 +88,18 @@ export default function DashboardScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
 
-          {/* Görevler alanı Takvim gibi geniş ve kart yapısında */}
+          {/* Görevler alanı */}
           <View
             style={[styles.tasksContainer, { backgroundColor: colors.card }]}
           >
             <TasksWidget
               initialItems={tasks}
               hideHeader={true}
-              userRole="owner"
+              userRole={profile?.role || "member"}
             />
           </View>
         </View>
 
-        {/* Tab Bar altında kalmaması için boşluk */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -107,7 +119,6 @@ export default function DashboardScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollContent: { paddingVertical: 10 },
-  // Yanlardaki boşluğu 15'ten 8'e düşürerek genişliği artırdık
   fullWidthWidget: {
     marginBottom: 18,
     paddingHorizontal: 8,
@@ -122,7 +133,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
-    paddingHorizontal: 10, // Başlıklar çok kenara yapışmasın diye iç boşluk
+    paddingHorizontal: 10,
   },
   sectionTitle: {
     fontSize: 17,
@@ -130,7 +141,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   tasksContainer: {
-    borderRadius: 28, // Daha yumuşak ve geniş görünüm için artırıldı
+    borderRadius: 28,
     padding: 8,
     minHeight: 160,
     width: "100%",

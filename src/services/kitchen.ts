@@ -170,6 +170,7 @@ export async function saveReceiptFinal(receiptData: any) {
           category: item.category || "Genel",
           last_price: unitPrice,
           added_by: user.id,
+          created_at: new Date().toISOString(),
         });
       }
 

@@ -8,17 +8,24 @@ import {
   Alert,
   SafeAreaView,
 } from "react-native";
-import { LogOut, Save } from "lucide-react-native";
+import {
+  LogOut,
+  Save,
+  Users,
+  PawPrint,
+  ChevronRight,
+} from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPreferences, updatePreferences } from "../../services/settings";
 import SelectionGroup from "../../components/ui/SelectionGroup";
+import { useNavigation } from "@react-navigation/native";
 
 export default function SettingsScreen() {
   const { colors, themeMode, setThemeMode } = useTheme();
-  const { profile, signOut } = useAuth();
+  const { signOut } = useAuth();
+  const navigation = useNavigation<any>();
 
-  // Web'deki settings.ts yapısına uygun state'ler
   const [lang, setLang] = useState("tr");
   const [currency, setCurrency] = useState("TL");
   const [themeColor, setThemeColor] = useState("blue");
@@ -53,6 +60,37 @@ export default function SettingsScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={[styles.mainTitle, { color: colors.text }]}>Ayarlar</Text>
+
+        {/* YÖNETİM PANELİ (YENİ BÖLÜM) */}
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+          YÖNETİM PANELİ
+        </Text>
+        <View style={[styles.managementCard, { backgroundColor: colors.card }]}>
+          {/* Aile Üyeleri */}
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: colors.border }]}
+            onPress={() => navigation.navigate("FamilyManagement")}
+          >
+            <View style={styles.menuRow}>
+              <Users size={20} color={colors.primary} />
+              <Text style={[styles.menuText, { color: colors.text }]}>
+                Aile Üyelerini Yönet
+              </Text>
+            </View>
+            <ChevronRight size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+
+          {/* Evcil Hayvan Ekleme */}
+        </View>
+
+        <Text
+          style={[
+            styles.sectionTitle,
+            { color: colors.textMuted, marginTop: 20 },
+          ]}
+        >
+          UYGULAMA TERCİHLERİ
+        </Text>
 
         <SelectionGroup
           label="Uygulama Dili"
@@ -115,6 +153,28 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginTop: 10,
   },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 10,
+    marginLeft: 4,
+    letterSpacing: 0.5,
+  },
+  managementCard: {
+    borderRadius: 20,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 18,
+    borderBottomWidth: 0.5,
+  },
+  menuRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  menuText: { fontSize: 16, fontWeight: "600" },
+
   saveBtn: {
     flexDirection: "row",
     padding: 16,

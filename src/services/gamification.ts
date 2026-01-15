@@ -36,41 +36,62 @@ export const getLeaderboard = async () => {
 
 // 2. Puan Ver (givePoints) - React Native Uyarlaması
 // FormData yerine doğrudan parametre alacak şekilde güncellendi
-export const givePoints = async (
-  targetUserId: string,
-  amount: number,
+export async function givePoints(
+  userId: string,
+  points: number,
   reason: string
-) => {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Oturum açın" };
+) {
+  try {
+    // 1. Puan geçmişine (log) ekle
+    // Not: Veritabanınızda 'point_logs' tablosu olduğunu varsayıyoruz.
+    const { error: logError } = await supabase.from("point_logs").insert({
+      user_id: userId,
+      points: points,
+      reason: reason,
+      type: points > 0 ? "earned" : "spent",
+      created_at: new Date().toISOString(),
+    });
 
-  const { data: adminProfile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+    if (logError) {
+      console.warn(
+        "Puan logu oluşturulamadı ancak işlem devam ediyor:",
+        logError
+      );
+    }
 
-  if (!["owner", "admin"].includes(adminProfile?.role || "")) {
-    return { error: "Sadece ebeveynler puan verebilir." };
+    // 2. Profildeki puanı güncelle
+    // Önce mevcut puanı alıyoruz
+    const { data: profile, error: fetchError } = await supabase
+      .from("profiles")
+      .select("current_points, total_points")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const currentPoints = profile.current_points || 0;
+    const totalPoints = profile.total_points || 0;
+
+    const newCurrent = currentPoints + points;
+    // Sadece pozitif puanlar toplam puana eklenir, harcamalar toplamı düşürmez (Level sistemi için)
+    const newTotal = points > 0 ? totalPoints + points : totalPoints;
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        current_points: newCurrent,
+        total_points: newTotal,
+      })
+      .eq("id", userId);
+
+    if (updateError) throw updateError;
+
+    return { success: true, newPoints: newCurrent };
+  } catch (error: any) {
+    console.error("Gamification servisi hatası:", error.message);
+    return { error: error.message };
   }
-
-  if (!targetUserId || !amount || !reason) return { error: "Eksik bilgi" };
-
-  // Supabase RPC (Stored Procedure) çağrısı
-  const { error } = await supabase.rpc("add_points", {
-    target_user_id: targetUserId,
-    points_amount: amount,
-    reason: reason,
-  });
-
-  if (error) return { error: "Puan verilemedi: " + error.message };
-
-  // Not: React Native'de revalidatePath yoktur.
-  // UI'ı güncellemek için fonksiyonun çağrıldığı yerde state güncellemesi yapılmalıdır.
-  return { success: true };
-};
+}
 
 // 3. Ödül Satın Al
 export const redeemReward = async (

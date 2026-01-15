@@ -21,6 +21,7 @@ import FamilyManagementScreen from "../screens/family/FamilyManagementScreen";
 import MemberDetailScreen from "../screens/family/MemberDetailScreen";
 import ReceiptConfirmScreen from "../screens/kitchen/ReceiptConfirmScreen";
 import FinanceSettingsScreen from "../screens/finance/FinanceSettingsScreen";
+import FamilyFinanceScreen from "../screens/family/FamilyFinanceScreen";
 
 const Stack = createStackNavigator();
 
@@ -89,6 +90,11 @@ export default function AppNavigator() {
               name="FinanceSettings"
               component={FinanceSettingsScreen}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="FamilyFinance"
+              component={FamilyFinanceScreen}
+              options={{ headerShown: true, title: "Aile Finansları" }}
             />
           </>
         )}

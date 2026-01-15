@@ -12,22 +12,20 @@ import {
 import {
   Lock,
   Settings,
-  Users,
-  ChevronRight,
   ShieldAlert,
   X,
-  Share2,
+  Landmark, // Finans ikonu
+  ChevronRight,
 } from "lucide-react-native";
-import QRCode from "react-native-qrcode-svg"; //
+import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function ProfileHubScreen({ navigation }: any) {
-  const { colors, themeMode, toggleTheme } = useTheme();
+  const { colors } = useTheme();
   const { profile } = useAuth();
   const [qrVisible, setQrVisible] = useState(false);
 
-  // vCard formatında Acil Durum Bilgileri
   const vCardData = `BEGIN:VCARD
 VERSION:3.0
 FN:ACIL - ${profile?.full_name || "Kullanıcı"}
@@ -51,7 +49,6 @@ END:VCARD`;
               }}
               style={[styles.mainAvatar, { borderColor: colors.primary }]}
             />
-            {/* HIZLI QR BUTONU */}
             <TouchableOpacity
               style={[styles.qrShortcut, { backgroundColor: colors.primary }]}
               onPress={() => setQrVisible(true)}
@@ -65,8 +62,9 @@ END:VCARD`;
           </Text>
         </View>
 
-        {/* HUB GRID (Kasa & Ayarlar) */}
+        {/* HUB GRID (Kasa, Ayarlar ve Finans) */}
         <View style={styles.hubGrid}>
+          {/* AİLE KASASI */}
           <TouchableOpacity
             style={[styles.hubCard, { backgroundColor: colors.card }]}
             onPress={() => navigation.navigate("Vault")}
@@ -84,6 +82,7 @@ END:VCARD`;
             </Text>
           </TouchableOpacity>
 
+          {/* AYARLAR */}
           <TouchableOpacity
             style={[styles.hubCard, { backgroundColor: colors.card }]}
             onPress={() => navigation.navigate("Settings")}
@@ -97,16 +96,30 @@ END:VCARD`;
           </TouchableOpacity>
         </View>
 
-        {/* DİĞER LİSTE ÖĞELERİ */}
-        <View style={[styles.listCard, { backgroundColor: colors.card }]}>
+        {/* YENİ: AİLE FİNANS MERKEZİ (Buraya Taşındı) */}
+        <View
+          style={[
+            styles.listCard,
+            { backgroundColor: colors.card, marginTop: 10 },
+          ]}
+        >
           <TouchableOpacity
             style={styles.listItem}
-            onPress={() => navigation.navigate("FamilyManagement")}
+            onPress={() => navigation.navigate("FamilyFinance")}
           >
-            <Users size={20} color={colors.primary} />
-            <Text style={[styles.listText, { color: colors.text }]}>
-              Aile Üyelerini Yönet
-            </Text>
+            <View
+              style={[styles.iconCircleSmall, { backgroundColor: "#f59e0b20" }]}
+            >
+              <Landmark size={24} color="#f59e0b" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={[styles.listText, { color: colors.text }]}>
+                Aile Finans Merkezi
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                Bütçe, Raporlar ve Kumbara
+              </Text>
+            </View>
             <ChevronRight size={18} color={colors.border} />
           </TouchableOpacity>
         </View>
@@ -170,7 +183,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 8,
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 10,
   },
   hubCard: { flex: 1, padding: 20, borderRadius: 28, alignItems: "center" },
   iconCircle: {
@@ -181,10 +194,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
+  iconCircleSmall: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   hubTitle: { fontSize: 15, fontWeight: "bold" },
   listCard: { marginHorizontal: 8, borderRadius: 28, overflow: "hidden" },
   listItem: { flexDirection: "row", alignItems: "center", padding: 18 },
-  listText: { flex: 1, marginLeft: 12, fontSize: 16, fontWeight: "600" },
+  listText: { fontSize: 16, fontWeight: "700" },
 
   // Modal Styles
   modalOverlay: {
@@ -210,14 +230,4 @@ const styles = StyleSheet.create({
   qrContainer: { padding: 15, backgroundColor: "#fff", borderRadius: 20 },
   qrInfo: { fontSize: 18, fontWeight: "bold", marginTop: 20 },
   qrDesc: { textAlign: "center", marginTop: 10, fontSize: 14, lineHeight: 20 },
-  shareBtn: {
-    flexDirection: "row",
-    marginTop: 25,
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 15,
-    gap: 10,
-    alignItems: "center",
-  },
-  shareBtnText: { color: "#fff", fontWeight: "bold" },
 });
