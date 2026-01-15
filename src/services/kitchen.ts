@@ -80,6 +80,233 @@ export async function getInventoryAndBudget() {
   };
 }
 
+// 1.a Stok listesine manuel ürün ekleme
+export async function addInventoryItem(itemData: {
+  product_name: string;
+  quantity: string | number;
+  price: string | number;
+  category?: string;
+  unit?: string;
+}) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
+
+    const productName = itemData.product_name?.trim();
+    if (!productName) return { error: "Ürün adı gerekli." };
+
+    const quantity =
+      Number(itemData.quantity) > 0 ? Number(itemData.quantity) : 1;
+    const unit = itemData.unit?.trim() || "adet";
+    const lastPrice = Number(itemData.price) >= 0 ? Number(itemData.price) : 0;
+    const category = itemData.category || "Genel";
+
+    const { data: existing } = await supabase
+      .from("inventory")
+      .select("id, quantity")
+      .eq("family_id", profile.family_id)
+      .ilike("product_name", productName)
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await supabase
+        .from("inventory")
+        .update({
+          quantity: existing.quantity + quantity,
+          last_price: lastPrice,
+          unit,
+          category,
+        })
+        .eq("id", existing.id);
+      return { success: !error, error: error?.message };
+    }
+
+    const { error } = await supabase.from("inventory").insert({
+      family_id: profile.family_id,
+      product_name: productName,
+      quantity,
+      unit,
+      category,
+      last_price: lastPrice,
+      added_by: user.id,
+      created_at: new Date().toISOString(),
+    });
+
+    return { success: !error, error: error?.message };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+// 1.c Stoktaki ürünü güncelle
+export async function updateInventoryItem(
+  itemId: string,
+  itemData: {
+    product_name: string;
+    quantity: string | number;
+    price: string | number;
+    category?: string;
+    unit?: string;
+  }
+) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
+
+    const productName = itemData.product_name?.trim();
+    if (!productName) return { error: "Ürün adı gerekli." };
+
+    const quantity =
+      Number(itemData.quantity) > 0 ? Number(itemData.quantity) : 1;
+    const unit = itemData.unit?.trim() || "adet";
+    const lastPrice = Number(itemData.price) >= 0 ? Number(itemData.price) : 0;
+    const category = itemData.category || "Genel";
+
+    const { error } = await supabase
+      .from("inventory")
+      .update({
+        product_name: productName,
+        quantity,
+        unit,
+        category,
+        last_price: lastPrice,
+      })
+      .eq("id", itemId)
+      .eq("family_id", profile.family_id);
+
+    return { success: !error, error: error?.message };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+// 1.d Stoktaki ürünü sil
+export async function deleteInventoryItem(itemId: string) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
+
+    const { error } = await supabase
+      .from("inventory")
+      .delete()
+      .eq("id", itemId)
+      .eq("family_id", profile.family_id);
+
+    return { success: !error, error: error?.message };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+// 1.b Alışveriş listesine ürün ekle
+export async function addShoppingItem(
+  productName: string,
+  quantity: number,
+  unit: string,
+  market?: string,
+  isUrgent: boolean = false
+) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
+
+    const { error } = await supabase.from("shopping_list").insert({
+      family_id: profile.family_id,
+      product_name: productName,
+      quantity,
+      unit,
+      market: market || null,
+      is_urgent: isUrgent,
+      is_completed: false,
+      added_by: user.id,
+      created_at: new Date().toISOString(),
+    });
+
+    if (!error && isUrgent) {
+      try {
+        const { data: members } = await supabase
+          .from("profiles")
+          .select("id, push_token")
+          .eq("family_id", profile.family_id)
+          .neq("id", user.id);
+
+        const tokens =
+          members
+            ?.map((member: any) => member.push_token)
+            .filter((token: string) => !!token) || [];
+
+        if (tokens.length > 0) {
+          const bodyParts = [`${productName}`, `${quantity} ${unit}`];
+          if (market) bodyParts.push(`Market: ${market}`);
+          const messages = tokens.map((token: string) => ({
+            to: token,
+            sound: "default",
+            title: "Acil alışveriş",
+            body: bodyParts.join(" • "),
+            data: { type: "shopping_urgent" },
+          }));
+
+          await fetch("https://exp.host/--/api/v2/push/send", {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Accept-Encoding": "gzip, deflate",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(messages),
+          });
+        }
+      } catch (notifyError) {
+        console.warn("Acil bildirim gönderilemedi:", notifyError);
+      }
+    }
+
+    return { success: !error, error: error?.message };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
 // 2. AI Fiş Analizi (Mobil için optimize edildi)
 export async function analyzeReceiptMobile(base64Image: string) {
   try {

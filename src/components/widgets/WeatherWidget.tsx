@@ -101,14 +101,15 @@ export default function WeatherWidget() {
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    marginHorizontal: 12,
-    marginVertical: 8,
+    marginHorizontal: 0,
+    marginVertical: 0,
     padding: 16,
-    elevation: 2,
+    width: "100%",
+    elevation: 12,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
     alignItems: "center",
   },
   currentSection: {

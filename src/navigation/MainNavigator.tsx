@@ -46,65 +46,67 @@ export default function MainNavigator() {
   const { colors } = useTheme();
 
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        // YAPIŞIK VE DÜZ TASARIM
-        tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          height: Platform.OS === "ios" ? 85 : 70,
-          paddingBottom: Platform.OS === "ios" ? 25 : 10,
-          paddingTop: 10,
-          elevation: 0, // Android düz üst çizgi için
-        },
-        tabBarLabelStyle: { fontWeight: "700", fontSize: 10 },
-      }}
-    >
-      <Tab.Screen
-        name="Home"
-        component={DashboardScreen}
-        options={{
-          tabBarLabel: "Özet",
-          tabBarIcon: ({ color }) => <Home color={color} size={24} />,
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.textMuted,
+          // YAPIŞIK VE DÜZ TASARIM
+          tabBarStyle: {
+            backgroundColor: colors.card,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            height: Platform.OS === "ios" ? 85 : 70,
+            paddingBottom: Platform.OS === "ios" ? 25 : 10,
+            paddingTop: 10,
+            elevation: 0, // Android düz üst çizgi için
+          },
+          tabBarLabelStyle: { fontWeight: "700", fontSize: 10 },
         }}
-      />
-      <Tab.Screen
-        name="Mutfak"
-        component={KitchenScreen}
-        options={{
-          tabBarLabel: "Mutfak",
-          tabBarIcon: ({ color }) => <ShoppingCart color={color} size={24} />,
-        }}
-      />
-      <Tab.Screen
-        name="Pet"
-        component={PetScreen}
-        options={{
-          tabBarLabel: "Pet",
-          tabBarIcon: ({ color }) => <PawPrint color={color} size={24} />,
-        }}
-      />
-      <Tab.Screen
-        name="Finance"
-        component={FinanceScreen}
-        options={{
-          tabBarLabel: "Finans",
-          tabBarIcon: ({ color }) => <Wallet color={color} size={24} />,
-        }}
-      />
-      <Tab.Screen
-        name="Hub"
-        component={ProfileHubScreen}
-        options={{
-          tabBarLabel: () => null, // Yazı kaldırıldı
-          tabBarIcon: props => <ProfileTabIcon {...props} />,
-        }}
-      />
-    </Tab.Navigator>
+      >
+        <Tab.Screen
+          name="Home"
+          component={DashboardScreen}
+          options={{
+            tabBarLabel: "Özet",
+            tabBarIcon: ({ color }) => <Home color={color} size={24} />,
+          }}
+        />
+        <Tab.Screen
+          name="Mutfak"
+          component={KitchenScreen}
+          options={{
+            tabBarLabel: "Mutfak",
+            tabBarIcon: ({ color }) => <ShoppingCart color={color} size={24} />,
+          }}
+        />
+        <Tab.Screen
+          name="Pet"
+          component={PetScreen}
+          options={{
+            tabBarLabel: "Pet",
+            tabBarIcon: ({ color }) => <PawPrint color={color} size={24} />,
+          }}
+        />
+        <Tab.Screen
+          name="Finance"
+          component={FinanceScreen}
+          options={{
+            tabBarLabel: "Finans",
+            tabBarIcon: ({ color }) => <Wallet color={color} size={24} />,
+          }}
+        />
+        <Tab.Screen
+          name="Hub"
+          component={ProfileHubScreen}
+          options={{
+            tabBarLabel: () => null, // Yazı kaldırıldı
+            tabBarIcon: props => <ProfileTabIcon {...props} />,
+          }}
+        />
+      </Tab.Navigator>
+    </View>
   );
 }
 

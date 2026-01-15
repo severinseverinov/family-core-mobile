@@ -58,7 +58,8 @@ import { getFamilyMembers } from "../../services/family";
 const { width } = Dimensions.get("window");
 
 export default function PetScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, themeMode } = useTheme();
+  const isLight = themeMode === "light";
   const { profile } = useAuth();
   const isParent = ["owner", "admin"].includes(profile?.role || "");
 
@@ -388,6 +389,7 @@ END:VCARD`;
           <View
             style={[
               styles.petInfoCard,
+              isLight && styles.surfaceLift,
               { backgroundColor: colors.card, shadowColor: "#000" },
             ]}
           >
@@ -478,6 +480,7 @@ END:VCARD`;
                   key={item.id}
                   style={[
                     styles.taskCard,
+                    isLight && styles.surfaceLift,
                     { backgroundColor: colors.card, opacity: isDone ? 0.6 : 1 },
                   ]}
                   onPress={() => !isDone && !isPending && handleTaskPress(item)}
@@ -697,7 +700,13 @@ END:VCARD`;
                 </View>
               ) : (
                 /* DİJİTAL KÜNYE (QR) */
-                <View style={[styles.qrCard, { backgroundColor: colors.card }]}>
+                <View
+                  style={[
+                    styles.qrCard,
+                    isLight && styles.surfaceLift,
+                    { backgroundColor: colors.card },
+                  ]}
+                >
                   <View style={styles.qrHeader}>
                     <AlertCircle color="#ef4444" size={24} />
                     <Text
@@ -809,6 +818,7 @@ END:VCARD`;
                     key={i}
                     style={[
                       styles.healthItem,
+                      isLight && styles.surfaceLift,
                       { backgroundColor: colors.card },
                     ]}
                   >
@@ -857,6 +867,7 @@ END:VCARD`;
                       key={i}
                       style={[
                         styles.healthItem,
+                        isLight && styles.surfaceLift,
                         { backgroundColor: colors.card },
                       ]}
                     >
@@ -1297,4 +1308,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   saveBtnText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  surfaceLift: {
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
 });

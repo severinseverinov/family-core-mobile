@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   PanResponder,
+  ActivityIndicator,
 } from "react-native";
 import {
   format,
@@ -26,13 +27,14 @@ import {
   subMonths,
 } from "date-fns";
 import { tr } from "date-fns/locale";
-import { Cake, Star, Clock, Flag, Info } from "lucide-react-native";
+import { Clock, Flag, Info, MapPin } from "lucide-react-native";
+import * as Location from "expo-location";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getPublicHolidays } from "../../services/events";
 
 export default function CalendarWidget({
   events = [],
-  countryCode = "DE",
+  countryCode, // Opsiyonel prop
 }: {
   events: any[];
   countryCode?: string;
@@ -42,18 +44,102 @@ export default function CalendarWidget({
     "weekly"
   );
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [holidays, setHolidays] = useState<any[]>([]);
 
+  // Varsayılan olarak NULL yapıyoruz, böylece "TR" yazısı peşinen çıkmaz.
+  const [activeCountryCode, setActiveCountryCode] = useState<string | null>(
+    countryCode || null
+  );
+  const [locationLabel, setLocationLabel] =
+    useState<string>("Konum Alınıyor...");
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [loadingHolidays, setLoadingHolidays] = useState(false);
+
+  // 1. KONUM TESPİTİ (FamilyWidget Mantığı)
   useEffect(() => {
-    getPublicHolidays(countryCode).then(setHolidays);
+    // Eğer prop olarak ülke kodu verilmişse direkt onu kullan, konum arama.
+    if (countryCode) {
+      setActiveCountryCode(countryCode);
+      setLocationLabel(countryCode); // Label olarak da kodu göster
+      return;
+    }
+
+    let isMounted = true;
+
+    (async () => {
+      try {
+        // İzin kontrolü
+        let { status } = await Location.requestForegroundPermissionsAsync();
+
+        if (status !== "granted") {
+          if (isMounted) {
+            setLocationLabel("Konum İzni Yok");
+            // İzin yoksa varsayılan olarak TR'ye dönebiliriz veya boş bırakabiliriz.
+            // İşlevsellik için TR'ye dönüyoruz ama kullanıcıya izin yok diyoruz.
+            setActiveCountryCode("TR");
+          }
+          return;
+        }
+
+        // Konumu al
+        let location = await Location.getCurrentPositionAsync({});
+
+        // Adres çözümleme
+        let geocode = await Location.reverseGeocodeAsync({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+
+        if (isMounted && geocode.length > 0) {
+          const address = geocode[0];
+
+          // ISO Ülke Kodu (Örn: 'DE', 'US', 'TR')
+          if (address.isoCountryCode) {
+            setActiveCountryCode(address.isoCountryCode.toUpperCase());
+          }
+
+          // Şehir + Ülke bilgisini FamilyWidget ile aynı formatta göster
+          if (address.city && address.country) {
+            setLocationLabel(`${address.city}, ${address.country}`);
+          } else if (address.city) {
+            setLocationLabel(address.city);
+          } else if (address.country) {
+            setLocationLabel(address.country);
+          }
+        }
+      } catch (error) {
+        console.error("Konum hatası:", error);
+        if (isMounted) {
+          setLocationLabel("Konum Bulunamadı");
+          setActiveCountryCode("TR"); // Hata durumunda fallback
+        }
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
   }, [countryCode]);
 
-  // Seçili güne ait tüm verileri (etkinlik + tatil) filtrele
+  // 2. TATİLLERİ ÇEKME
+  useEffect(() => {
+    if (activeCountryCode) {
+      setLoadingHolidays(true);
+      getPublicHolidays(activeCountryCode)
+        .then(data => {
+          setHolidays(data);
+        })
+        .catch(err => console.log("Tatiller çekilemedi:", err))
+        .finally(() => setLoadingHolidays(false));
+    }
+  }, [activeCountryCode]);
+
+  // Seçili gün verilerini hesapla
   const activeDayData = useMemo(() => {
     const dayEvents = events.filter(e =>
       isSameDay(new Date(e.time), selectedDate)
     );
-    const dayHoliday = holidays.find(h =>
+    // Holidays dizisi boşsa veya undefined ise hata vermesin
+    const dayHoliday = (holidays || []).find(h =>
       isSameDay(new Date(h.date), selectedDate)
     );
     return { dayHoliday, dayEvents };
@@ -65,26 +151,32 @@ export default function CalendarWidget({
         direction === "left" ? addDays(prev, 1) : subDays(prev, 1)
       );
     else if (viewMode === "weekly")
-      setSelectedDate(prev =>
-        direction === "left" ? addWeeks(prev, 1) : subWeeks(prev, 1)
-      );
+      setSelectedDate(prev => {
+        const next =
+          direction === "left" ? addWeeks(prev, 1) : subWeeks(prev, 1);
+        return startOfWeek(next, { weekStartsOn: 1 });
+      });
     else if (viewMode === "monthly")
-      setSelectedDate(prev =>
-        direction === "left" ? addMonths(prev, 1) : subMonths(prev, 1)
-      );
+      setSelectedDate(prev => {
+        const next =
+          direction === "left" ? addMonths(prev, 1) : subMonths(prev, 1);
+        return startOfMonth(next);
+      });
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy),
-      onPanResponderRelease: (_, g) => {
-        if (g.dx < -50) handleSwipe("left");
-        else if (g.dx > 50) handleSwipe("right");
-      },
-      onPanResponderTerminationRequest: () => false,
-    })
-  ).current;
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) =>
+          Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy),
+        onPanResponderRelease: (_, g) => {
+          if (g.dx < -50) handleSwipe("left");
+          else if (g.dx > 50) handleSwipe("right");
+        },
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [viewMode]
+  );
 
   return (
     <View
@@ -104,10 +196,15 @@ export default function CalendarWidget({
               ? format(selectedDate, "d MMMM yyyy", { locale: tr })
               : format(selectedDate, "MMMM yyyy", { locale: tr })}
           </Text>
-          <Text style={[styles.headerSub, { color: colors.textMuted }]}>
-            {format(selectedDate, "EEEE", { locale: tr })}
-          </Text>
+
+          <View style={{ gap: 2 }}>
+            <Text style={[styles.headerSub, { color: colors.textMuted }]}>
+              {format(selectedDate, "EEEE", { locale: tr })}
+            </Text>
+          </View>
         </View>
+
+        {/* GÖRÜNÜM MODU SEÇİCİ */}
         <View
           style={[styles.toggleRow, { backgroundColor: colors.background }]}
         >
@@ -134,7 +231,7 @@ export default function CalendarWidget({
       </View>
 
       <View {...panResponder.panHandlers} style={styles.swipeContent}>
-        {/* IZGARA GÖRÜNÜMLERİ (Aylık/Haftalık) */}
+        {/* IZGARA GÖRÜNÜMLERİ */}
         {viewMode !== "daily" && (
           <View
             style={
@@ -152,7 +249,7 @@ export default function CalendarWidget({
                   : endOfWeek(selectedDate, { weekStartsOn: 1 }),
             }).map((day, i) => {
               const isSelected = isSameDay(day, selectedDate);
-              const hasHoliday = holidays.some(h =>
+              const hasHoliday = (holidays || []).some(h =>
                 isSameDay(new Date(h.date), day)
               );
               const hasEvent = events.some(e =>
@@ -248,62 +345,80 @@ export default function CalendarWidget({
         )}
       </View>
 
-      {/* GÜNLÜK ÖZET PANELİ (Seçili günün detayları burada yazar) */}
+      {/* DETAY PANELİ */}
       <View style={[styles.detailsArea, { borderTopColor: colors.border }]}>
-        {activeDayData.dayHoliday && (
-          <View style={styles.detailItem}>
-            <Flag size={14} color={colors.error} />
-            <Text
-              style={[
-                styles.detailText,
-                { color: colors.error, fontWeight: "700" },
-              ]}
-            >
-              {activeDayData.dayHoliday.name} (Resmi Tatil)
-            </Text>
-          </View>
-        )}
-        {activeDayData.dayEvents.length > 0
-          ? activeDayData.dayEvents.map((ev, idx) => (
-              <View key={idx} style={styles.detailItem}>
-                <Info size={14} color={colors.primary} />
-                <View>
-                  <Text
-                    style={[
-                      styles.detailText,
-                      { color: colors.text, fontWeight: "600" },
-                    ]}
-                  >
-                    {ev.title}
-                  </Text>
-                  {ev.description && (
-                    <Text
-                      style={[
-                        styles.subDetailText,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      {ev.description}
-                    </Text>
-                  )}
-                  <Text style={[styles.timeLabel, { color: colors.primary }]}>
-                    {format(new Date(ev.time), "HH:mm")}
-                  </Text>
-                </View>
+        {loadingHolidays ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <>
+            {activeDayData.dayHoliday && (
+              <View style={styles.detailItem}>
+                <Flag size={14} color={colors.error} />
+                <Text
+                  style={[
+                    styles.detailText,
+                    { color: colors.error, fontWeight: "700" },
+                  ]}
+                >
+                  {activeDayData.dayHoliday.name} (Resmi Tatil)
+                </Text>
               </View>
-            ))
-          : !activeDayData.dayHoliday && (
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                Bu gün için kayıtlı bir etkinlik yok.
-              </Text>
             )}
+
+            {activeDayData.dayEvents.length > 0
+              ? activeDayData.dayEvents.map((ev, idx) => (
+                  <View key={idx} style={styles.detailItem}>
+                    <Info size={14} color={colors.primary} />
+                    <View>
+                      <Text
+                        style={[
+                          styles.detailText,
+                          { color: colors.text, fontWeight: "600" },
+                        ]}
+                      >
+                        {ev.title}
+                      </Text>
+                      {ev.description && (
+                        <Text
+                          style={[
+                            styles.subDetailText,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          {ev.description}
+                        </Text>
+                      )}
+                      <Text
+                        style={[styles.timeLabel, { color: colors.primary }]}
+                      >
+                        {format(new Date(ev.time), "HH:mm")}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              : !activeDayData.dayHoliday && (
+                  <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                    Bu gün için kayıtlı bir etkinlik yok.
+                  </Text>
+                )}
+          </>
+        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { margin: 12, padding: 16 },
+  container: {
+    margin: 0,
+    padding: 16,
+    width: "100%",
+    elevation: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -332,7 +447,6 @@ const styles = StyleSheet.create({
   eventSlot: { flex: 1, flexDirection: "row", gap: 5 },
   eventPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   eventPillText: { fontSize: 11 },
-  // Detay Paneli Stilleri
   detailsArea: { borderTopWidth: 1, paddingTop: 15, marginTop: 5, gap: 10 },
   detailItem: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   detailText: { fontSize: 13 },

@@ -9,7 +9,9 @@ import {
   SafeAreaView,
   TouchableOpacity,
   Platform,
+  StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Plus } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -23,6 +25,7 @@ export default function DashboardScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { profile, user } = useAuth();
   const { data } = useDashboardData();
+  const insets = useSafeAreaInsets();
 
   // Verileri güvenli bir şekilde alalım
   const events = data?.events?.items || [];
@@ -35,73 +38,81 @@ export default function DashboardScreen({ navigation }: any) {
 
   return (
     <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: colors.background,
+          paddingTop: insets.top,
+        },
+      ]}
     >
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* 3. AİLE ÜYELERİ WIDGET */}
-        <View style={styles.fullWidthWidget}>
-          <FamilyWidget
-            familyData={family}
-            members={members}
-            userName={userName}
-            userAvatarUrl={profile?.avatar_url}
-          />
-        </View>
-        {/* 1. HAVA DURUMU WIDGET */}
-        <View style={styles.fullWidthWidget}>
-          <WeatherWidget />
-        </View>
-
-        {/* 2. TAKVİM WIDGET (GENİŞ) */}
-        <View style={styles.fullWidthWidget}>
-          {/* Varsayılan ülke kodunu TR olarak kullanacak */}
-          <CalendarWidget events={events} countryCode="TR" />
-        </View>
-
-        {/* 4. GÜNLÜK GÖREVLER BÖLÜMÜ */}
-        <View style={styles.tasksSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Günlük Görevler
-            </Text>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("MainTabs", {
-                  screen: "Home",
-                  params: { screen: "Tasks" },
-                })
-              }
-            >
-              {/* Not: Navigasyon yapınıza göre burası TaskScreen'e gitmeli, genellikle Stack içinde tanımlı olmalı */}
-              <Text
-                style={{
-                  color: colors.primary,
-                  fontWeight: "600",
-                  fontSize: 13,
-                }}
-              >
-                Tümünü Gör
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Görevler alanı */}
-          <View
-            style={[styles.tasksContainer, { backgroundColor: colors.card }]}
-          >
-            <TasksWidget
-              initialItems={tasks}
-              hideHeader={true}
-              userRole={profile?.role || "member"}
+      <StatusBar animated translucent backgroundColor={colors.background} />
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* 3. AİLE ÜYELERİ WIDGET */}
+          <View style={styles.fullWidthWidget}>
+            <FamilyWidget
+              familyData={family}
+              members={members}
+              userName={userName}
+              userAvatarUrl={profile?.avatar_url}
             />
           </View>
-        </View>
+          {/* 1. HAVA DURUMU WIDGET */}
+          <View style={styles.fullWidthWidget}>
+            <WeatherWidget />
+          </View>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+          {/* 2. TAKVİM WIDGET (GENİŞ) */}
+          <View style={styles.fullWidthWidget}>
+            <CalendarWidget events={events} />
+          </View>
+
+          {/* 4. GÜNLÜK GÖREVLER BÖLÜMÜ */}
+          <View style={styles.tasksSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Günlük Görevler
+              </Text>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate("MainTabs", {
+                    screen: "Home",
+                    params: { screen: "Tasks" },
+                  })
+                }
+              >
+                {/* Not: Navigasyon yapınıza göre burası TaskScreen'e gitmeli, genellikle Stack içinde tanımlı olmalı */}
+                <Text
+                  style={{
+                    color: colors.primary,
+                    fontWeight: "600",
+                    fontSize: 13,
+                  }}
+                >
+                  Tümünü Gör
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Görevler alanı */}
+            <View
+              style={[styles.tasksContainer, { backgroundColor: colors.card }]}
+            >
+              <TasksWidget
+                initialItems={tasks}
+                hideHeader={true}
+                userRole={profile?.role || "member"}
+              />
+            </View>
+          </View>
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      </View>
 
       {/* GÖREV / HATIRLATMA EKLEME BUTONU */}
       <View style={styles.fabWrapper}>
@@ -145,11 +156,11 @@ const styles = StyleSheet.create({
     padding: 8,
     minHeight: 160,
     width: "100%",
-    elevation: 2,
+    elevation: 12,
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
   },
   fabWrapper: {
     position: "absolute",

@@ -128,7 +128,7 @@ export default function FamilyWidget({
 
 const styles = StyleSheet.create({
   containerShadow: {
-    margin: 12,
+    margin: 0,
     borderRadius: 32,
     elevation: 12,
     shadowColor: "#000",
@@ -136,6 +136,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 12,
     backgroundColor: "#0f172a",
+    width: "100%",
   },
   background: {
     width: "100%",

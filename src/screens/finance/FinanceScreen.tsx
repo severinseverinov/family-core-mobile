@@ -49,7 +49,8 @@ import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 const screenWidth = Dimensions.get("window").width;
 
 export default function FinanceScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, themeMode } = useTheme();
+  const isLight = themeMode === "light";
   const scrollRef = useRef<ScrollView>(null); // Sayfayı yukarı kaydırmak için
 
   const [loading, setLoading] = useState(true);
@@ -288,7 +289,13 @@ export default function FinanceScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
       >
         {/* ÖZET KARTI */}
-        <View style={[styles.summaryCard, { backgroundColor: colors.card }]}>
+        <View
+          style={[
+            styles.summaryCard,
+            isLight && styles.surfaceLift,
+            { backgroundColor: colors.card },
+          ]}
+        >
           <View style={{ flex: 1 }}>
             <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>
               Genel Bütçe Durumu
@@ -326,7 +333,11 @@ export default function FinanceScreen({ navigation }: any) {
         {/* GRAFİK BÖLÜMÜ */}
         {categoryStats.length > 0 && (
           <View
-            style={[styles.cardContainer, { backgroundColor: colors.card }]}
+            style={[
+              styles.cardContainer,
+              isLight && styles.surfaceLift,
+              { backgroundColor: colors.card },
+            ]}
           >
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Harcama Dağılımı
@@ -378,6 +389,7 @@ export default function FinanceScreen({ navigation }: any) {
         <View
           style={[
             styles.cardContainer,
+            isLight && styles.surfaceLift,
             {
               backgroundColor: editingItem ? "#fff7ed" : colors.card,
               borderColor: editingItem ? "#f97316" : "transparent",
@@ -467,6 +479,7 @@ export default function FinanceScreen({ navigation }: any) {
                   key={tab.value}
                   style={[
                     styles.tabButton,
+                    isLight && styles.surfaceLift,
                     {
                       backgroundColor: isActive ? colors.primary : colors.card,
                       borderColor: isActive ? colors.primary : colors.border,
@@ -512,7 +525,11 @@ export default function FinanceScreen({ navigation }: any) {
             return (
               <View
                 key={item.id}
-                style={[styles.expenseItem, { backgroundColor: colors.card }]}
+                style={[
+                  styles.expenseItem,
+                  isLight && styles.surfaceLift,
+                  { backgroundColor: colors.card },
+                ]}
               >
                 {/* SOL KISIM: İkon ve Bilgiler */}
                 <View
@@ -722,5 +739,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
+  },
+  surfaceLift: {
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
 });
