@@ -149,7 +149,7 @@ END:VCARD`;
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20 },
+  container: { paddingVertical: 20 },
   profileHeader: { alignItems: "center", marginVertical: 30 },
   avatarContainer: { position: "relative" },
   mainAvatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 4 },
@@ -166,8 +166,13 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
   },
   userName: { fontSize: 24, fontWeight: "900", marginTop: 15 },
-  hubGrid: { flexDirection: "row", gap: 15, marginBottom: 20 },
-  hubCard: { flex: 1, padding: 20, borderRadius: 24, alignItems: "center" },
+  hubGrid: {
+    flexDirection: "row",
+    paddingHorizontal: 8,
+    gap: 12,
+    marginBottom: 20,
+  },
+  hubCard: { flex: 1, padding: 20, borderRadius: 28, alignItems: "center" },
   iconCircle: {
     width: 55,
     height: 55,
@@ -177,7 +182,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   hubTitle: { fontSize: 15, fontWeight: "bold" },
-  listCard: { borderRadius: 20, overflow: "hidden" },
+  listCard: { marginHorizontal: 8, borderRadius: 28, overflow: "hidden" },
   listItem: { flexDirection: "row", alignItems: "center", padding: 18 },
   listText: { flex: 1, marginLeft: 12, fontSize: 16, fontWeight: "600" },
 

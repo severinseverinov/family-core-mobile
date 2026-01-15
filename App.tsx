@@ -1,38 +1,42 @@
-// severinseverinov/family-core-mobile/App.tsx
+// App.tsx
+
 import "react-native-gesture-handler";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SafeAreaProvider } from "react-native-safe-area-context"; // Eklendi
-import "./src/i18n/config";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "./src/contexts/ThemeContext";
-import { AuthProvider } from "./src/contexts/AuthContext";
+import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 import AppNavigator from "./src/navigation/index";
 import SplashScreen from "./src/screens/SplashScreen";
 
-// Query Client'ı bileşen dışında tanımlamak, re-render sırasında
-// client'ın yeniden oluşturulmasını engeller (Senin kodunda da böyle, doğru).
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 2,
-      staleTime: 1000 * 60 * 5,
-    },
-  },
-});
+const queryClient = new QueryClient();
+
+// Alt bileşen oluşturuyoruz çünkü useAuth() kullanabilmek için AuthProvider içinde olmalıyız
+function RootApp() {
+  const { loading: authLoading } = useAuth();
+  const [timerFinished, setTimerFinished] = useState(false);
+
+  // Uygulama ne zaman hazır? Hem auth kontrolü bitmeli hem Splash süresi dolmalı
+  const isReady = !authLoading && timerFinished;
+
+  return (
+    <>
+      {!isReady ? (
+        <SplashScreen onFinish={() => setTimerFinished(true)} />
+      ) : (
+        <AppNavigator />
+      )}
+    </>
+  );
+}
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
-
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <ThemeProvider>
-            {showSplash ? (
-              <SplashScreen onFinish={() => setShowSplash(false)} />
-            ) : (
-              <AppNavigator />
-            )}
+            <RootApp />
           </ThemeProvider>
         </AuthProvider>
       </QueryClientProvider>

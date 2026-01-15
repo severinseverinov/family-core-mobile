@@ -26,6 +26,7 @@ import {
   toggleShoppingItem,
   analyzeReceiptMobile,
 } from "../../services/kitchen";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 
 export default function KitchenScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -70,9 +71,28 @@ export default function KitchenScreen({ navigation }: any) {
     }
   };
 
-  if (loading)
-    return <ActivityIndicator style={{ flex: 1 }} color={colors.primary} />;
-
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          backgroundColor: colors.background,
+        }}
+      >
+        <HeartbeatLoader size={50} />
+        <Text
+          style={{
+            textAlign: "center",
+            color: colors.textMuted,
+            marginTop: 10,
+          }}
+        >
+          Mutfak Hazırlanıyor...
+        </Text>
+      </View>
+    );
+  }
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -255,12 +275,12 @@ export default function KitchenScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  header: { paddingHorizontal: 25, paddingTop: 10, marginBottom: 15 },
+  header: { paddingHorizontal: 18, paddingTop: 10, marginBottom: 15 },
   headerTitle: { fontSize: 24, fontWeight: "900" },
   budgetCard: {
-    marginHorizontal: 20,
-    padding: 15,
-    borderRadius: 20,
+    marginHorizontal: 8, // 20'den 8'e düşürüldü
+    padding: 18,
+    borderRadius: 28, // 20'den 28'e çıkarıldı
     marginBottom: 15,
   },
   budgetRow: {
@@ -279,9 +299,9 @@ const styles = StyleSheet.create({
   progressBar: { height: "100%", borderRadius: 3 },
   tabContainer: {
     flexDirection: "row",
-    marginHorizontal: 20,
-    padding: 4,
-    borderRadius: 12,
+    marginHorizontal: 8, // Genişletildi
+    padding: 5,
+    borderRadius: 15,
     marginBottom: 15,
   },
   tabButton: {
@@ -294,12 +314,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tabLabel: { fontSize: 13, fontWeight: "700" },
-  listContent: { paddingHorizontal: 20 },
+  listContent: { paddingHorizontal: 8 },
   itemCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 15,
-    borderRadius: 18,
+    padding: 16,
+    borderRadius: 24, // Kart yumuşaklığı artırıldı
     marginBottom: 10,
   },
   itemInfo: { flex: 1 },

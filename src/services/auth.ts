@@ -157,9 +157,7 @@ export async function signInWithApple() {
   try {
     if (Platform.OS !== "ios") {
       return { error: "Apple Sign In is only available on iOS" };
-    }
-
-    // Check if Apple Authentication is available
+    }    // Check if Apple Authentication is available
     const isAvailable = await AppleAuthentication.isAvailableAsync();
     if (!isAvailable) {
       return { error: "Apple Sign In is not available on this device" };

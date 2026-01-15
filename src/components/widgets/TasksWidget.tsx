@@ -15,18 +15,21 @@ interface TasksWidgetProps {
 }
 
 export default function TasksWidget({
-  initialItems,
+  initialItems = [], // Varsayılan değer undefined hatasını engeller
   hideHeader = false,
   userRole = "member",
 }: TasksWidgetProps) {
   const { colors, themeMode } = useTheme();
+
+  // Hata Önleyici: initialItems undefined ise boş dizi olarak ele al
+  const safeItems = initialItems || [];
 
   return (
     <View
       style={[
         styles.container,
         {
-          backgroundColor: colors.card,
+          // Dashboard'daki genişleme için arka plan DashboardScreen'de yönetiliyor
           borderRadius: themeMode === "colorful" ? 28 : 16,
         },
       ]}
@@ -35,46 +38,69 @@ export default function TasksWidget({
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Görevler</Text>
           <TouchableOpacity>
-            <Text style={{ color: colors.primary }}>+ Puan Ver</Text>
+            <Text style={{ color: colors.primary, fontWeight: "600" }}>
+              + Puan Ver
+            </Text>
           </TouchableOpacity>
         </View>
       )}
-      {initialItems.length === 0 ? (
+
+      {safeItems.length === 0 ? (
         <Text style={[styles.empty, { color: colors.textMuted }]}>
           Henüz bir görev bulunmuyor.
         </Text>
       ) : (
-        initialItems.map(item => (
-          <View key={item.id} style={styles.taskCard}>
+        safeItems.map(item => (
+          <View
+            key={item.id}
+            style={[
+              styles.taskCard,
+              { borderBottomColor: colors.border + "40" },
+            ]}
+          >
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontWeight: "700" }}>
+              <Text
+                style={{ color: colors.text, fontWeight: "700", fontSize: 15 }}
+              >
                 {item.title}
               </Text>
               {item.is_completed && (
-                <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                  Yapan: {item.completed_by}
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: colors.textMuted,
+                    marginTop: 2,
+                  }}
+                >
+                  Yapan: {item.completed_by || "Bilinmiyor"}
                 </Text>
               )}
             </View>
 
             <View style={styles.actionRow}>
-              {item.status === "pending_approval" ? ( //
+              {item.status === "pending_approval" ? (
                 userRole === "admin" || userRole === "owner" ? (
                   <View style={{ flexDirection: "row", gap: 15 }}>
                     <TouchableOpacity onPress={() => approveEvent(item.id)}>
-                      <CheckCircle size={24} color={colors.success} />
+                      <CheckCircle size={24} color="#10b981" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => rejectEvent(item.id)}>
-                      <RotateCcw size={24} color={colors.error} />
+                      <RotateCcw size={24} color="#ef4444" />
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <Text style={{ color: colors.warning, fontSize: 11 }}>
+                  <Text
+                    style={{
+                      color: "#f59e0b",
+                      fontSize: 11,
+                      fontWeight: "600",
+                    }}
+                  >
                     Onay Bekliyor
                   </Text>
                 )
               ) : item.is_completed ? (
-                <CheckCircle size={22} color={colors.success} />
+                <CheckCircle size={22} color="#10b981" />
               ) : (
                 <TouchableOpacity onPress={() => completeEvent(item.id)}>
                   <Clock size={22} color={colors.textMuted} />
@@ -89,23 +115,22 @@ export default function TasksWidget({
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
+  container: { padding: 10, width: "100%" },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 15,
   },
-  title: { fontSize: 16, fontWeight: "700" },
-  item: { paddingVertical: 12, borderBottomWidth: 1 },
+  title: { fontSize: 16, fontWeight: "800" },
   taskCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
   },
   actionRow: {
     marginLeft: 12,
   },
-  empty: { textAlign: "center", padding: 20 },
+  empty: { textAlign: "center", padding: 30, fontSize: 14 },
 });

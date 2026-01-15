@@ -3,13 +3,14 @@ import { supabase } from "./supabase";
 /**
  * Tüm aile harcamalarını getirir
  */
-export async function getExpenses() {
+// src/services/finance.ts
+
+export async function getExpenses(monthKey?: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { data: [], error: "Oturum yok" };
 
-  // Kullanıcının ailesini bul
   const { data: profile } = await supabase
     .from("profiles")
     .select("family_id")
@@ -18,18 +19,23 @@ export async function getExpenses() {
 
   if (!profile?.family_id) return { data: [], error: "Aile bulunamadı" };
 
-  // Harcamaları ve harcamayı yapan kişinin adını getir
-  const { data, error } = await supabase
+  let query = supabase
     .from("expenses")
-    .select(
-      `
-      *,
-      profiles (full_name)
-    `
-    )
+    .select(`*, profiles (full_name)`)
     .eq("family_id", profile.family_id)
     .order("created_at", { ascending: false });
 
+  if (monthKey) {
+    // Ayın başlangıcı ve bir sonraki ayın başlangıcı arasında filtrele
+    const start = new Date(`${monthKey}-01T00:00:00.000Z`);
+    const next = new Date(start);
+    next.setMonth(next.getMonth() + 1);
+    query = query
+      .gte("created_at", start.toISOString())
+      .lt("created_at", next.toISOString());
+  }
+
+  const { data, error } = await query;
   return { data: data || [], error: error?.message };
 }
 
@@ -92,4 +98,136 @@ export async function addExpense(
   }
 
   return { success: true };
+}
+export async function getMonthlyFinanceData(monthKey: string) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { expenses: [], configs: [], role: null, error: "Oturum yok" };
+  }
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id, role")
+    .eq("id", user?.id)
+    .single();
+  if (!profile?.family_id) {
+    return { expenses: [], configs: [], role: null, error: "Aile yok" };
+  }
+
+  // 1. O aya ait harcamalar
+  const expensesQuery = supabase
+    .from("expenses")
+    .select("*, profiles(full_name)")
+    .eq("family_id", profile.family_id)
+    .filter("created_at", "gte", `${monthKey}-01`)
+    .filter("created_at", "lt", `${monthKey}-32`);
+
+  // 2. O aya ait bütçe ve gelir ayarları
+  const configQuery = supabase
+    .from("monthly_config")
+    .select("*")
+    .eq("family_id", profile.family_id)
+    .eq("month_key", monthKey);
+
+  const [expenses, configs] = await Promise.all([expensesQuery, configQuery]);
+
+  return {
+    expenses: expenses.data || [],
+    configs: configs.data || [],
+    role: profile.role,
+  };
+}
+
+// Çocuk harcaması: Kendi bakiyesinden düşer
+export async function addPocketMoneyExpense(
+  amount: number,
+  description: string
+) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Oturum yok" };
+
+  // Önce bakiyeyi kontrol et ve düş
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("current_balance, family_id")
+    .eq("id", user?.id)
+    .single();
+  if (!profile) return { error: "Profil bulunamadı" };
+  if (!profile.family_id) return { error: "Aile yok" };
+
+  if (profile.current_balance < amount) return { error: "Yetersiz harçlık!" };
+
+  const newBalance = profile.current_balance - amount;
+
+  await supabase
+    .from("profiles")
+    .update({ current_balance: newBalance })
+    .eq("id", user?.id);
+
+  // Harcamayı kaydet
+  return await supabase.from("expenses").insert({
+    family_id: profile.family_id,
+    user_id: user?.id,
+    amount,
+    category: "Harçlık",
+    description,
+    is_pocket_money: true,
+  });
+}
+export async function getMonthlyConfigs(monthKey: string) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { data: [], error: "Oturum yok" };
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id")
+    .eq("id", user?.id)
+    .single();
+  if (!profile?.family_id) return { data: [], error: "Aile yok" };
+
+  const { data, error } = await supabase
+    .from("monthly_config")
+    .select("*")
+    .eq("family_id", profile.family_id)
+    .eq("month_key", monthKey);
+
+  return { data: data || [], error: error?.message };
+}
+
+/**
+ * Gelir veya Kategori Bütçesini günceller/oluşturur
+ */
+export async function upsertMonthlyConfig(
+  monthKey: string,
+  type: "income" | "budget",
+  amount: number,
+  category?: string
+) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Oturum yok" };
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id")
+    .eq("id", user?.id)
+    .single();
+  if (!profile?.family_id) return { success: false, error: "Aile yok" };
+
+  const { error } = await supabase.from("monthly_config").upsert(
+    {
+      family_id: profile.family_id,
+      month_key: monthKey,
+      type: type,
+      category: category || null,
+      amount: amount,
+    },
+    { onConflict: "family_id, month_key, type, category" }
+  );
+
+  return { success: !error, error: error?.message };
 }

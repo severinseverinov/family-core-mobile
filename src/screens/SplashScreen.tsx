@@ -1,7 +1,14 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Easing, TouchableOpacity, Text } from 'react-native';
-import AppLogo from '../components/AppLogo';
-import { useTheme } from '../contexts/ThemeContext';
+import React, { useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  Animated,
+  Dimensions,
+  Platform,
+} from "react-native";
+import { useTheme } from "../contexts/ThemeContext";
 
 interface SplashScreenProps {
   onFinish: () => void;
@@ -9,140 +16,114 @@ interface SplashScreenProps {
 
 export default function SplashScreen({ onFinish }: SplashScreenProps) {
   const { colors, themeMode } = useTheme();
+
+  // Animasyon Değerleri
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const buttonFadeAnim = useRef(new Animated.Value(0)).current;
-  
+  const slideAnim = useRef(new Animated.Value(20)).current; // Yazı için hafif aşağıdan yukarı kayma efekti
+
   useEffect(() => {
-    // Fade in animation
+    // Logo ve Yazı Yavaşça Belirsin
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 800,
-        easing: Easing.out(Easing.ease),
+        duration: 1200,
         useNativeDriver: true,
       }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 1200,
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Show button after logo appears
-    setTimeout(() => {
-      Animated.timing(buttonFadeAnim, {
-        toValue: 1,
-        duration: 500,
+    // 2.8 saniye sonra kararak kapanma ve ana ekrana geçiş
+    const timer = setTimeout(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 600,
         useNativeDriver: true,
-      }).start();
-    }, 1200);
+      }).start(() => onFinish());
+    }, 2800);
 
-    // Auto finish after animation (optional, commented for testing)
-    // const timer = setTimeout(() => {
-    //   Animated.timing(fadeAnim, {
-    //     toValue: 0,
-    //     duration: 300,
-    //     useNativeDriver: true,
-    //   }).start(() => {
-    //     onFinish();
-    //   });
-    // }, 2500);
-
-    // return () => clearTimeout(timer);
+    return () => clearTimeout(timer);
   }, []);
 
-  const handleContinue = () => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      onFinish();
-    });
+  // Temaya Göre Logo Seçimi
+  const getLogo = () => {
+    switch (themeMode) {
+      case "dark":
+        return require("../../assets/splash-dark.png");
+      case "colorful":
+        return require("../../assets/splash-colorful.png");
+      default:
+        return require("../../assets/splash-light.png");
+    }
   };
 
-  const styles = createStyles(colors, themeMode);
-
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.View
-        style={[
-          styles.logoContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
+        style={{
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+          alignItems: "center",
+        }}
       >
-        <AppLogo size={180} />
-        <Text style={styles.debugText}>FamilyCore</Text>
-      </Animated.View>
-      
-      <Animated.View
-        style={[
-          styles.buttonContainer,
-          {
-            opacity: buttonFadeAnim,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.continueButton}
-          onPress={handleContinue}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.continueButtonText}>Devam</Text>
-        </TouchableOpacity>
+        {/* LOGO */}
+        <Image source={getLogo()} style={styles.logo} resizeMode="contain" />
+
+        {/* LOGO ALTI YAZI */}
+        <View style={styles.textContainer}>
+          <Text
+            style={[
+              styles.brandText,
+              {
+                color: themeMode === "colorful" ? colors.primary : colors.text,
+              },
+            ]}
+          >
+            FAMILY CORE
+          </Text>
+          <View
+            style={[
+              styles.underline,
+              { backgroundColor: colors.primary, opacity: 0.6 },
+            ]}
+          />
+        </View>
       </Animated.View>
     </View>
   );
 }
 
-const createStyles = (colors: any, themeMode: string) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  logoContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 60,
+  logo: {
+    width: Dimensions.get("window").width * 0.55,
+    height: Dimensions.get("window").width * 0.55,
   },
-  debugText: {
+  textContainer: {
     marginTop: 20,
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
+    alignItems: "center",
   },
-  buttonContainer: {
-    position: 'absolute',
-    bottom: 80,
-    width: '100%',
-    alignItems: 'center',
-  },
-  continueButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 40,
-    paddingVertical: 16,
-    borderRadius: themeMode === 'colorful' ? 20 : 12,
-    minWidth: 120,
-    alignItems: 'center',
-    ...(themeMode === 'colorful' && {
-      shadowColor: colors.primary,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 8,
+  brandText: {
+    fontSize: 28,
+    fontWeight: "900", // Çok kalın ve tok bir font
+    letterSpacing: 4, // Harf aralarını açarak daha modern bir hava katıyoruz
+    textAlign: "center",
+    ...Platform.select({
+      ios: { fontFamily: "AvenirNext-Heavy" }, // iOS için özel kalın font
+      android: { fontFamily: "sans-serif-condensed" },
     }),
   },
-  continueButtonText: {
-    color: colors.buttonText,
-    fontSize: 18,
-    fontWeight: '600',
+  underline: {
+    height: 3,
+    width: 40,
+    marginTop: 8,
+    borderRadius: 2,
   },
 });
-

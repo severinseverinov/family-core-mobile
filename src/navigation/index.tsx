@@ -20,27 +20,13 @@ import SettingsScreen from "../screens/settings/SettingsScreen";
 import FamilyManagementScreen from "../screens/family/FamilyManagementScreen";
 import MemberDetailScreen from "../screens/family/MemberDetailScreen";
 import ReceiptConfirmScreen from "../screens/kitchen/ReceiptConfirmScreen";
+import FinanceSettingsScreen from "../screens/finance/FinanceSettingsScreen";
 
 const Stack = createStackNavigator();
 
 export default function AppNavigator() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const { themeMode } = useTheme();
-
-  if (loading) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "#fff",
-        }}
-      >
-        <ActivityIndicator size="large" color="#6366f1" />
-      </View>
-    );
-  }
 
   return (
     <NavigationContainer>
@@ -56,7 +42,7 @@ export default function AppNavigator() {
             <Stack.Screen
               name="AddTask"
               component={AddTaskScreen}
-              options={{ headerShown: true, title: "Yeni Görev" }}
+              options={{ headerShown: true, title: "Yeni Görev / Hatırlatma" }}
             />
             <Stack.Screen
               name="AddPet"
@@ -98,6 +84,11 @@ export default function AppNavigator() {
               name="ReceiptConfirm"
               component={ReceiptConfirmScreen}
               options={{ headerShown: true, title: "Fiş Detaylarını Onayla" }}
+            />
+            <Stack.Screen
+              name="FinanceSettings"
+              component={FinanceSettingsScreen}
+              options={{ headerShown: false }}
             />
           </>
         )}
