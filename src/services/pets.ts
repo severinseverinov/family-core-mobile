@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { decode } from "base64-arraybuffer";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 // --- TİP TANIMLARI ---
 export interface Pet {
@@ -134,7 +134,8 @@ export async function addRoutine(
   title: string,
   points: number,
   recurrence: string,
-  assignedTo: string[]
+  assignedTo: string[],
+  time: string
 ) {
   const {
     data: { user },
@@ -159,7 +160,86 @@ export async function addRoutine(
     assigned_to: assignedTo.length > 0 ? assignedTo : null, // Kimlere atandı
   });
 
-  return { success: !error, error: error?.message };
+  if (error) return { success: false, error: error?.message };
+
+  const reminderAt = buildRoutineReminderDate(recurrence, time);
+  if (reminderAt && assignedTo.length > 0) {
+    const { data: pet } = await supabase
+      .from("pets")
+      .select("name")
+      .eq("id", petId)
+      .single();
+
+    await supabase.from("notifications").insert(
+      assignedTo.map(userId => ({
+        family_id: profile.family_id,
+        user_id: userId,
+        title: `Rutin Hatırlatma: ${pet?.name || "Pet"}`,
+        message: `${pet?.name || "Pet"} için "${title}" rutini yaklaşyor.`,
+        is_read: false,
+        created_at: reminderAt.toISOString(),
+      }))
+    );
+  }
+
+  return { success: true };
+}
+
+function buildRoutineReminderDate(recurrence: string, time: string) {
+  const parts = time.split(":").map(Number);
+  if (parts.length !== 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) {
+    return null;
+  }
+  const [hour, minute] = parts;
+  const now = new Date();
+
+  const buildBase = () => {
+    const base = new Date();
+    base.setHours(hour, minute, 0, 0);
+    return base;
+  };
+
+  const nextOccurrence = (base: Date) => {
+    const next = new Date(base);
+    if (recurrence === "weekly") {
+      next.setDate(next.getDate() + 7);
+    } else if (recurrence === "monthly") {
+      const day = next.getDate();
+      next.setMonth(next.getMonth() + 1);
+      const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+      if (day > lastDay) {
+        next.setDate(lastDay);
+      } else {
+        next.setDate(day);
+      }
+    } else {
+      next.setDate(next.getDate() + 1);
+    }
+    return next;
+  };
+
+  let base = buildBase();
+  if (base <= now) base = nextOccurrence(base);
+
+  const reminder = new Date(base);
+  if (recurrence === "daily") {
+    reminder.setHours(reminder.getHours() - 2);
+  } else {
+    reminder.setDate(reminder.getDate() - 1);
+  }
+
+  if (reminder <= now) {
+    const shifted = nextOccurrence(base);
+    const nextReminder = new Date(shifted);
+    if (recurrence === "daily") {
+      nextReminder.setHours(nextReminder.getHours() - 2);
+    } else {
+      nextReminder.setDate(nextReminder.getDate() - 1);
+    }
+    return nextReminder;
+  }
+
+  return reminder;
 }
 
 // --- SAĞLIK & AŞI İŞLEMLERİ (YENİ) ---

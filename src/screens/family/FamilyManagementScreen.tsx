@@ -10,6 +10,9 @@ import {
   SafeAreaView,
   Modal,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import {
   UserPlus,
@@ -22,32 +25,54 @@ import {
   Settings,
   Landmark, // İkon eklendi
   PieChart, // İkon eklendi
+  ChevronLeft,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
 import ModernInput from "../../components/ui/ModernInput";
+import SelectionGroup from "../../components/ui/SelectionGroup";
 import {
   getFamilyMembers,
   getFamilyDetails,
   createInvitation,
   removeMember,
+  updateFamilySettings,
   FamilyMember,
 } from "../../services/family";
+import { updatePreferences } from "../../services/settings";
+import * as ImagePicker from "expo-image-picker";
 
 export default function FamilyManagementScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { profile: myProfile } = useAuth();
+  const queryClient = useQueryClient();
 
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [family, setFamily] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [savingFamily, setSavingFamily] = useState(false);
+  const [familyNameDraft, setFamilyNameDraft] = useState("");
+  const [familyAvatarDraftUri, setFamilyAvatarDraftUri] = useState<
+    string | null
+  >(null);
 
   // Davet & Modal State'leri
   const [inviteEmail, setInviteEmail] = useState("");
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(
+  const [selectedMemberDetail, setSelectedMemberDetail] =
+    useState<FamilyMember | null>(null);
+  const [mealPrefsMember, setMealPrefsMember] = useState<FamilyMember | null>(
     null
   );
+  const [mealPrefsModalOpen, setMealPrefsModalOpen] = useState(false);
+  const [mealPreferences, setMealPreferences] = useState({
+    cuisine: "world",
+    calories: "",
+    avoid: "",
+    diet: "standard",
+    notes: "",
+  });
 
   const isAdmin = ["owner", "admin"].includes(myProfile?.role || "");
 
@@ -63,7 +88,44 @@ export default function FamilyManagementScreen({ navigation }: any) {
     ]);
     setMembers(membersRes.members as any);
     setFamily(familyRes.family);
+    setFamilyNameDraft(familyRes.family?.name || "");
     setLoading(false);
+  };
+
+  const handlePickFamilyAvatar = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Hata", "Galeri izni gerekli.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setFamilyAvatarDraftUri(result.assets[0].uri);
+    }
+  };
+
+  const handleSaveFamily = async () => {
+    if (!family?.id) return;
+    setSavingFamily(true);
+    const res = await updateFamilySettings({
+      familyId: family.id,
+      name: familyNameDraft,
+      avatarUri: familyAvatarDraftUri,
+    });
+    setSavingFamily(false);
+    if (res.success) {
+      Alert.alert("Başarılı", "Aile ayarları güncellendi.");
+      setFamilyAvatarDraftUri(null);
+      // Refresh dashboard widgets (FamilyWidget uses dashboard query cache)
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      loadData();
+    } else {
+      Alert.alert("Hata", res.error || "Ayarlar güncellenemedi.");
+    }
   };
 
   const handleInvite = async () => {
@@ -97,10 +159,110 @@ export default function FamilyManagementScreen({ navigation }: any) {
     ]);
   };
 
+  const openMealPrefs = (member: FamilyMember) => {
+    setMealPrefsMember(member);
+    setMealPreferences({
+      cuisine: member?.meal_preferences?.cuisine || "world",
+      calories: member?.meal_preferences?.calories || "",
+      avoid: member?.meal_preferences?.avoid || "",
+      diet: member?.meal_preferences?.diet || "standard",
+      notes: member?.meal_preferences?.notes || "",
+    });
+    setMealPrefsModalOpen(true);
+  };
+
+  const handleSaveMealPrefs = async () => {
+    if (!mealPrefsMember) return;
+    const res = await updatePreferences({
+      mealPreferences,
+      userIdOverride: mealPrefsMember.id,
+    } as any);
+    if (res?.success) {
+      Alert.alert("Başarılı", "Yemek tercihleri güncellendi.");
+      setMealPrefsModalOpen(false);
+      setMealPrefsMember(null);
+      loadData();
+    } else {
+      Alert.alert("Hata", res?.error || "Güncellenemedi.");
+    }
+  };
+
   // HEADER KISMI (ListHeaderComponent olarak kullanılacak)
   const ListHeader = () => (
     <View style={styles.listHeader}>
-      {/* YENİ EKLENEN FİNANS MERKEZİ BUTONU */}
+      {/* AİLE AYARLARI */}
+      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+        AİLE AYARLARI
+      </Text>
+      <View
+        style={[
+          styles.familyCard,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        <View style={styles.familyTopRow}>
+          <View
+            style={[styles.familyAvatarCircle, { borderColor: colors.border }]}
+          >
+            <Image
+              source={{
+                uri:
+                  familyAvatarDraftUri ||
+                  family?.image_url ||
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                    family?.name || "Family"
+                  )}&background=0f172a&color=ffffff&size=256&format=png&bold=true`,
+              }}
+              style={styles.familyAvatar}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <ModernInput
+              label="Aile adı"
+              value={familyNameDraft}
+              onChangeText={setFamilyNameDraft}
+              placeholder="Örn: Yılmaz Ailesi"
+              editable={isAdmin}
+            />
+            <View style={styles.familyActionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.secondaryBtn,
+                  { borderColor: colors.border, opacity: isAdmin ? 1 : 0.5 },
+                ]}
+                onPress={handlePickFamilyAvatar}
+                disabled={!isAdmin}
+              >
+                <Text style={[styles.secondaryBtnText, { color: colors.text }]}>
+                  Avatar Seç
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.primarySmallBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: isAdmin ? 1 : 0.5,
+                  },
+                ]}
+                onPress={handleSaveFamily}
+                disabled={!isAdmin || savingFamily}
+              >
+                {savingFamily ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.primarySmallBtnText}>Kaydet</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            {!isAdmin ? (
+              <Text style={[styles.helperText, { color: colors.textMuted }]}>
+                Aile ayarlarını sadece yönetici değiştirebilir.
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </View>
 
       {/* Liste Başlığı */}
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
@@ -110,13 +272,16 @@ export default function FamilyManagementScreen({ navigation }: any) {
   );
 
   const renderMember = ({ item }: { item: FamilyMember }) => (
-    <TouchableOpacity
+    <View
       style={[
         styles.memberCard,
         { backgroundColor: colors.card, borderColor: colors.border },
       ]}
-      onPress={() => setSelectedMember(item)}
     >
+      <TouchableOpacity
+        style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+        onPress={() => setSelectedMemberDetail(item)}
+      >
       <Image
         source={{
           uri:
@@ -148,8 +313,24 @@ export default function FamilyManagementScreen({ navigation }: any) {
           </Text>
         </View>
       </View>
-      <ChevronRight size={20} color={colors.textMuted} />
-    </TouchableOpacity>
+      </TouchableOpacity>
+      {isAdmin && (
+        <TouchableOpacity
+          onPress={() => openMealPrefs(item)}
+          style={[styles.mealPrefButton, { borderColor: colors.border }]}
+        >
+          <Text style={[styles.mealPrefText, { color: colors.text }]}>
+            Yemek Tercihi
+          </Text>
+        </TouchableOpacity>
+      )}
+      <TouchableOpacity
+        onPress={() => navigation.navigate("MemberDetail", { member: item })}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <ChevronRight size={20} color={colors.textMuted} />
+      </TouchableOpacity>
+    </View>
   );
 
   if (loading)
@@ -158,13 +339,21 @@ export default function FamilyManagementScreen({ navigation }: any) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={styles.header}>
-        <View>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {family?.name || "Ailem"}
-          </Text>
-          <Text style={[styles.subTitle, { color: colors.textMuted }]}>
-            Yönetim Paneli
-          </Text>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={[styles.backButton, { borderColor: colors.border }]}
+          >
+            <ChevronLeft size={22} color={colors.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={[styles.title, { color: colors.text }]}>
+              {family?.name || "Ailem"}
+            </Text>
+            <Text style={[styles.subTitle, { color: colors.textMuted }]}>
+              Aileyi Yönet
+            </Text>
+          </View>
         </View>
         {isAdmin && (
           <TouchableOpacity
@@ -186,41 +375,49 @@ export default function FamilyManagementScreen({ navigation }: any) {
       />
 
       {/* DAVET MODALI */}
-      <Modal visible={isInviteModalOpen} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                Yeni Üye Davet Et
-              </Text>
-              <TouchableOpacity onPress={() => setIsInviteModalOpen(false)}>
-                <X color={colors.text} />
+      <Modal visible={isInviteModalOpen} animationType="fade" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalOverlay}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  Yeni Üye Davet Et
+                </Text>
+                <TouchableOpacity onPress={() => setIsInviteModalOpen(false)}>
+                  <X color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              <ModernInput
+                label="E-posta Adresi"
+                placeholder="user@example.com"
+                value={inviteEmail}
+                onChangeText={setInviteEmail}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+                onPress={handleInvite}
+              >
+                <Text style={styles.btnText}>Davet Gönder</Text>
               </TouchableOpacity>
             </View>
-            <ModernInput
-              label="E-posta Adresi"
-              placeholder="user@example.com"
-              value={inviteEmail}
-              onChangeText={setInviteEmail}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-              onPress={handleInvite}
-            >
-              <Text style={styles.btnText}>Davet Gönder</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ÜYE DETAY MODALI */}
-      <Modal visible={!!selectedMember} animationType="fade" transparent>
+      <Modal visible={!!selectedMemberDetail} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.detailModal, { backgroundColor: colors.card }]}>
             <TouchableOpacity
               style={styles.closeDetail}
-              onPress={() => setSelectedMember(null)}
+              onPress={() => setSelectedMemberDetail(null)}
             >
               <X color={colors.text} />
             </TouchableOpacity>
@@ -228,16 +425,16 @@ export default function FamilyManagementScreen({ navigation }: any) {
             <Image
               source={{
                 uri:
-                  selectedMember?.avatar_url ||
-                  `https://api.dicebear.com/7.x/avataaars/png?seed=${selectedMember?.id}`,
+                  selectedMemberDetail?.avatar_url ||
+                  `https://api.dicebear.com/7.x/avataaars/png?seed=${selectedMemberDetail?.id}`,
               }}
               style={styles.largeAvatar}
             />
             <Text style={[styles.detailName, { color: colors.text }]}>
-              {selectedMember?.full_name}
+              {selectedMemberDetail?.full_name}
             </Text>
             <Text style={[styles.detailEmail, { color: colors.textMuted }]}>
-              {selectedMember?.email}
+              {selectedMemberDetail?.email}
             </Text>
 
             <View style={styles.healthInfoRow}>
@@ -252,7 +449,7 @@ export default function FamilyManagementScreen({ navigation }: any) {
                   Kan Grubu
                 </Text>
                 <Text style={[styles.healthValue, { color: colors.text }]}>
-                  {selectedMember?.blood_type || "--"}
+                  {selectedMemberDetail?.blood_type || "--"}
                 </Text>
               </View>
               <View
@@ -269,17 +466,17 @@ export default function FamilyManagementScreen({ navigation }: any) {
                   style={[styles.healthValue, { color: colors.text }]}
                   numberOfLines={1}
                 >
-                  {selectedMember?.allergies || "Yok"}
+                  {selectedMemberDetail?.allergies || "Yok"}
                 </Text>
               </View>
             </View>
 
             {isAdmin &&
-              selectedMember?.id !== myProfile?.id &&
-              selectedMember?.role !== "owner" && (
+              selectedMemberDetail?.id !== myProfile?.id &&
+              selectedMemberDetail?.role !== "owner" && (
                 <TouchableOpacity
                   style={styles.removeBtn}
-                  onPress={() => handleRemove(selectedMember!)}
+                  onPress={() => handleRemove(selectedMemberDetail!)}
                 >
                   <Trash2 size={20} color="#ef4444" />
                   <Text style={styles.removeBtnText}>Aileden Çıkar</Text>
@@ -288,6 +485,114 @@ export default function FamilyManagementScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={mealPrefsModalOpen} animationType="fade" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalOverlay}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>
+                    Yemek Tercihleri
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                    {mealPrefsMember?.full_name || "Üye"}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setMealPrefsModalOpen(false);
+                    setMealPrefsMember(null);
+                  }}
+                >
+                  <X color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <SelectionGroup
+                label="Mutfak"
+                options={[
+                  { label: "Dünya", value: "world" },
+                  { label: "Türk", value: "turkish" },
+                  { label: "İtalyan", value: "italian" },
+                  { label: "Meksika", value: "mexican" },
+                  { label: "Asya", value: "asian" },
+                ]}
+                selectedValue={mealPreferences.cuisine}
+                onSelect={(val: any) =>
+                  setMealPreferences(prev => ({ ...prev, cuisine: val }))
+                }
+              />
+
+              <SelectionGroup
+                label="Diyet tipi"
+                options={[
+                  { label: "Standart", value: "standard" },
+                  { label: "Vejetaryen", value: "vegetarian" },
+                  { label: "Vegan", value: "vegan" },
+                  { label: "Keto", value: "keto" },
+                  { label: "Glutensiz", value: "gluten_free" },
+                ]}
+                selectedValue={mealPreferences.diet}
+                onSelect={(val: any) =>
+                  setMealPreferences(prev => ({ ...prev, diet: val }))
+                }
+              />
+
+              <ModernInput
+                label="Kalori hedefi"
+                value={mealPreferences.calories}
+                onChangeText={val =>
+                  setMealPreferences(prev => ({ ...prev, calories: val }))
+                }
+                keyboardType="numeric"
+              />
+              <ModernInput
+                label="Yemediği içerikler"
+                value={mealPreferences.avoid}
+                onChangeText={val =>
+                  setMealPreferences(prev => ({ ...prev, avoid: val }))
+                }
+                placeholder="Örn: mantar, deniz ürünleri"
+              />
+              <ModernInput
+                label="Notlar / Özel istekler"
+                value={mealPreferences.notes}
+                onChangeText={val =>
+                  setMealPreferences(prev => ({ ...prev, notes: val }))
+                }
+                multiline
+              />
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: colors.border }]}
+                  onPress={() => {
+                    setMealPrefsModalOpen(false);
+                    setMealPrefsMember(null);
+                  }}
+                >
+                  <Text style={{ color: colors.text }}>İptal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: colors.primary }]}
+                  onPress={handleSaveMealPrefs}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                    Kaydet
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -295,12 +600,22 @@ export default function FamilyManagementScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: 25,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 15 },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: { fontSize: 28, fontWeight: "900", letterSpacing: -1 },
-  subTitle: { fontSize: 14, fontWeight: "600", marginTop: 2 },
+  subTitle: { fontSize: 14, fontWeight: "600", marginTop: 0 },
   addBtn: {
     width: 50,
     height: 50,
@@ -312,6 +627,40 @@ const styles = StyleSheet.create({
 
   // YENİ STİLLER (Header ve Finans Kartı)
   listHeader: { marginBottom: 10 },
+  familyCard: {
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  familyTopRow: { flexDirection: "row", gap: 14, alignItems: "flex-start" },
+  familyAvatarCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  familyAvatar: { width: "100%", height: "100%" },
+  familyActionsRow: { flexDirection: "row", gap: 10, marginTop: 8 },
+  secondaryBtn: {
+    flex: 1,
+    borderWidth: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryBtnText: { fontWeight: "700" },
+  primarySmallBtn: {
+    width: 110,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primarySmallBtnText: { color: "#fff", fontWeight: "800" },
+  helperText: { fontSize: 12, marginTop: 6 },
   financeCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -357,6 +706,14 @@ const styles = StyleSheet.create({
   avatar: { width: 50, height: 50, borderRadius: 25 },
   memberInfo: { flex: 1, marginLeft: 15 },
   memberName: { fontSize: 17, fontWeight: "700" },
+  mealPrefButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  mealPrefText: { fontSize: 11, fontWeight: "700" },
   roleTag: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   roleText: { fontSize: 12, fontWeight: "700" },
 
@@ -365,6 +722,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     padding: 20,
+    flexGrow: 1,
   },
   modalContent: { padding: 25, borderRadius: 30 },
   modalHeader: {

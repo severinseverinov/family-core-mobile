@@ -14,16 +14,18 @@ import {
   Users,
   PawPrint,
   ChevronRight,
+  ChevronLeft,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPreferences, updatePreferences } from "../../services/settings";
+import ModernInput from "../../components/ui/ModernInput";
 import SelectionGroup from "../../components/ui/SelectionGroup";
 import { useNavigation } from "@react-navigation/native";
 
 export default function SettingsScreen() {
   const { colors, themeMode, setThemeMode } = useTheme();
-  const { signOut } = useAuth();
+  const { signOut, profile } = useAuth();
   const navigation = useNavigation<any>();
 
   const [lang, setLang] = useState("tr");
@@ -31,6 +33,11 @@ export default function SettingsScreen() {
   const [themeColor, setThemeColor] = useState("blue");
 
   const [loading, setLoading] = useState(false);
+  const [mealPreferences, setMealPreferences] = useState({
+    cuisine: "world",
+    calories: "",
+    avoid: "",
+  });
 
   useEffect(() => {
     loadPrefs();
@@ -42,8 +49,12 @@ export default function SettingsScreen() {
       setLang(prefs.preferred_language || "tr");
       setCurrency(prefs.preferred_currency || "TL");
       setThemeColor(prefs.theme_color || "blue");
+      if (prefs.meal_preferences) {
+        setMealPreferences(prev => ({ ...prev, ...prefs.meal_preferences }));
+      }
     }
   };
+
 
   const handleSave = async () => {
     setLoading(true);
@@ -51,15 +62,27 @@ export default function SettingsScreen() {
       language: lang,
       currency,
       themeColor,
+      mealPreferences,
     });
     setLoading(false);
-    if (res.success) Alert.alert("Başarılı", "Tercihleriniz güncellendi.");
+    if (res.success) {
+      Alert.alert("Başarılı", "Tercihleriniz güncellendi.");
+      if (navigation.canGoBack()) navigation.goBack();
+    }
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={[styles.mainTitle, { color: colors.text }]}>Ayarlar</Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={[styles.backButton, { borderColor: colors.border }]}
+          >
+            <ChevronLeft size={22} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.mainTitle, { color: colors.text }]}>Ayarlar</Text>
+        </View>
 
         {/* YÖNETİM PANELİ (YENİ BÖLÜM) */}
         <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
@@ -74,7 +97,7 @@ export default function SettingsScreen() {
             <View style={styles.menuRow}>
               <Users size={20} color={colors.primary} />
               <Text style={[styles.menuText, { color: colors.text }]}>
-                Aile Üyelerini Yönet
+                Aileyi Yönet
               </Text>
             </View>
             <ChevronRight size={18} color={colors.textMuted} />
@@ -82,6 +105,51 @@ export default function SettingsScreen() {
 
           {/* Evcil Hayvan Ekleme */}
         </View>
+
+        <Text
+          style={[
+            styles.sectionTitle,
+            { color: colors.textMuted, marginTop: 20 },
+          ]}
+        >
+          YEMEK TERCİHLERİM
+        </Text>
+
+        <View style={[styles.memberPrefCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <Text style={[styles.memberPrefTitle, { color: colors.text }]}>
+            Yemek Tercihlerim
+          </Text>
+          <SelectionGroup
+            label="Mutfak"
+            options={[
+              { label: "Dünya", value: "world" },
+              { label: "Türk", value: "turkish" },
+              { label: "İtalyan", value: "italian" },
+              { label: "Meksika", value: "mexican" },
+              { label: "Asya", value: "asian" },
+            ]}
+            selectedValue={mealPreferences.cuisine}
+            onSelect={(val: any) =>
+              setMealPreferences(prev => ({ ...prev, cuisine: val }))
+            }
+          />
+          <ModernInput
+            label="Kalori hedefi"
+            value={mealPreferences.calories}
+            onChangeText={val =>
+              setMealPreferences(prev => ({ ...prev, calories: val }))
+            }
+            keyboardType="numeric"
+          />
+          <ModernInput
+            label="Yemediği içerikler"
+            value={mealPreferences.avoid}
+            onChangeText={val =>
+              setMealPreferences(prev => ({ ...prev, avoid: val }))
+            }
+          />
+        </View>
+
 
         <Text
           style={[
@@ -146,12 +214,25 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20 },
+  container: { paddingHorizontal: 20, paddingTop: 0, paddingBottom: 20 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+    paddingVertical: 15,
+    marginBottom: 10,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   mainTitle: {
     fontSize: 28,
     fontWeight: "900",
-    marginBottom: 20,
-    marginTop: 10,
   },
   sectionTitle: {
     fontSize: 12,
@@ -174,6 +255,34 @@ const styles = StyleSheet.create({
   },
   menuRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   menuText: { fontSize: 16, fontWeight: "600" },
+  infoBox: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+  },
+  memberSelect: { marginBottom: 12 },
+  memberLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  memberRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  memberChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  memberPrefCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 12,
+  },
+  memberPrefTitle: { fontSize: 13, fontWeight: "700", marginBottom: 8 },
 
   saveBtn: {
     flexDirection: "row",

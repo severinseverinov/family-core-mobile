@@ -1,4 +1,6 @@
 import { supabase } from "./supabase";
+import { decode } from "base64-arraybuffer";
+import * as FileSystem from "expo-file-system/legacy";
 import { encrypt, decrypt } from "../utils/encryption"; // Bu yardımcıların mobil tarafta da olması gerekir
 
 // 1. Listeyi Getir (Yetkiye ve Aileye Göre)
@@ -86,7 +88,11 @@ export async function addVaultItem(itemData: {
   type: "text" | "file";
   visibility: string;
   value?: string;
-  file?: any;
+  file?: {
+    uri: string;
+    name?: string;
+    mimeType?: string;
+  };
   assignedTo?: string[];
 }) {
   try {
@@ -117,20 +123,27 @@ export async function addVaultItem(itemData: {
     if (itemData.type === "text" && itemData.value) {
       dbData.encrypted_data = encrypt(itemData.value);
     }
-    // Dosya yükleme mantığı
-    else if (itemData.type === "file" && itemData.file) {
+    // Dosya yükleme mantığı (React Native)
+    else if (itemData.type === "file" && itemData.file?.uri) {
       const file = itemData.file;
-      const fileExt = file.name.split(".").pop();
-      const filePath = `${profile.family_id}/${Date.now()}.${fileExt}`;
+      const rawName = (file.name || `file-${Date.now()}`).replace(
+        /[^a-zA-Z0-9._-]/g,
+        "-"
+      );
+      const filePath = `${profile.family_id}/${Date.now()}-${rawName}`;
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: "base64",
+      });
+      const mimeType = file.mimeType || "application/octet-stream";
 
       const { error: uploadError } = await supabase.storage
         .from("vault_files")
-        .upload(filePath, file);
+        .upload(filePath, decode(base64), { contentType: mimeType });
 
       if (uploadError) throw uploadError;
 
       dbData.file_path = filePath;
-      dbData.mime_type = file.type;
+      dbData.mime_type = mimeType;
       dbData.encrypted_data = "FILE_ENCRYPTED";
     }
 

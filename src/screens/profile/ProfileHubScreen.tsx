@@ -22,7 +22,8 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function ProfileHubScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, themeMode } = useTheme();
+  const isLight = themeMode === "light";
   const { profile } = useAuth();
   const [qrVisible, setQrVisible] = useState(false);
 
@@ -50,7 +51,13 @@ END:VCARD`;
               style={[styles.mainAvatar, { borderColor: colors.primary }]}
             />
             <TouchableOpacity
-              style={[styles.qrShortcut, { backgroundColor: colors.primary }]}
+              style={[
+                styles.qrShortcut,
+                {
+                  backgroundColor: colors.primary,
+                  borderColor: colors.background,
+                },
+              ]}
               onPress={() => setQrVisible(true)}
             >
               <ShieldAlert size={20} color="#fff" />
@@ -66,7 +73,11 @@ END:VCARD`;
         <View style={styles.hubGrid}>
           {/* AİLE KASASI */}
           <TouchableOpacity
-            style={[styles.hubCard, { backgroundColor: colors.card }]}
+            style={[
+              styles.hubCard,
+              isLight && styles.surfaceLift,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
             onPress={() => navigation.navigate("Vault")}
           >
             <View
@@ -84,7 +95,11 @@ END:VCARD`;
 
           {/* AYARLAR */}
           <TouchableOpacity
-            style={[styles.hubCard, { backgroundColor: colors.card }]}
+            style={[
+              styles.hubCard,
+              isLight && styles.surfaceLift,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
             onPress={() => navigation.navigate("Settings")}
           >
             <View style={[styles.iconCircle, { backgroundColor: "#10b98120" }]}>
@@ -100,7 +115,8 @@ END:VCARD`;
         <View
           style={[
             styles.listCard,
-            { backgroundColor: colors.card, marginTop: 10 },
+            isLight && styles.surfaceLift,
+            { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 },
           ]}
         >
           <TouchableOpacity
@@ -162,8 +178,8 @@ END:VCARD`;
 }
 
 const styles = StyleSheet.create({
-  container: { paddingVertical: 20 },
-  profileHeader: { alignItems: "center", marginVertical: 30 },
+  container: { paddingHorizontal: 20, paddingTop: 15, paddingBottom: 30 },
+  profileHeader: { alignItems: "center", marginVertical: 20 },
   avatarContainer: { position: "relative" },
   mainAvatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 4 },
   qrShortcut: {
@@ -181,11 +197,16 @@ const styles = StyleSheet.create({
   userName: { fontSize: 24, fontWeight: "900", marginTop: 15 },
   hubGrid: {
     flexDirection: "row",
-    paddingHorizontal: 8,
     gap: 12,
     marginBottom: 10,
   },
-  hubCard: { flex: 1, padding: 20, borderRadius: 28, alignItems: "center" },
+  hubCard: {
+    flex: 1,
+    padding: 20,
+    borderRadius: 24,
+    alignItems: "center",
+    borderWidth: 0,
+  },
   iconCircle: {
     width: 55,
     height: 55,
@@ -202,9 +223,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   hubTitle: { fontSize: 15, fontWeight: "bold" },
-  listCard: { marginHorizontal: 8, borderRadius: 28, overflow: "hidden" },
+  listCard: { borderRadius: 24, overflow: "hidden", borderWidth: 0 },
   listItem: { flexDirection: "row", alignItems: "center", padding: 18 },
   listText: { fontSize: 16, fontWeight: "700" },
+  surfaceLift: {
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
 
   // Modal Styles
   modalOverlay: {

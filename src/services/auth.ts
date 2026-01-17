@@ -143,9 +143,7 @@ export async function signInWithGoogle() {
       }
 
       return { error: "Authentication failed" };
-    }
-
-    return { error: "Failed to initiate Google sign in" };
+    }    return { error: "Failed to initiate Google sign in" };
   } catch (error: any) {
     return {
       error: error?.message || "An error occurred during Google sign in",
@@ -161,9 +159,7 @@ export async function signInWithApple() {
     const isAvailable = await AppleAuthentication.isAvailableAsync();
     if (!isAvailable) {
       return { error: "Apple Sign In is not available on this device" };
-    }
-
-    // Request Apple Authentication
+    }    // Request Apple Authentication
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -177,13 +173,9 @@ export async function signInWithApple() {
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: "apple",
       token: credential.identityToken,
-    });
-
-    if (error) {
+    });    if (error) {
       return { error: error.message };
-    }
-
-    // Update user metadata if full name is available
+    }    // Update user metadata if full name is available
     if (credential.fullName) {
       const fullName = `${credential.fullName.givenName || ""} ${
         credential.fullName.familyName || ""

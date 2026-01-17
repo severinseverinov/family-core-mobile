@@ -81,11 +81,11 @@ export default function TaskScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <TasksWidget
+      <TasksWidget
           initialItems={tasks}
           hideHeader={true}
           userRole={profile?.role || "member"}
-        />
+      />
       </ScrollView>
     </SafeAreaView>
   );

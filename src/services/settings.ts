@@ -8,7 +8,9 @@ export async function getPreferences() {
 
   const { data } = await supabase
     .from("profiles")
-    .select("preferred_language, preferred_currency, theme_color, gender")
+    .select(
+      "preferred_language, preferred_currency, theme_color, gender, meal_settings, meal_preferences"
+    )
     .eq("id", user.id)
     .single();
 
@@ -20,11 +22,15 @@ export async function updatePreferences(updates: {
   currency?: string;
   themeColor?: string;
   gender?: string;
+  mealSettings?: any;
+  mealPreferences?: any;
+  userIdOverride?: string;
 }) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Oturum bulunamadı" };
+  const targetUserId = updates.userIdOverride || user?.id;
+  if (!targetUserId) return { error: "Oturum bulunamadı" };
 
   const { error } = await supabase
     .from("profiles")
@@ -33,8 +39,10 @@ export async function updatePreferences(updates: {
       preferred_currency: updates.currency,
       theme_color: updates.themeColor,
       gender: updates.gender,
+      meal_settings: updates.mealSettings,
+      meal_preferences: updates.mealPreferences,
     })
-    .eq("id", user.id);
+    .eq("id", targetUserId);
 
   return { success: !error, error };
 }

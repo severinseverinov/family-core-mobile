@@ -136,7 +136,7 @@ export default function FinanceSettingsScreen({ navigation, route }: any) {
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: colors.card }]}
+            style={[styles.backButton, { borderColor: colors.border }]}
             onPress={() =>
               navigation.canGoBack()
                 ? navigation.goBack()
@@ -329,8 +329,12 @@ const styles = StyleSheet.create({
     gap: 15,
   },
   backButton: {
-    padding: 10,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: { fontSize: 20, fontWeight: "800" },
   headerSubtitle: { fontSize: 13, fontWeight: "600" },

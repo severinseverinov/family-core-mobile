@@ -182,12 +182,20 @@ export default function FamilyFinanceScreen({ navigation }: any) {
       >
         {/* BAŞLIK */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            Aile Finans Merkezi
-          </Text>
-          <Text style={{ color: colors.textMuted }}>
-            {selectedYear} Genel Bakış
-          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={[styles.backButton, { borderColor: colors.border }]}
+          >
+            <ChevronLeft size={22} color={colors.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Aile Finans Merkezi
+            </Text>
+            <Text style={{ color: colors.textMuted }}>
+              {selectedYear} Genel Bakış
+            </Text>
+          </View>
         </View>
 
         {/* ÖZET KARTLAR (GRID) */}
@@ -391,9 +399,22 @@ export default function FamilyFinanceScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
+  container: { paddingHorizontal: 20, paddingTop: 15, paddingBottom: 20 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { marginBottom: 20 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+    marginBottom: 20,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: { fontSize: 28, fontWeight: "800" },
 
   grid: { flexDirection: "row", gap: 15, marginBottom: 20 },

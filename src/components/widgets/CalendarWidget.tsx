@@ -27,23 +27,46 @@ import {
   subMonths,
 } from "date-fns";
 import { tr } from "date-fns/locale";
-import { Clock, Flag, Info, MapPin } from "lucide-react-native";
+import {
+  Clock,
+  Flag,
+  Info,
+  MapPin,
+  Sun,
+  Cloud,
+  CloudRain,
+  CloudLightning,
+  Snowflake,
+} from "lucide-react-native";
 import * as Location from "expo-location";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getPublicHolidays } from "../../services/events";
+import { fetchWeather } from "../../services/weather";
 
 export default function CalendarWidget({
   events = [],
   countryCode, // Opsiyonel prop
+  selectedDate: controlledSelectedDate,
+  onDateChange,
 }: {
   events: any[];
   countryCode?: string;
+  selectedDate?: Date;
+  onDateChange?: (date: Date) => void;
 }) {
   const { colors, themeMode } = useTheme();
   const [viewMode, setViewMode] = useState<"daily" | "weekly" | "monthly">(
     "weekly"
   );
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [internalSelectedDate, setInternalSelectedDate] = useState(new Date());
+  const selectedDate = controlledSelectedDate ?? internalSelectedDate;
+  const setSelectedDateValue = (nextDate: Date) => {
+    if (onDateChange) {
+      onDateChange(nextDate);
+      return;
+    }
+    setInternalSelectedDate(nextDate);
+  };
 
   // Varsayılan olarak NULL yapıyoruz, böylece "TR" yazısı peşinen çıkmaz.
   const [activeCountryCode, setActiveCountryCode] = useState<string | null>(
@@ -53,6 +76,7 @@ export default function CalendarWidget({
     useState<string>("Konum Alınıyor...");
   const [holidays, setHolidays] = useState<any[]>([]);
   const [loadingHolidays, setLoadingHolidays] = useState(false);
+  const [weatherData, setWeatherData] = useState<any>(null);
 
   // 1. KONUM TESPİTİ (FamilyWidget Mantığı)
   useEffect(() => {
@@ -120,6 +144,27 @@ export default function CalendarWidget({
     };
   }, [countryCode]);
 
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+        let location = await Location.getCurrentPositionAsync({});
+        const data = await fetchWeather(
+          location.coords.latitude,
+          location.coords.longitude
+        );
+        if (isMounted) setWeatherData(data);
+      } catch (error) {
+        console.error("Hava durumu hatası:", error);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // 2. TATİLLERİ ÇEKME
   useEffect(() => {
     if (activeCountryCode) {
@@ -146,22 +191,84 @@ export default function CalendarWidget({
   }, [selectedDate, events, holidays]);
 
   const handleSwipe = (direction: "left" | "right") => {
-    if (viewMode === "daily")
-      setSelectedDate(prev =>
-        direction === "left" ? addDays(prev, 1) : subDays(prev, 1)
+    if (viewMode === "daily") {
+      const next =
+        direction === "left"
+          ? addDays(selectedDate, 1)
+          : subDays(selectedDate, 1);
+      setSelectedDateValue(next);
+    } else if (viewMode === "weekly") {
+      const next =
+        direction === "left"
+          ? addWeeks(selectedDate, 1)
+          : subWeeks(selectedDate, 1);
+      setSelectedDateValue(startOfWeek(next, { weekStartsOn: 1 }));
+    } else if (viewMode === "monthly") {
+      const next =
+        direction === "left"
+          ? addMonths(selectedDate, 1)
+          : subMonths(selectedDate, 1);
+      setSelectedDateValue(startOfMonth(next));
+    }
+  };
+
+  const getWeatherIcon = (main: string, size: number = 18) => {
+    switch (main) {
+      case "Clear":
+        return <Sun size={size} color="#f59e0b" />;
+      case "Rain":
+        return <CloudRain size={size} color="#3b82f6" />;
+      case "Thunderstorm":
+        return <CloudLightning size={size} color="#6366f1" />;
+      case "Snow":
+        return <Snowflake size={size} color="#0ea5e9" />;
+      default:
+        return <Cloud size={size} color="#94a3b8" />;
+    }
+  };
+
+  const selectedWeather = useMemo(() => {
+    const list = weatherData?.hourly?.list || [];
+    if (!list.length) return null;
+    const dayItems = list.filter((item: any) =>
+      isSameDay(new Date(item.dt_txt), selectedDate)
+    );
+    if (!dayItems.length) return null;
+    const noon = new Date(selectedDate);
+    noon.setHours(12, 0, 0, 0);
+    return dayItems.reduce((prev: any, cur: any) => {
+      const prevDiff = Math.abs(
+        new Date(prev.dt_txt).getTime() - noon.getTime()
       );
-    else if (viewMode === "weekly")
-      setSelectedDate(prev => {
-        const next =
-          direction === "left" ? addWeeks(prev, 1) : subWeeks(prev, 1);
-        return startOfWeek(next, { weekStartsOn: 1 });
-      });
-    else if (viewMode === "monthly")
-      setSelectedDate(prev => {
-        const next =
-          direction === "left" ? addMonths(prev, 1) : subMonths(prev, 1);
-        return startOfMonth(next);
-      });
+      const curDiff = Math.abs(new Date(cur.dt_txt).getTime() - noon.getTime());
+      return curDiff < prevDiff ? cur : prev;
+    });
+  }, [weatherData, selectedDate]);
+
+  const getDayWeatherMain = (day: Date) => {
+    const list = weatherData?.hourly?.list || [];
+    if (!list.length) return null;
+    const dayItems = list.filter((item: any) =>
+      isSameDay(new Date(item.dt_txt), day)
+    );
+    if (!dayItems.length) return null;
+    const noon = new Date(day);
+    noon.setHours(12, 0, 0, 0);
+    const closest = dayItems.reduce((prev: any, cur: any) => {
+      const prevDiff = Math.abs(
+        new Date(prev.dt_txt).getTime() - noon.getTime()
+      );
+      const curDiff = Math.abs(new Date(cur.dt_txt).getTime() - noon.getTime());
+      return curDiff < prevDiff ? cur : prev;
+    });
+    return closest?.weather?.[0]?.main || null;
+  };
+
+  const getEventIcon = (type?: string) => {
+    if (type === "task") {
+      return <Clock size={10} color={colors.primary} />;
+    }
+    return <Info size={10} color={colors.textMuted} />;
   };
 
   const panResponder = useMemo(
@@ -233,63 +340,104 @@ export default function CalendarWidget({
       <View {...panResponder.panHandlers} style={styles.swipeContent}>
         {/* IZGARA GÖRÜNÜMLERİ */}
         {viewMode !== "daily" && (
-          <View
-            style={
-              viewMode === "monthly" ? styles.monthGrid : styles.weekHeader
-            }
-          >
-            {eachDayOfInterval({
-              start:
-                viewMode === "monthly"
-                  ? startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 })
-                  : startOfWeek(selectedDate, { weekStartsOn: 1 }),
-              end:
-                viewMode === "monthly"
-                  ? endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 })
-                  : endOfWeek(selectedDate, { weekStartsOn: 1 }),
-            }).map((day, i) => {
-              const isSelected = isSameDay(day, selectedDate);
-              const hasHoliday = (holidays || []).some(h =>
-                isSameDay(new Date(h.date), day)
-              );
-              const hasEvent = events.some(e =>
-                isSameDay(new Date(e.time), day)
-              );
-
-              return (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => setSelectedDate(day)}
-                  style={[
-                    styles.dayCell,
-                    isSelected && { backgroundColor: colors.primary },
-                  ]}
-                >
+          <View>
+            <View style={styles.weekdayRow}>
+              {eachDayOfInterval({
+                start: startOfWeek(new Date(), { weekStartsOn: 1 }),
+                end: endOfWeek(new Date(), { weekStartsOn: 1 }),
+              }).map((day, i) => (
+                <View key={i} style={styles.weekdayCell}>
                   <Text
+                    style={[styles.weekdayText, { color: colors.textMuted }]}
+                  >
+                    {format(day, "EEE", { locale: tr })}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <View
+              style={
+                viewMode === "monthly" ? styles.monthGrid : styles.weekHeader
+              }
+            >
+              {eachDayOfInterval({
+                start:
+                  viewMode === "monthly"
+                    ? startOfWeek(startOfMonth(selectedDate), {
+                        weekStartsOn: 1,
+                      })
+                    : startOfWeek(selectedDate, { weekStartsOn: 1 }),
+                end:
+                  viewMode === "monthly"
+                    ? endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 })
+                    : endOfWeek(selectedDate, { weekStartsOn: 1 }),
+              }).map((day, i) => {
+                const isSelected = isSameDay(day, selectedDate);
+                const isToday = isSameDay(day, new Date());
+                const dayWeatherMain = getDayWeatherMain(day);
+                const dayEvents = events.filter(e =>
+                  isSameDay(new Date(e.time), day)
+                );
+                const hasHoliday = (holidays || []).some(h =>
+                  isSameDay(new Date(h.date), day)
+                );
+                const hasEvent = events.some(e =>
+                  isSameDay(new Date(e.time), day)
+                );
+
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => setSelectedDateValue(day)}
                     style={[
-                      styles.dayText,
-                      { color: isSelected ? "#fff" : colors.text },
+                      styles.dayCell,
+                      isSelected && { backgroundColor: colors.primary },
+                      isToday && !isSelected && { borderColor: colors.primary },
                     ]}
                   >
-                    {format(day, "d")}
-                  </Text>
-                  <View style={styles.iconRow}>
-                    {hasHoliday && (
-                      <Flag
-                        size={8}
-                        color={isSelected ? "#fff" : colors.error}
-                      />
-                    )}
-                    {hasEvent && (
-                      <Clock
-                        size={8}
-                        color={isSelected ? "#fff" : colors.primary}
-                      />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+                    <View style={styles.dayWeatherIcon}>
+                      {dayWeatherMain && !isToday
+                        ? getWeatherIcon(dayWeatherMain, 14)
+                        : null}
+                    </View>
+                    <Text
+                      style={[
+                        styles.dayText,
+                        { color: isSelected ? "#fff" : colors.text },
+                      ]}
+                    >
+                      {format(day, "d")}
+                    </Text>
+                    <View style={styles.dayEventIcons}>
+                      {dayEvents.length > 0
+                        ? dayEvents.slice(0, 3).map((ev, idx) => (
+                            <View
+                              key={`${ev.id || idx}`}
+                              style={styles.eventIcon}
+                            >
+                              {getEventIcon(ev.type)}
+                            </View>
+                          ))
+                        : null}
+                    </View>
+                    <View style={styles.iconRow}>
+                      {hasHoliday && (
+                        <Flag
+                          size={8}
+                          color={isSelected ? "#fff" : colors.error}
+                        />
+                      )}
+                      {hasEvent && (
+                        <Clock
+                          size={8}
+                          color={isSelected ? "#fff" : colors.primary}
+                        />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         )}
 
@@ -327,6 +475,9 @@ export default function CalendarWidget({
                             { backgroundColor: colors.background },
                           ]}
                         >
+                          <View style={styles.eventPillIcon}>
+                            {getEventIcon(ev.type)}
+                          </View>
                           <Text
                             style={[
                               styles.eventPillText,
@@ -432,20 +583,50 @@ const styles = StyleSheet.create({
   modeText: { fontSize: 11, fontWeight: "bold" },
   swipeContent: { marginBottom: 10 },
   monthGrid: { flexDirection: "row", flexWrap: "wrap" },
+  weekdayRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  weekdayCell: { width: "14.2%", alignItems: "center" },
+  weekdayText: { fontSize: 10, fontWeight: "700" },
   dayCell: {
     width: "14.2%",
-    height: 40,
+    height: 58,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
-  dayText: { fontSize: 13, fontWeight: "500" },
+  dayWeatherIcon: { marginBottom: 2, minHeight: 14 },
+  dayText: { fontSize: 15, fontWeight: "600" },
+  dayEventIcons: {
+    flexDirection: "row",
+    gap: 4,
+    minHeight: 12,
+    marginTop: 2,
+  },
+  eventIcon: {
+    width: 10,
+    height: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   iconRow: { flexDirection: "row", gap: 2, marginTop: 2 },
   weekHeader: { flexDirection: "row", justifyContent: "space-between" },
   hourRow: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: 1 },
   hourLabel: { width: 40, fontSize: 11 },
   eventSlot: { flex: 1, flexDirection: "row", gap: 5 },
-  eventPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  eventPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  eventPillIcon: { width: 12, alignItems: "center" },
   eventPillText: { fontSize: 11 },
   detailsArea: { borderTopWidth: 1, paddingTop: 15, marginTop: 5, gap: 10 },
   detailItem: { flexDirection: "row", gap: 10, alignItems: "flex-start" },

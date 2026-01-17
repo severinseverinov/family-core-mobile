@@ -26,13 +26,16 @@ import {
   ImageIcon,
   FileIcon,
   Plus,
+  ChevronLeft,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getVaultItems, revealSecret, getFileUrl } from "../../services/vault";
+import AddVaultItemModal from "../../components/modals/AddVaultItemModal";
 import QRCode from "react-native-qrcode-svg";
 
 export default function VaultScreen() {
-  const { colors } = useTheme();
+  const { colors, themeMode } = useTheme();
+  const isLight = themeMode === "light";
   const navigation = useNavigation<any>();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [items, setItems] = useState<any[]>([]);
@@ -40,6 +43,7 @@ export default function VaultScreen() {
   const [secretValue, setSecretValue] = useState("");
   const [previewData, setPreviewData] = useState<any>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [addVaultVisible, setAddVaultVisible] = useState(false);
 
   useEffect(() => {
     loadVault();
@@ -77,13 +81,40 @@ export default function VaultScreen() {
     }
   };
 
+  const getVaultIcon = (item: any) => {
+    if (item.type === "file") {
+      if (item.mime_type?.startsWith("image/")) {
+        return <ImageIcon size={22} color={colors.primary} />;
+      }
+      return <FileIcon size={22} color={colors.primary} />;
+    }
+    const title = (item.title || "").toLowerCase();
+    if (title.includes("wifi") || title.includes("wi-fi")) {
+      return <Wifi size={22} color={colors.primary} />;
+    }
+    if (title.includes("şifre") || title.includes("password")) {
+      return <Key size={22} color={colors.primary} />;
+    }
+    return <Lock size={22} color={colors.primary} />;
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={styles.screenHeader}>
-        <Text style={[styles.screenTitle, { color: colors.text }]}>Kasa</Text>
-        <Text style={[styles.screenSub, { color: colors.textMuted }]}>
-          Şifreli ve güvenli aile verileri
-        </Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={[styles.backButton, { borderColor: colors.border }]}
+          >
+            <ChevronLeft size={22} color={colors.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={[styles.screenTitle, { color: colors.text }]}>Kasa</Text>
+            <Text style={[styles.screenSub, { color: colors.textMuted }]}>
+              Şifreli ve güvenli aile verileri
+            </Text>
+          </View>
+        </View>
       </View>
 
       <FlatList
@@ -93,24 +124,38 @@ export default function VaultScreen() {
           <View
             style={[
               styles.card,
+              isLight && styles.surfaceLift,
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
             <View style={styles.cardMain}>
               <TouchableOpacity
-                style={styles.iconBox}
+                style={[
+                  styles.iconBox,
+                  {
+                    backgroundColor: colors.primary + "12",
+                    borderColor: colors.primary + "30",
+                  },
+                ]}
                 onPress={() => item.type === "file" && handlePreview(item)}
               >
-                {/* İkon belirleme mantığı */}
+                {getVaultIcon(item)}
               </TouchableOpacity>
               <View style={styles.details}>
                 <Text style={[styles.title, { color: colors.text }]}>
                   {item.title}
                 </Text>
                 {item.type === "file" ? (
-                  <TouchableOpacity onPress={() => handlePreview(item)}>
+                  <TouchableOpacity
+                    onPress={() => handlePreview(item)}
+                    style={[
+                      styles.linkPill,
+                      { backgroundColor: colors.primary + "18" },
+                    ]}
+                  >
+                    <Eye size={14} color={colors.primary} />
                     <Text style={[styles.linkText, { color: colors.primary }]}>
-                      Dosyayı Görüntüle
+                      Görüntüle
                     </Text>
                   </TouchableOpacity>
                 ) : (
@@ -130,10 +175,16 @@ export default function VaultScreen() {
       />
       <TouchableOpacity
         style={[styles.floatingAddButton, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate("AddVaultItem")}
+        onPress={() => setAddVaultVisible(true)}
       >
         <Plus size={24} color="#fff" strokeWidth={3} />
       </TouchableOpacity>
+
+      <AddVaultItemModal
+        visible={addVaultVisible}
+        onClose={() => setAddVaultVisible(false)}
+        onSaved={() => loadVault()}
+      />
 
       {/* Preview Modal */}
       <Modal visible={isPreviewOpen} animationType="slide">
@@ -175,32 +226,52 @@ export default function VaultScreen() {
 }
 
 const styles = StyleSheet.create({
-  screenHeader: { padding: 24, paddingBottom: 10 },
+  screenHeader: { paddingHorizontal: 20, paddingVertical: 15 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   screenTitle: { fontSize: 28, fontWeight: "900", letterSpacing: -1 },
-  screenSub: { fontSize: 14, marginTop: 4, fontWeight: "500" },
+  screenSub: { fontSize: 14, marginTop: 0, fontWeight: "500" },
   card: {
     padding: 16,
     marginBottom: 15,
     borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#4A90E2",
+    borderWidth: 1,
   },
   cardMain: { flexDirection: "row", alignItems: "center" },
   iconBox: {
     width: 55,
     height: 55,
     borderRadius: 15,
-    backgroundColor: "rgba(0,0,0,0.03)",
+    borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
   },
   details: { flex: 1, marginLeft: 15 },
   title: { fontSize: 17, fontWeight: "700" },
   linkText: {
-    fontSize: 15,
-    fontWeight: "bold",
-    textDecorationLine: "underline",
-    marginTop: 5,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  linkPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginTop: 6,
+    alignSelf: "flex-start",
   },
   secret: { fontSize: 14, marginTop: 4, fontFamily: "monospace" },
   modalHeader: {
@@ -220,5 +291,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     elevation: 8,
+  },
+  surfaceLift: {
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
 });

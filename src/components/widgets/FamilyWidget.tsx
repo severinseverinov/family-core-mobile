@@ -8,7 +8,9 @@ import {
   Dimensions,
 } from "react-native";
 import * as Location from "expo-location";
-import { MapPin, Quote } from "lucide-react-native";
+import { MapPin, Quote, Users } from "lucide-react-native";
+import { supabase } from "../../services/supabase";
+import { getFamilyMottosSample } from "../../services/family";
 
 interface FamilyWidgetProps {
   familyData: any;
@@ -27,6 +29,18 @@ export default function FamilyWidget({
   userAvatarUrl,
 }: FamilyWidgetProps) {
   const [locationName, setLocationName] = useState("Yükleniyor...");
+  const [dailyReminders, setDailyReminders] = useState<string[]>([]);
+  const [dailyMotto, setDailyMotto] = useState<string | null>(null);
+  const getInitials = (name?: string) => {
+    const parts = String(name || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (parts.length === 0) return "?";
+    const first = parts[0]?.[0] || "";
+    const last = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
+    return (first + last).toUpperCase();
+  };
 
   useEffect(() => {
     (async () => {
@@ -49,9 +63,57 @@ export default function FamilyWidget({
     })();
   }, []);
 
-  const backgroundSource = familyData?.image_url
-    ? { uri: familyData.image_url }
-    : PLACEHOLDER_FAMILY_BG;
+  useEffect(() => {
+    const loadDailyContent = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("family_id")
+        .eq("id", user.id)
+        .single();
+      if (!profile?.family_id) return;
+
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+
+      const { data: events } = await supabase
+        .from("events")
+        .select("title, start_time")
+        .eq("family_id", profile.family_id)
+        .gte("start_time", start.toISOString())
+        .lte("start_time", end.toISOString())
+        .order("start_time", { ascending: true });
+
+      const titles =
+        events?.map((event: any) => event.title).filter(Boolean) || [];
+
+      if (titles.length > 0) {
+        setDailyReminders(titles.slice(0, 3));
+        return;
+      }
+
+      const { mottos } = await getFamilyMottosSample(30);
+      if (mottos && mottos.length > 0) {
+        const random = mottos[Math.floor(Math.random() * mottos.length)];
+        if (random?.text) setDailyMotto(random.text);
+      }
+    };
+
+    loadDailyContent();
+  }, []);
+
+  const familyImageUrl = familyData?.image_url;
+  const isSvg =
+    typeof familyImageUrl === "string" &&
+    familyImageUrl.toLowerCase().includes(".svg");
+  const backgroundSource =
+    familyImageUrl && !isSvg ? { uri: familyImageUrl } : PLACEHOLDER_FAMILY_BG;
 
   return (
     <View style={styles.containerShadow}>
@@ -70,15 +132,15 @@ export default function FamilyWidget({
 
           {/* 2. SATIR: Kullanıcı ve Konum */}
           <View style={styles.userSection}>
-            <View style={styles.avatarWrapper}>
-              <Image
-                source={
-                  userAvatarUrl
-                    ? { uri: userAvatarUrl }
-                    : { uri: "https://via.placeholder.com/100" }
-                }
-                style={styles.mainAvatar}
-              />
+            <View style={styles.heroBadge}>
+              {familyData?.image_url ? (
+                <Image
+                  source={{ uri: familyData.image_url }}
+                  style={styles.heroAvatar}
+                />
+              ) : (
+                <Users size={22} color="#ffffff" />
+              )}
             </View>
             <View style={styles.userTextWrapper}>
               <Text style={styles.greetingText}>Hoş geldin, {userName} 👋</Text>
@@ -92,9 +154,18 @@ export default function FamilyWidget({
           {/* 3. SATIR: Motto (Altına ekstra boşluk eklendi) */}
           <View style={styles.mottoContainer}>
             <Quote size={12} color="#cbd5e1" style={styles.quoteIcon} />
-            <Text style={styles.mottoText}>
-              "Sebze ağırlıklı bir öğünle bedeninizi ödüllendirin."
-            </Text>
+            {dailyReminders.length > 0 ? (
+              <View style={styles.reminderBlock}>
+                <Text style={styles.reminderTitle}>Bugünün Hatırlatmaları</Text>
+                {dailyReminders.map((title, index) => (
+                  <Text key={`${title}-${index}`} style={styles.reminderItem}>
+                    • {title}
+                  </Text>
+                ))}
+              </View>
+            ) : dailyMotto ? (
+              <Text style={styles.mottoText}>"{dailyMotto}"</Text>
+            ) : null}
           </View>
 
           {/* 4. SATIR: Üyeler ve Puanlar (Çizgi ve üst boşluk optimize edildi) */}
@@ -102,14 +173,18 @@ export default function FamilyWidget({
             {members.slice(0, 4).map(member => (
               <View key={member.id} style={styles.memberBox}>
                 <View style={styles.memberAvatarCircle}>
-                  <Image
-                    source={
-                      member.avatar_url
-                        ? { uri: member.avatar_url }
-                        : { uri: "https://via.placeholder.com/50" }
-                    }
-                    style={styles.memberThumb}
-                  />
+                  {member.avatar_url ? (
+                    <Image
+                      source={{ uri: member.avatar_url }}
+                      style={styles.memberThumb}
+                    />
+                  ) : (
+                    <View style={styles.memberInitialsCircle}>
+                      <Text style={styles.memberInitialsText}>
+                        {getInitials(member.full_name || member.email)}
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 <View style={styles.pointsTag}>
                   {/* Üye puanları gamification servisinden gelen veriye dayanır */}
@@ -166,15 +241,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: 8,
   },
-  avatarWrapper: {
+  heroBadge: {
     width: 60,
     height: 60,
     borderRadius: 30,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.6)",
-    padding: 3,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    overflow: "hidden",
   },
-  mainAvatar: { width: "100%", height: "100%", borderRadius: 30 },
+  heroAvatar: { width: "100%", height: "100%" },
   userTextWrapper: { marginLeft: 16 },
   greetingText: { fontSize: 16, fontWeight: "500", color: "#ffffff" },
   locationContainer: {
@@ -206,6 +284,18 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 18,
   },
+  reminderBlock: { flex: 1 },
+  reminderTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#e2e8f0",
+    marginBottom: 6,
+  },
+  reminderItem: {
+    fontSize: 12,
+    color: "#cbd5e1",
+    marginBottom: 4,
+  },
 
   // Alt Satır: Çizgi (borderTop) ve iç boşluk (paddingTop)
   footerRow: {
@@ -225,6 +315,15 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   memberThumb: { width: "100%", height: "100%", borderRadius: 21 },
+  memberInitialsCircle: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  memberInitialsText: { color: "#ffffff", fontWeight: "800", fontSize: 12 },
   pointsTag: {
     backgroundColor: "#1e293b",
     paddingHorizontal: 8,

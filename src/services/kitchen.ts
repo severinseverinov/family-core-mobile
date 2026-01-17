@@ -43,7 +43,7 @@ export async function getInventoryAndBudget() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("family_id, preferred_currency")
+    .select("family_id, preferred_currency, role")
     .eq("id", user.id)
     .single();
 
@@ -71,9 +71,22 @@ export async function getInventoryAndBudget() {
       .maybeSingle(),
   ]);
 
+  const isParent = ["owner", "admin"].includes(profile?.role || "");
+  const shopping = shop.data || [];
+  const filteredShopping = isParent
+    ? shopping
+    : shopping.filter((item: any) => {
+        const visibility = item?.visibility || "family";
+        if (visibility === "parents") return false;
+        if (visibility === "member") {
+          return item?.assigned_to?.includes(user.id);
+        }
+        return true;
+      });
+
   return {
     items: inv.data || [],
-    shoppingList: shop.data || [],
+    shoppingList: filteredShopping,
     budget: bud.data?.budget_limit || 0,
     spent: bud.data?.spent_amount || 0,
     currency: profile.preferred_currency || "TL",
@@ -234,7 +247,9 @@ export async function addShoppingItem(
   quantity: number,
   unit: string,
   market?: string,
-  isUrgent: boolean = false
+  isUrgent: boolean = false,
+  visibility: "family" | "parents" | "member" = "family",
+  assignedTo: string[] = []
 ) {
   try {
     const {
@@ -250,6 +265,8 @@ export async function addShoppingItem(
 
     if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
 
+    const assigned =
+      visibility === "member" && assignedTo.length === 0 ? [user.id] : assignedTo;
     const { error } = await supabase.from("shopping_list").insert({
       family_id: profile.family_id,
       product_name: productName,
@@ -259,6 +276,8 @@ export async function addShoppingItem(
       is_urgent: isUrgent,
       is_completed: false,
       added_by: user.id,
+      visibility,
+      assigned_to: assigned.length > 0 ? assigned : null,
       created_at: new Date().toISOString(),
     });
 
@@ -266,13 +285,23 @@ export async function addShoppingItem(
       try {
         const { data: members } = await supabase
           .from("profiles")
-          .select("id, push_token")
+          .select("id, push_token, role")
           .eq("family_id", profile.family_id)
           .neq("id", user.id);
 
+        const recipients = (members || []).filter((member: any) => {
+          if (visibility === "parents") {
+            return ["owner", "admin"].includes(member.role);
+          }
+          if (visibility === "member") {
+            return assigned.includes(member.id);
+          }
+          return true;
+        });
+
         const tokens =
-          members
-            ?.map((member: any) => member.push_token)
+          recipients
+            .map((member: any) => member.push_token)
             .filter((token: string) => !!token) || [];
 
         if (tokens.length > 0) {

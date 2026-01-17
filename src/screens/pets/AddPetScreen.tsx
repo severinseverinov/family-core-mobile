@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
   },
 
   scrollContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     paddingTop: 10,
   },
 
@@ -316,6 +316,8 @@ const styles = StyleSheet.create({
   formCard: {
     borderRadius: 24,
     padding: 20,
+    width: "100%",
+    alignSelf: "stretch",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 10,

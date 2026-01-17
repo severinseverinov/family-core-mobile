@@ -13,6 +13,8 @@ import {
   ActivityIndicator,
   TextInput,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -96,6 +98,7 @@ export default function PetScreen({ navigation }: any) {
     title: "",
     points: "10",
     recurrence: "daily",
+    time: "09:00",
     assignees: [] as string[],
   });
   const [healthDetails, setHealthDetails] = useState<{
@@ -188,13 +191,18 @@ export default function PetScreen({ navigation }: any) {
   const handleCreateRoutine = async () => {
     if (!newRoutine.title || !selectedPetId)
       return Alert.alert("Eksik", "Görev adı gerekli.");
+    if (!/^\d{2}:\d{2}$/.test(newRoutine.time)) {
+      Alert.alert("Hata", "Saat formatı HH:MM olmalı.");
+      return;
+    }
     setUploading(true);
     const res = await addRoutine(
       selectedPetId,
       newRoutine.title,
       Number(newRoutine.points),
       newRoutine.recurrence,
-      newRoutine.assignees
+      newRoutine.assignees,
+      newRoutine.time
     );
     setUploading(false);
     if (res.success) {
@@ -422,7 +430,7 @@ END:VCARD`;
                 Onay Bekleyenler ({pendingReviews.length})
               </Text>
             </View>
-            <ScrollView
+    <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={{ marginTop: 10 }}
@@ -448,12 +456,12 @@ END:VCARD`;
         {/* RUTİN LİSTESİ */}
         <View style={styles.listHeaderRow}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Günlük Rutinler
+            {selectedPet ? `${selectedPet.name} • Günlük Rutinler` : "Günlük Rutinler"}
           </Text>
           {isParent && selectedPetId && (
             <TouchableOpacity onPress={() => setAddRoutineVisible(true)}>
               <Text style={{ color: colors.primary, fontWeight: "bold" }}>
-                + Görev Ekle
+                + Rutin Ekle
               </Text>
             </TouchableOpacity>
           )}
@@ -496,7 +504,7 @@ END:VCARD`;
                             : colors.background,
                         },
                       ]}
-                    >
+    >
                       {isDone ? (
                         <CheckCircle size={20} color="#10b981" />
                       ) : (
@@ -777,23 +785,23 @@ END:VCARD`;
         </Modal>
 
         {/* --- DİĞER MODALLAR (AYNI) --- */}
-        <Modal
-          visible={healthModalVisible}
-          animationType="slide"
-          presentationStyle="pageSheet"
-        >
-          <View
-            style={[styles.fullModal, { backgroundColor: colors.background }]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitleBig, { color: colors.text }]}>
-                Sağlık Geçmişi
-              </Text>
-              <TouchableOpacity onPress={() => setHealthModalVisible(false)}>
-                <X color={colors.text} size={28} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView contentContainerStyle={{ padding: 20 }}>
+        <Modal visible={healthModalVisible} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.modalContentLarge,
+                { backgroundColor: colors.card },
+              ]}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitleBig, { color: colors.text }]}>
+                  Sağlık Geçmişi
+                </Text>
+                <TouchableOpacity onPress={() => setHealthModalVisible(false)}>
+                  <X color={colors.text} size={28} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={{ padding: 20 }}>
               <View style={styles.healthSection}>
                 <View style={styles.hSectionHeader}>
                   <Text style={[styles.hSectionTitle, { color: colors.text }]}>
@@ -887,19 +895,71 @@ END:VCARD`;
                     </View>
                   ))}
               </View>
-            </ScrollView>
-            <Modal
-              visible={addHealthLogVisible}
-              transparent
-              animationType="fade"
-            >
-              <View style={styles.modalOverlay}>
-                <View
-                  style={[
-                    styles.modalContent,
-                    { backgroundColor: colors.card },
-                  ]}
+              <View style={styles.healthSection}>
+                <View style={styles.hSectionHeader}>
+                  <Text style={[styles.hSectionTitle, { color: colors.text }]}>
+                    ⚖️ Boy & Kilo
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setNewHealthLog(p => ({ ...p, type: "measurement" }));
+                      setAddHealthLogVisible(true);
+                    }}
+                  >
+                    <Plus color={colors.primary} size={20} />
+                  </TouchableOpacity>
+                </View>
+                {healthDetails.logs.filter((l: any) => l.type === "measurement")
+                  .length === 0 && (
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                    Kayıt yok.
+                  </Text>
+                )}
+                {healthDetails.logs
+                  .filter((l: any) => l.type === "measurement")
+                  .map((l: any, i: number) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.healthItem,
+                        isLight && styles.surfaceLift,
+                        { backgroundColor: colors.card },
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontWeight: "bold", color: colors.text }}>
+                          {l.title}
+                        </Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                          {l.value || l.description}
+                        </Text>
+                      </View>
+                      <Text style={{ color: colors.textMuted, fontSize: 10 }}>
+                        {l.date?.slice(0, 10)}
+                      </Text>
+                    </View>
+                  ))}
+              </View>
+              </ScrollView>
+              <Modal
+                visible={addHealthLogVisible}
+                transparent
+                animationType="fade"
+              >
+              <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                style={{ flex: 1 }}
+              >
+                <ScrollView
+                  contentContainerStyle={styles.modalOverlay}
+                  keyboardShouldPersistTaps="handled"
                 >
+                  <View
+                    style={[
+                      styles.modalContent,
+                      { backgroundColor: colors.card },
+                    ]}
+                  >
                   <Text style={[styles.modalTitle, { color: colors.text }]}>
                     Kayıt Ekle
                   </Text>
@@ -965,20 +1025,29 @@ END:VCARD`;
                       )}
                     </TouchableOpacity>
                   </View>
-                </View>
-              </View>
-            </Modal>
+                  </View>
+                </ScrollView>
+              </KeyboardAvoidingView>
+              </Modal>
+            </View>
           </View>
         </Modal>
 
         {/* FOTO & REVIEW MODALS (Aynı) */}
-        <Modal visible={addRoutineVisible} transparent animationType="slide">
-          <View style={styles.modalOverlay}>
-            <View
-              style={[styles.modalContent, { backgroundColor: colors.card }]}
+        <Modal visible={addRoutineVisible} transparent animationType="fade">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
+            <ScrollView
+              contentContainerStyle={styles.modalOverlay}
+              keyboardShouldPersistTaps="handled"
             >
+              <View
+                style={[styles.modalContent, { backgroundColor: colors.card }]}
+              >
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                Yeni Görev
+                {selectedPet ? `${selectedPet.name} • Rutin Ekle` : "Rutin Ekle"}
               </Text>
               <ModernInput
                 label="Görev Adı"
@@ -991,15 +1060,63 @@ END:VCARD`;
                 onChangeText={t => setNewRoutine(p => ({ ...p, points: t }))}
                 keyboardType="numeric"
               />
+              <ModernInput
+                label="Saat (HH:MM)"
+                value={newRoutine.time}
+                onChangeText={t => setNewRoutine(p => ({ ...p, time: t }))}
+                placeholder="09:00"
+              />
               <SelectionGroup
                 label="TEKRAR"
                 options={[
                   { label: "Günlük", value: "daily" },
                   { label: "Haftalık", value: "weekly" },
+                  { label: "Aylık", value: "monthly" },
                 ]}
                 selectedValue={newRoutine.recurrence}
                 onSelect={v => setNewRoutine(p => ({ ...p, recurrence: v }))}
               />
+              {familyMembers.length > 0 && (
+                <View style={{ marginTop: 6 }}>
+                  <Text style={[styles.modalLabel, { color: colors.textMuted }]}>
+                    KİME ATANACAK?
+                  </Text>
+                  <View style={styles.assigneeRow}>
+                    {familyMembers.map(member => {
+                      const isActive = newRoutine.assignees.includes(member.id);
+                      return (
+                        <TouchableOpacity
+                          key={member.id}
+                          style={[
+                            styles.assigneeChip,
+                            isActive && {
+                              backgroundColor: colors.primary,
+                              borderColor: colors.primary,
+                            },
+                          ]}
+                          onPress={() =>
+                            setNewRoutine(p => ({
+                              ...p,
+                              assignees: isActive
+                                ? p.assignees.filter(id => id !== member.id)
+                                : [...p.assignees, member.id],
+                            }))
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.assigneeText,
+                              { color: isActive ? "#fff" : colors.text },
+                            ]}
+                          >
+                            {member.full_name || member.email}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalBtn, { backgroundColor: colors.border }]}
@@ -1020,8 +1137,9 @@ END:VCARD`;
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
-          </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </Modal>
         <Modal visible={photoModalVisible} transparent>
           <View style={styles.modalOverlay}>
@@ -1052,7 +1170,7 @@ END:VCARD`;
                     borderRadius: 12,
                     marginBottom: 15,
                   }}
-                />
+      />
               )}
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -1075,7 +1193,7 @@ END:VCARD`;
             </View>
           </View>
         </Modal>
-      </ScrollView>
+    </ScrollView>
     </SafeAreaView>
   );
 }
@@ -1260,8 +1378,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     padding: 20,
+    flexGrow: 1,
   },
   modalContent: { width: "100%", borderRadius: 24, padding: 25 },
+  modalContentLarge: {
+    width: "100%",
+    borderRadius: 24,
+    padding: 10,
+    maxHeight: "85%",
+  },
   modalTitle: { fontSize: 20, fontWeight: "800", marginBottom: 20 },
   modalButtons: { flexDirection: "row", gap: 15, marginTop: 15 },
   modalBtn: {
@@ -1271,6 +1396,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  modalLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  assigneeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  assigneeChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  assigneeText: { fontSize: 12, fontWeight: "600" },
 
   // YENİ STİLLER
   tabContainer: {

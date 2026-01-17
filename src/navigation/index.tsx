@@ -135,6 +135,8 @@ export default function AppNavigator() {
             screenOptions={{
               headerShown: false,
               cardStyle: { backgroundColor: colors.background },
+              animationEnabled: true,
+              gestureEnabled: false,
             }}
           >
             {!user ? (
@@ -153,7 +155,7 @@ export default function AppNavigator() {
                 <Stack.Screen
                   name="AddPet"
                   component={AddPetScreen}
-                  options={{ headerShown: true, title: "Yeni Pet" }}
+                  options={{ headerShown: false, title: "Yeni Pet" }}
                 />
                 <Stack.Screen
                   name="AddKitchenItem"
@@ -163,22 +165,22 @@ export default function AppNavigator() {
                 <Stack.Screen
                   name="AddVaultItem"
                   component={AddVaultItemScreen}
-                  options={{ headerShown: true, title: "Kasa Kaydı" }}
+                  options={{ headerShown: false, title: "Kasa Kaydı" }}
                 />
                 <Stack.Screen
                   name="Vault"
                   component={VaultScreen}
-                  options={{ headerShown: true, title: "Aile Kasası" }}
+                  options={{ headerShown: false, title: "Aile Kasası" }}
                 />
                 <Stack.Screen
                   name="Settings"
                   component={SettingsScreen}
-                  options={{ headerShown: true, title: "Ayarlar" }}
+                  options={{ headerShown: false, title: "Ayarlar" }}
                 />
                 <Stack.Screen
                   name="FamilyManagement"
                   component={FamilyManagementScreen}
-                  options={{ headerShown: true, title: "Üyeleri Yönet" }}
+                  options={{ headerShown: false, title: "Aileyi Yönet" }}
                 />
                 <Stack.Screen
                   name="MemberDetail"
@@ -202,7 +204,7 @@ export default function AppNavigator() {
                 <Stack.Screen
                   name="FamilyFinance"
                   component={FamilyFinanceScreen}
-                  options={{ headerShown: true, title: "Aile Finansları" }}
+                  options={{ headerShown: false, title: "Aile Finansları" }}
                 />
               </>
             )}

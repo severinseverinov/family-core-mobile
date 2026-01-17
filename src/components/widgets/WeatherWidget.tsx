@@ -14,11 +14,17 @@ import {
   CloudRain,
   CloudLightning,
   Snowflake,
+  CloudOff,
 } from "lucide-react-native";
 import { fetchWeather } from "../../services/weather";
 import { useTheme } from "../../contexts/ThemeContext"; //
+import { addDays, isSameDay, startOfDay } from "date-fns";
 
-export default function WeatherWidget() {
+type WeatherWidgetProps = {
+  selectedDate?: Date;
+};
+
+export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
   const { colors, themeMode } = useTheme(); //
 
   const { data, isLoading } = useQuery({
@@ -47,11 +53,54 @@ export default function WeatherWidget() {
     }
   };
 
-  if (isLoading) return <ActivityIndicator color={colors.primary} />; //
-  if (!data?.current || !data?.hourly) return null;
+  const current = data?.current;
+  const selected = selectedDate
+    ? startOfDay(selectedDate)
+    : startOfDay(new Date());
+  const today = startOfDay(new Date());
+  const maxDate = startOfDay(addDays(today, 7));
+  const isInRange = selected >= today && selected <= maxDate;
 
-  const current = data.current;
-  const hourlyItems = data.hourly.list.slice(0, 8); // Önümüzdeki 24 saati gösterir (3'er saatlik 8 öğe)
+  const hourlyItems = React.useMemo(() => {
+    if (!isInRange) return [];
+    const list = data?.hourly?.list || [];
+    const expanded: any[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const base = list[i];
+      const baseDate = new Date(base.dt_txt);
+      for (let h = 0; h < 3; h++) {
+        const hourDate = new Date(baseDate);
+        hourDate.setHours(baseDate.getHours() + h);
+        expanded.push({
+          ...base,
+          __date: hourDate,
+          dt_txt: hourDate.toISOString().replace("T", " ").slice(0, 16),
+        });
+      }
+    }
+    const now = new Date();
+    return expanded.filter(item => {
+      const itemDate = item.__date as Date;
+      if (!isSameDay(itemDate, selected)) return false;
+      if (isSameDay(selected, now)) {
+        return itemDate.getTime() >= now.getTime();
+      }
+      return true;
+    });
+  }, [data?.hourly?.list, isInRange, selected]);
+
+  const summaryItem = isSameDay(selected, today)
+    ? current
+    : hourlyItems[0] || null;
+  const summaryTemp = summaryItem?.main?.temp;
+  const summaryMain =
+    summaryItem?.weather?.[0]?.main || current?.weather?.[0]?.main;
+  const summaryLabel = isSameDay(selected, today)
+    ? "Bugün"
+    : selected.toLocaleDateString("tr-TR", { weekday: "short" });
+
+  if (isLoading) return <ActivityIndicator color={colors.primary} />; //
+  const hasWeatherData = Boolean(current && data?.hourly);
 
   return (
     <View
@@ -67,12 +116,16 @@ export default function WeatherWidget() {
       <View
         style={[styles.currentSection, { borderRightColor: colors.border }]}
       >
-        {getWeatherIcon(current.weather[0].main, 32)}
+        {hasWeatherData && summaryMain ? (
+          getWeatherIcon(summaryMain, 32)
+        ) : (
+          <CloudOff size={32} color={colors.textMuted} />
+        )}
         <Text style={[styles.currentTemp, { color: colors.text }]}>
-          {Math.round(current.main.temp)}°
+          {typeof summaryTemp === "number" ? Math.round(summaryTemp) : "--"}°
         </Text>
         <Text style={[styles.conditionText, { color: colors.textMuted }]}>
-          Şimdi
+          {summaryLabel}
         </Text>
       </View>
 
@@ -82,17 +135,26 @@ export default function WeatherWidget() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.hourlyList}
       >
-        {hourlyItems.map((item: any, index: number) => (
-          <View key={index} style={styles.hourlyItem}>
-            <Text style={[styles.hourText, { color: colors.textMuted }]}>
-              {item.dt_txt.split(" ")[1].substring(0, 5)}
-            </Text>
-            {getWeatherIcon(item.weather[0].main, 20)}
-            <Text style={[styles.hourTemp, { color: colors.text }]}>
-              {Math.round(item.main.temp)}°
+        {!hasWeatherData || hourlyItems.length === 0 ? (
+          <View style={styles.emptyHourly}>
+            <CloudOff size={18} color={colors.textMuted} />
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              Bu gün için saatlik hava durumu yok.
             </Text>
           </View>
-        ))}
+        ) : (
+          hourlyItems.map((item: any, index: number) => (
+            <View key={index} style={styles.hourlyItem}>
+              <Text style={[styles.hourText, { color: colors.textMuted }]}>
+                {item.dt_txt.split(" ")[1].substring(0, 5)}
+              </Text>
+              {getWeatherIcon(item.weather[0].main, 20)}
+              <Text style={[styles.hourTemp, { color: colors.text }]}>
+                {Math.round(item.main.temp)}°
+              </Text>
+            </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -137,6 +199,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 45,
   },
+  emptyHourly: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    minHeight: 60,
+    gap: 6,
+  },
+  emptyText: { fontSize: 12, textAlign: "center" },
   hourText: {
     fontSize: 10,
     fontWeight: "500",

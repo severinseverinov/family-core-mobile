@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Plus } from "lucide-react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDashboardData } from "../../hooks/useDashboardData";
@@ -20,12 +21,16 @@ import WeatherWidget from "../../components/widgets/WeatherWidget";
 import CalendarWidget from "../../components/widgets/CalendarWidget";
 import FamilyWidget from "../../components/widgets/FamilyWidget";
 import TasksWidget from "../../components/widgets/TasksWidget";
+import AddTaskModal from "../../components/modals/AddTaskModal";
 
 export default function DashboardScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { profile, user } = useAuth();
   const { data } = useDashboardData();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const [taskModalVisible, setTaskModalVisible] = React.useState(false);
+  const [selectedDate, setSelectedDate] = React.useState(new Date());
 
   // Verileri güvenli bir şekilde alalım
   const events = data?.events?.items || [];
@@ -63,12 +68,16 @@ export default function DashboardScreen({ navigation }: any) {
           </View>
           {/* 1. HAVA DURUMU WIDGET */}
           <View style={styles.fullWidthWidget}>
-            <WeatherWidget />
+            <WeatherWidget selectedDate={selectedDate} />
           </View>
 
           {/* 2. TAKVİM WIDGET (GENİŞ) */}
           <View style={styles.fullWidthWidget}>
-            <CalendarWidget events={events} />
+            <CalendarWidget
+              events={events}
+              selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
+            />
           </View>
 
           {/* 4. GÜNLÜK GÖREVLER BÖLÜMÜ */}
@@ -118,11 +127,19 @@ export default function DashboardScreen({ navigation }: any) {
       <View style={styles.fabWrapper}>
         <TouchableOpacity
           style={[styles.mainFab, { backgroundColor: colors.primary }]}
-          onPress={() => navigation.navigate("AddTask")}
+          onPress={() => setTaskModalVisible(true)}
         >
           <Plus size={26} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      <AddTaskModal
+        visible={taskModalVisible}
+        onClose={() => setTaskModalVisible(false)}
+        onSaved={() =>
+          queryClient.invalidateQueries({ queryKey: ["dashboard"] })
+        }
+      />
     </SafeAreaView>
   );
 }

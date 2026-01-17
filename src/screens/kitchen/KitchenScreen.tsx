@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
   Modal,
+  KeyboardAvoidingView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -24,6 +25,8 @@ import {
   Trash2,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   getInventoryAndBudget,
   addShoppingItem,
@@ -33,11 +36,14 @@ import {
   toggleShoppingItem,
   analyzeReceiptMobile,
 } from "../../services/kitchen";
+import { getFamilyMembers } from "../../services/family";
+import { getPreferences } from "../../services/settings";
 import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import ModernInput from "../../components/ui/ModernInput";
 
 export default function KitchenScreen({ navigation }: any) {
   const { colors, themeMode } = useTheme();
+  const { profile, user } = useAuth();
   const isLight = themeMode === "light";
   const [activeTab, setActiveTab] = useState<"inventory" | "shopping" | "meal">(
     "inventory"
@@ -46,13 +52,19 @@ export default function KitchenScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [mealLoading, setMealLoading] = useState(false);
-  const [mealSuggestions, setMealSuggestions] = useState<string[]>([]);
+  const [mealSuggestionGroups, setMealSuggestionGroups] = useState<
+    { label: string; suggestions: string[] }[]
+  >([]);
   const [shoppingModalVisible, setShoppingModalVisible] = useState(false);
   const [shoppingName, setShoppingName] = useState("");
   const [shoppingQty, setShoppingQty] = useState("1");
   const [shoppingUnit, setShoppingUnit] = useState("adet");
   const [shoppingMarket, setShoppingMarket] = useState("");
   const [shoppingUrgent, setShoppingUrgent] = useState(false);
+  const [shoppingVisibility, setShoppingVisibility] = useState<
+    "family" | "parents" | "member"
+  >("family");
+  const [shoppingAssignees, setShoppingAssignees] = useState<string[]>([]);
   const [shoppingSaving, setShoppingSaving] = useState(false);
   const [inventoryFilter, setInventoryFilter] = useState("");
   const [inventoryCategory, setInventoryCategory] = useState("Tümü");
@@ -68,16 +80,54 @@ export default function KitchenScreen({ navigation }: any) {
   const [inventoryUnit, setInventoryUnit] = useState("adet");
   const [inventoryPrice, setInventoryPrice] = useState("0");
   const [inventorySaving, setInventorySaving] = useState(false);
+  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
+  const isParent = ["owner", "admin"].includes(profile?.role || "");
+  const defaultMealSettings = {
+    visibility: "family",
+    memberIds: [] as string[],
+    cuisine: "world",
+    calories: "",
+    avoid: "",
+    memberPrefs: {} as Record<
+      string,
+      { cuisine: string; calories: string; avoid: string }
+    >,
+  };
+  const [mealSettings, setMealSettings] = useState(defaultMealSettings);
+  const [mealPreferences, setMealPreferences] = useState({
+    cuisine: "world",
+    calories: "",
+    avoid: "",
+  });
 
   useEffect(() => {
     loadData();
   }, []);
 
+  const loadMealSettings = async () => {
+    const prefs = await getPreferences();
+    if (prefs?.meal_settings) {
+      setMealSettings(prev => ({ ...prev, ...prefs.meal_settings }));
+    }
+    if (prefs?.meal_preferences) {
+      setMealPreferences(prev => ({ ...prev, ...prefs.meal_preferences }));
+    }
+  };
+
   const loadData = async () => {
     const res = await getInventoryAndBudget();
     setData(res);
+    const membersRes = await getFamilyMembers();
+    setFamilyMembers(membersRes.members || []);
+    await loadMealSettings();
     setLoading(false);
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadMealSettings();
+    }, [])
+  );
 
   const handleScanReceipt = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -104,6 +154,14 @@ export default function KitchenScreen({ navigation }: any) {
   };
 
   const handleAddShoppingItem = () => {
+    const isParent = ["owner", "admin"].includes(profile?.role || "");
+    if (!isParent && user?.id) {
+      setShoppingVisibility("member");
+      setShoppingAssignees([user.id]);
+    } else {
+      setShoppingVisibility("family");
+      setShoppingAssignees([]);
+    }
     setShoppingModalVisible(true);
   };
 
@@ -148,6 +206,10 @@ export default function KitchenScreen({ navigation }: any) {
       Alert.alert("Hata", "Ürün adı gerekli.");
       return;
     }
+    if (shoppingVisibility === "member" && shoppingAssignees.length === 0) {
+      Alert.alert("Hata", "Kişiye özel için kişi seçin.");
+      return;
+    }
     setShoppingSaving(true);
     const quantity = Number(shoppingQty) > 0 ? Number(shoppingQty) : 1;
     const unit = shoppingUnit.trim() || "adet";
@@ -156,7 +218,9 @@ export default function KitchenScreen({ navigation }: any) {
       quantity,
       unit,
       shoppingMarket.trim(),
-      shoppingUrgent
+      shoppingUrgent,
+      shoppingVisibility,
+      shoppingAssignees
     );
     setShoppingSaving(false);
     if (result?.success) {
@@ -166,6 +230,8 @@ export default function KitchenScreen({ navigation }: any) {
       setShoppingUnit("adet");
       setShoppingMarket("");
       setShoppingUrgent(false);
+      setShoppingVisibility("family");
+      setShoppingAssignees([]);
       loadData();
     } else {
       Alert.alert("Hata", result?.error || "Ürün eklenemedi.");
@@ -180,7 +246,30 @@ export default function KitchenScreen({ navigation }: any) {
     if (item?.market) {
       parts.push(item.market);
     }
+    if (item?.visibility === "parents") {
+      parts.push("Ebeveynler");
+    } else if (item?.visibility === "member") {
+      const names =
+        item.assigned_to
+          ?.map((id: string) => {
+            const member = familyMembers.find(m => m.id === id);
+            return member?.full_name || member?.email;
+          })
+          .filter(Boolean) || [];
+      if (names.length > 0) parts.push(names.join(", "));
+    }
     return parts.join(" • ");
+  };
+
+  const canSeeShoppingItem = (item: any) => {
+    const isParent = ["owner", "admin"].includes(profile?.role || "");
+    if (isParent) return true;
+    const visibility = item?.visibility || "family";
+    if (visibility === "parents") return false;
+    if (visibility === "member") {
+      return item?.assigned_to?.includes(user?.id);
+    }
+    return true;
   };
 
   const submitInventoryItem = async () => {
@@ -215,7 +304,11 @@ export default function KitchenScreen({ navigation }: any) {
     }
   };
 
-  const buildMealSuggestions = () => {
+  const buildMealSuggestions = (prefs?: {
+    cuisine?: string;
+    calories?: string;
+    avoid?: string;
+  }) => {
     const names = (data?.items || [])
       .map((item: any) => String(item.product_name || "").toLowerCase())
       .filter((name: string) => name.length > 0);
@@ -223,30 +316,161 @@ export default function KitchenScreen({ navigation }: any) {
       return ["Stok boş. Öneri için önce ürün ekleyin."];
     }
 
-    const suggestions: string[] = [];
-    const has = (keyword: string) =>
-      names.some((name: string) => name.includes(keyword));
+    const normalizedAvoid = (prefs?.avoid || "")
+      .split(",")
+      .map(v => v.trim().toLowerCase())
+      .filter(Boolean);
+    const cuisine = prefs?.cuisine || "world";
+    const calorieTarget = Number(prefs?.calories || 0);
 
-    if (has("tavuk")) suggestions.push("Tavuk sote + pilav");
-    if (has("makarna")) suggestions.push("Kremalı sebzeli makarna");
-    if (has("patates")) suggestions.push("Fırında patates + yoğurt");
-    if (has("yumurta")) suggestions.push("Menemen veya omlet");
-    if (has("pirinç")) suggestions.push("Sebzeli pilav");
-    if (has("kıyma") || has("et")) suggestions.push("Kıymalı sebze yemeği");
+    const recipes = [
+      {
+        name: "Menemen",
+        cuisine: "turkish",
+        calories: 350,
+        ingredients: ["yumurta", "domates", "biber", "soğan"],
+      },
+      {
+        name: "Mercimek çorbası",
+        cuisine: "turkish",
+        calories: 300,
+        ingredients: ["mercimek", "soğan", "havuç", "patates"],
+      },
+      {
+        name: "Tavuk sote",
+        cuisine: "world",
+        calories: 520,
+        ingredients: ["tavuk", "biber", "soğan"],
+      },
+      {
+        name: "Sebzeli pilav",
+        cuisine: "world",
+        calories: 480,
+        ingredients: ["pirinç", "havuç", "bezelye", "soğan"],
+      },
+      {
+        name: "Kremalı sebzeli makarna",
+        cuisine: "italian",
+        calories: 650,
+        ingredients: ["makarna", "krema", "mantar", "ıspanak"],
+      },
+      {
+        name: "Taco bowl",
+        cuisine: "mexican",
+        calories: 560,
+        ingredients: ["kıyma", "fasulye", "domates", "mısır"],
+      },
+      {
+        name: "Sebzeli noodle",
+        cuisine: "asian",
+        calories: 540,
+        ingredients: ["noodle", "soya", "havuç", "biber"],
+      },
+      {
+        name: "Fırında patates + yoğurt",
+        cuisine: "world",
+        calories: 400,
+        ingredients: ["patates", "yoğurt", "sarımsak"],
+      },
+    ];
 
-    if (suggestions.length === 0) {
+    const filtered = recipes
+      .filter(recipe =>
+        cuisine === "world" ? true : recipe.cuisine === cuisine
+      )
+      .filter(recipe =>
+        calorieTarget > 0 ? recipe.calories <= calorieTarget : true
+      )
+      .filter(recipe =>
+        normalizedAvoid.length > 0
+          ? !recipe.ingredients.some(ing =>
+              normalizedAvoid.some(a => ing.includes(a))
+            )
+          : true
+      )
+      .map(recipe => {
+        const missing = recipe.ingredients.filter(
+          ing => !names.some(name => name.includes(ing))
+        );
+        return { ...recipe, missing };
+      })
+      .filter(recipe => recipe.missing.length <= 4)
+      .sort((a, b) => a.missing.length - b.missing.length)
+      .slice(0, 5)
+      .map(recipe => {
+        if (recipe.missing.length === 0) return recipe.name;
+        return `${recipe.name} (eksik: ${recipe.missing.join(", ")})`;
+      });
+
+    if (filtered.length === 0) {
       const base = names.slice(0, 3).join(", ");
-      suggestions.push(`${base} ile pratik sote`);
-      suggestions.push(`${base} ile hafif salata`);
+      return [`${base} ile pratik sote`, `${base} ile hafif salata`];
     }
 
-    return suggestions.slice(0, 5);
+    return filtered;
   };
 
-  const handleMealSuggest = () => {
+  const handleMealSuggest = async () => {
     setMealLoading(true);
-    const suggestions = buildMealSuggestions();
-    setMealSuggestions(suggestions);
+    const prefs = await getPreferences();
+    if (prefs?.meal_preferences) {
+      setMealPreferences(prev => ({ ...prev, ...prefs.meal_preferences }));
+    }
+    if (prefs?.meal_settings) {
+      setMealSettings(prev => ({ ...prev, ...prefs.meal_settings }));
+    }
+
+    if (!isParent) {
+      const suggestions = buildMealSuggestions({
+        cuisine: prefs?.meal_preferences?.cuisine || mealPreferences.cuisine,
+        calories: prefs?.meal_preferences?.calories || mealPreferences.calories,
+        avoid: prefs?.meal_preferences?.avoid || mealPreferences.avoid,
+      });
+      setMealSuggestionGroups([
+        { label: "Benim önerilerim", suggestions },
+      ]);
+      setMealLoading(false);
+      return;
+    }
+
+    const membersWithPrefs = familyMembers
+      .map(member => ({
+        member,
+        prefs:
+          member.meal_preferences || {
+            cuisine: "world",
+            calories: "",
+            avoid: "",
+          },
+      }))
+      .filter(item => item.prefs);
+
+    const grouped: Record<
+      string,
+      { memberNames: string[]; prefs: any }
+    > = {};
+    membersWithPrefs.forEach(({ member, prefs }) => {
+      const key = JSON.stringify({
+        cuisine: prefs.cuisine || "world",
+        calories: prefs.calories || "",
+        avoid: (prefs.avoid || "").trim().toLowerCase(),
+      });
+      if (!grouped[key]) {
+        grouped[key] = { memberNames: [], prefs };
+      }
+      grouped[key].memberNames.push(
+        member.full_name || member.email || "Üye"
+      );
+    });
+
+    const groups = Object.values(grouped)
+      .filter(group => group.memberNames.length >= 2)
+      .map(group => ({
+        label: `Topluluk: ${group.memberNames.join(", ")}`,
+        suggestions: buildMealSuggestions(group.prefs),
+      }));
+
+    setMealSuggestionGroups(groups);
     setMealLoading(false);
   };
 
@@ -552,6 +776,7 @@ export default function KitchenScreen({ navigation }: any) {
               </TouchableOpacity>
             </ScrollView>
             {data?.shoppingList
+              .filter((item: any) => canSeeShoppingItem(item))
               .filter((item: any) => {
                 const query = shoppingFilter.trim().toLowerCase();
                 if (!query) return true;
@@ -642,29 +867,36 @@ export default function KitchenScreen({ navigation }: any) {
               </Text>
             </View>
 
-            {mealSuggestions.length === 0 ? (
+            {mealSuggestionGroups.length === 0 ? (
               <Text style={[styles.mealHint, { color: colors.textMuted }]}>
                 Öneri için alttaki yapay zeka butonuna basın.
               </Text>
             ) : (
               <View style={styles.mealList}>
-                {mealSuggestions.map((item, index) => (
-                  <View
-                    key={`${item}-${index}`}
-                    style={[
-                      styles.mealSuggestion,
-                      isLight && styles.surfaceLift,
-                      { backgroundColor: colors.card },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.mealSuggestionText,
-                        { color: colors.text },
-                      ]}
-                    >
-                      {item}
+                {mealSuggestionGroups.map(group => (
+                  <View key={group.label}>
+                    <Text style={[styles.mealGroupTitle, { color: colors.text }]}>
+                      {group.label}
                     </Text>
+                    {group.suggestions.map((item, index) => (
+                      <View
+                        key={`${group.label}-${item}-${index}`}
+                        style={[
+                          styles.mealSuggestion,
+                          isLight && styles.surfaceLift,
+                          { backgroundColor: colors.card },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.mealSuggestionText,
+                            { color: colors.text },
+                          ]}
+                        >
+                          {item}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
                 ))}
               </View>
@@ -748,14 +980,21 @@ export default function KitchenScreen({ navigation }: any) {
         animationType="fade"
         onRequestClose={() => setShoppingModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalCard,
-              isLight && styles.surfaceLift,
-              { backgroundColor: colors.card },
-            ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalOverlay}
+            keyboardShouldPersistTaps="handled"
           >
+            <View
+              style={[
+                styles.modalCard,
+                isLight && styles.surfaceLift,
+                { backgroundColor: colors.card },
+              ]}
+            >
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               Alışveriş listesine ekle
             </Text>
@@ -816,6 +1055,81 @@ export default function KitchenScreen({ navigation }: any) {
                 </Text>
               </TouchableOpacity>
             </View>
+            <View style={styles.visibilitySection}>
+              <Text style={[styles.visibilityLabel, { color: colors.textMuted }]}>
+                GÖRÜNÜRLÜK
+              </Text>
+              <View style={styles.visibilityRow}>
+                {[
+                  { label: "Aile", value: "family" },
+                  ...(isParent ? [{ label: "Ebeveynler", value: "parents" }] : []),
+                  { label: "Kişiye özel", value: "member" },
+                ].map(option => {
+                  const active = shoppingVisibility === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.visibilityChip,
+                        {
+                          backgroundColor: active ? colors.primary : colors.card,
+                          borderColor: active ? colors.primary : colors.border,
+                        },
+                      ]}
+                      onPress={() => setShoppingVisibility(option.value as any)}
+                    >
+                      <Text
+                        style={[
+                          styles.visibilityText,
+                          { color: active ? "#fff" : colors.text },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {shoppingVisibility === "member" && familyMembers.length > 0 && (
+                <View style={styles.assigneeRow}>
+                  {familyMembers.map(member => {
+                    const isActive = shoppingAssignees.includes(member.id);
+                    return (
+                      <TouchableOpacity
+                        key={member.id}
+                        style={[
+                          styles.assigneeChip,
+                          {
+                            backgroundColor: isActive
+                              ? colors.primary
+                              : colors.card,
+                            borderColor: isActive
+                              ? colors.primary
+                              : colors.border,
+                          },
+                        ]}
+                        onPress={() =>
+                          setShoppingAssignees(prev =>
+                            isActive
+                              ? prev.filter(id => id !== member.id)
+                              : [...prev, member.id]
+                          )
+                        }
+                      >
+                        <Text
+                          style={[
+                            styles.assigneeText,
+                            { color: isActive ? "#fff" : colors.text },
+                          ]}
+                        >
+                          {member.full_name || member.email}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, { borderColor: colors.border }]}
@@ -841,8 +1155,9 @@ export default function KitchenScreen({ navigation }: any) {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -851,14 +1166,21 @@ export default function KitchenScreen({ navigation }: any) {
         animationType="fade"
         onRequestClose={() => setInventoryModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalCard,
-              isLight && styles.surfaceLift,
-              { backgroundColor: colors.card },
-            ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalOverlay}
+            keyboardShouldPersistTaps="handled"
           >
+            <View
+              style={[
+                styles.modalCard,
+                isLight && styles.surfaceLift,
+                { backgroundColor: colors.card },
+              ]}
+            >
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               {inventoryEditId ? "Ürünü düzenle" : "Stoğa ürün ekle"}
             </Text>
@@ -919,8 +1241,9 @@ export default function KitchenScreen({ navigation }: any) {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
         </View>
+      </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -987,11 +1310,35 @@ const styles = StyleSheet.create({
   mealBody: { fontSize: 13, lineHeight: 18 },
   mealHint: { marginTop: 12, marginHorizontal: 10, fontSize: 13 },
   mealList: { marginTop: 12, gap: 10 },
+  mealGroupTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 6,
+    marginTop: 12,
+  },
   mealSuggestion: {
     padding: 14,
     borderRadius: 18,
   },
   mealSuggestionText: { fontSize: 14, fontWeight: "600" },
+  mealSettingsLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  mealPrefsRow: { marginTop: 4 },
+  memberPrefCard: {
+    marginTop: 12,
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1,
+  },
+  memberPrefTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
 
   // YENİ BUTON KONUMLANDIRMASI
   fabWrapper: {
@@ -1021,6 +1368,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     padding: 20,
+    flexGrow: 1,
   },
   modalCard: {
     borderRadius: 24,
@@ -1052,6 +1400,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   urgentToggleText: { fontWeight: "700", fontSize: 12 },
+  visibilitySection: { marginTop: 8 },
+  visibilityLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  visibilityRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  visibilityChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  visibilityText: { fontSize: 12, fontWeight: "600" },
+  assigneeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  assigneeChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  assigneeText: { fontSize: 12, fontWeight: "600" },
   modalActions: { flexDirection: "row", gap: 12, marginTop: 8 },
   modalButton: {
     flex: 1,
