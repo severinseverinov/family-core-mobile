@@ -298,7 +298,7 @@ export default function CalendarWidget({
       {/* HEADER */}
       <View style={styles.header}>
         <View>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
             {viewMode === "daily"
               ? format(selectedDate, "d MMMM yyyy", { locale: tr })
               : format(selectedDate, "MMMM yyyy", { locale: tr })}
@@ -307,7 +307,7 @@ export default function CalendarWidget({
           <View style={{ gap: 2 }}>
             <Text style={[styles.headerSub, { color: colors.textMuted }]}>
               {format(selectedDate, "EEEE", { locale: tr })}
-            </Text>
+        </Text>
           </View>
         </View>
 
@@ -360,7 +360,7 @@ export default function CalendarWidget({
                 viewMode === "monthly" ? styles.monthGrid : styles.weekHeader
               }
             >
-              {eachDayOfInterval({
+          {eachDayOfInterval({
                 start:
                   viewMode === "monthly"
                     ? startOfWeek(startOfMonth(selectedDate), {
@@ -371,8 +371,8 @@ export default function CalendarWidget({
                   viewMode === "monthly"
                     ? endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 })
                     : endOfWeek(selectedDate, { weekStartsOn: 1 }),
-              }).map((day, i) => {
-                const isSelected = isSameDay(day, selectedDate);
+          }).map((day, i) => {
+            const isSelected = isSameDay(day, selectedDate);
                 const isToday = isSameDay(day, new Date());
                 const dayWeatherMain = getDayWeatherMain(day);
                 const dayEvents = events.filter(e =>
@@ -385,29 +385,29 @@ export default function CalendarWidget({
                   isSameDay(new Date(e.time), day)
                 );
 
-                return (
-                  <TouchableOpacity
-                    key={i}
+            return (
+              <TouchableOpacity
+                key={i}
                     onPress={() => setSelectedDateValue(day)}
-                    style={[
-                      styles.dayCell,
-                      isSelected && { backgroundColor: colors.primary },
+                style={[
+                  styles.dayCell,
+                  isSelected && { backgroundColor: colors.primary },
                       isToday && !isSelected && { borderColor: colors.primary },
-                    ]}
-                  >
+                ]}
+              >
                     <View style={styles.dayWeatherIcon}>
                       {dayWeatherMain && !isToday
                         ? getWeatherIcon(dayWeatherMain, 14)
                         : null}
                     </View>
-                    <Text
-                      style={[
-                        styles.dayText,
-                        { color: isSelected ? "#fff" : colors.text },
-                      ]}
-                    >
-                      {format(day, "d")}
-                    </Text>
+                <Text
+                  style={[
+                    styles.dayText,
+                    { color: isSelected ? "#fff" : colors.text },
+                  ]}
+                >
+                  {format(day, "d")}
+                </Text>
                     <View style={styles.dayEventIcons}>
                       {dayEvents.length > 0
                         ? dayEvents.slice(0, 3).map((ev, idx) => (
@@ -420,29 +420,29 @@ export default function CalendarWidget({
                           ))
                         : null}
                     </View>
-                    <View style={styles.iconRow}>
+                <View style={styles.iconRow}>
                       {hasHoliday && (
                         <Flag
                           size={8}
                           color={isSelected ? "#fff" : colors.error}
                         />
-                      )}
+                  )}
                       {hasEvent && (
                         <Clock
                           size={8}
                           color={isSelected ? "#fff" : colors.primary}
                         />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
             </View>
-          </View>
-        )}
+        </View>
+      )}
 
         {/* GÜNLÜK SAATLİK ÇİZELGE */}
-        {viewMode === "daily" && (
+      {viewMode === "daily" && (
           <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
             {eachHourOfInterval({
               start: startOfDay(selectedDate),
@@ -452,48 +452,48 @@ export default function CalendarWidget({
               .map((hour, i) => {
                 const hourEvents = activeDayData.dayEvents.filter(
                   e => new Date(e.time).getHours() === hour.getHours()
-                );
-                return (
-                  <View
-                    key={i}
+            );
+            return (
+              <View
+                key={i}
                     style={[
                       styles.hourRow,
                       { borderBottomColor: colors.border },
                     ]}
-                  >
+              >
                     <Text
                       style={[styles.hourLabel, { color: colors.textMuted }]}
                     >
-                      {format(hour, "HH:00")}
-                    </Text>
-                    <View style={styles.eventSlot}>
-                      {hourEvents.map((ev, idx) => (
-                        <View
-                          key={idx}
-                          style={[
-                            styles.eventPill,
-                            { backgroundColor: colors.background },
-                          ]}
-                        >
+                  {format(hour, "HH:00")}
+                </Text>
+                <View style={styles.eventSlot}>
+                  {hourEvents.map((ev, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.eventPill,
+                        { backgroundColor: colors.background },
+                      ]}
+                    >
                           <View style={styles.eventPillIcon}>
                             {getEventIcon(ev.type)}
                           </View>
-                          <Text
+                      <Text
                             style={[
                               styles.eventPillText,
                               { color: colors.text },
                             ]}
-                          >
-                            {ev.title}
-                          </Text>
-                        </View>
-                      ))}
+                      >
+                        {ev.title}
+                      </Text>
                     </View>
-                  </View>
-                );
-              })}
-          </ScrollView>
-        )}
+                  ))}
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
       </View>
 
       {/* DETAY PANELİ */}

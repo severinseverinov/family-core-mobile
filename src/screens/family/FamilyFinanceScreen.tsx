@@ -14,7 +14,6 @@ import {
   TrendingUp,
   TrendingDown,
   PieChart as PieIcon,
-  PiggyBank,
   Wallet,
   ChevronLeft,
   ChevronRight,
@@ -327,7 +326,7 @@ export default function FamilyFinanceScreen({ navigation }: any) {
 
             <View style={styles.piggyRow}>
               <View style={styles.piggyInfo}>
-                <PiggyBank color="#ec4899" size={28} />
+                <Wallet color="#ec4899" size={28} />
                 <View style={{ marginLeft: 10 }}>
                   <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                     Kumbara Bakiyesi

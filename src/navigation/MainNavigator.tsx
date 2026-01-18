@@ -47,7 +47,7 @@ export default function MainNavigator() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <Tab.Navigator
+    <Tab.Navigator
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: colors.primary,
@@ -89,23 +89,23 @@ export default function MainNavigator() {
             tabBarIcon: ({ color }) => <PawPrint color={color} size={24} />,
           }}
         />
-        <Tab.Screen
+      <Tab.Screen
           name="Finance"
           component={FinanceScreen}
           options={{
             tabBarLabel: "Finans",
             tabBarIcon: ({ color }) => <Wallet color={color} size={24} />,
           }}
-        />
-        <Tab.Screen
+      />
+      <Tab.Screen
           name="Hub"
           component={ProfileHubScreen}
           options={{
             tabBarLabel: () => null, // Yazı kaldırıldı
             tabBarIcon: props => <ProfileTabIcon {...props} />,
           }}
-        />
-      </Tab.Navigator>
+      />
+    </Tab.Navigator>
     </View>
   );
 }

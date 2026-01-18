@@ -45,15 +45,30 @@ export interface FamilyMember {
   birth_date?: string;
   blood_type?: string;
   allergies?: string;
+  medications?: string;
   gender?: string;
-  // Yeni Alanlar:
-  school?: string;
-  height?: string;
-  weight?: string;
-  chronic_diseases?: string;
-  surgeries?: string;
-  past_illnesses?: string;
-  vaccinations?: string;
+  school_name?: string;
+  school_class?: string;
+  school_no?: string;
+  bank_name?: string;
+  iban?: string;
+  tshirt_size?: string;
+  shoe_size?: string;
+  notes?: string;
+  title?: string;
+  workplace?: string;
+  occupation?: string;
+  weekly_allowance?: number;
+  monthly_allowance?: number;
+  current_balance?: number;
+  piggy_bank?: number;
+  meal_preferences?: {
+    cuisine?: string;
+    calories?: string;
+    avoid?: string;
+    diet?: string;
+    notes?: string;
+  };
 }
 
 export interface Family {
@@ -83,6 +98,22 @@ export async function getFamilyMembers() {
     .order("role", { ascending: false });
 
   return { members: members || [] };
+}
+
+export async function getMemberById(memberId: string) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { member: null, error: "Not authenticated" };
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", memberId)
+    .single();
+
+  if (error) return { member: null, error: error.message };
+  return { member: data };
 }
 
 export async function getFamilyDetails() {

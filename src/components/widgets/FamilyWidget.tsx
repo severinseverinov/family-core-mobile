@@ -134,16 +134,16 @@ export default function FamilyWidget({
           <View style={styles.userSection}>
             <View style={styles.heroBadge}>
               {familyData?.image_url ? (
-                <Image
+              <Image
                   source={{ uri: familyData.image_url }}
                   style={styles.heroAvatar}
-                />
+              />
               ) : (
                 <Users size={22} color="#ffffff" />
               )}
             </View>
             <View style={styles.userTextWrapper}>
-              <Text style={styles.greetingText}>Hoş geldin, {userName} 👋</Text>
+            <Text style={styles.greetingText}>Hoş geldin, {userName} 👋</Text>
               <View style={styles.locationContainer}>
                 <MapPin size={12} color="#f59e0b" />
                 <Text style={styles.locationLabel}>{locationName}</Text>
@@ -174,7 +174,7 @@ export default function FamilyWidget({
               <View key={member.id} style={styles.memberBox}>
                 <View style={styles.memberAvatarCircle}>
                   {member.avatar_url ? (
-                    <Image
+                  <Image
                       source={{ uri: member.avatar_url }}
                       style={styles.memberThumb}
                     />

@@ -30,6 +30,7 @@ import SettingsScreen from "../screens/settings/SettingsScreen";
 import FamilyManagementScreen from "../screens/family/FamilyManagementScreen";
 import MemberDetailScreen from "../screens/family/MemberDetailScreen";
 import ReceiptConfirmScreen from "../screens/kitchen/ReceiptConfirmScreen";
+import TestRecipeScreen from "../screens/kitchen/TestRecipeScreen";
 import FinanceSettingsScreen from "../screens/finance/FinanceSettingsScreen";
 import FamilyFinanceScreen from "../screens/family/FamilyFinanceScreen";
 import { fetchWeather } from "../services/weather";
@@ -78,7 +79,7 @@ export default function AppNavigator() {
         if (!cancelled) {
           setWeatherColor(palette[main] || fallbackTint);
           setWeatherImage(images[main] || images.Clouds);
-        }
+      }
       } catch (e) {
         if (!cancelled) setWeatherColor(fallbackTint);
       }
@@ -131,12 +132,12 @@ export default function AppNavigator() {
             backgroundColor="transparent"
           />
 
-          <Stack.Navigator
-            screenOptions={{
-              headerShown: false,
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
               cardStyle: { backgroundColor: colors.background },
-              animationEnabled: true,
-              gestureEnabled: false,
+              animation: "default",
+          gestureEnabled: false,
             }}
           >
             {!user ? (
@@ -185,7 +186,7 @@ export default function AppNavigator() {
                 <Stack.Screen
                   name="MemberDetail"
                   component={MemberDetailScreen}
-                  options={{ headerShown: true, title: "Kişi Detayı" }}
+                  options={{ headerShown: false, title: "Kişi Detayı" }}
                 />
                 <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
                 <Stack.Screen
@@ -197,19 +198,24 @@ export default function AppNavigator() {
                   }}
                 />
                 <Stack.Screen
+                  name="TestRecipe"
+                  component={TestRecipeScreen}
+                  options={{ headerShown: false, title: "Tarif" }}
+                />
+            <Stack.Screen
                   name="FinanceSettings"
                   component={FinanceSettingsScreen}
                   options={{ headerShown: false }}
-                />
-                <Stack.Screen
+            />
+            <Stack.Screen
                   name="FamilyFinance"
                   component={FamilyFinanceScreen}
                   options={{ headerShown: false, title: "Aile Finansları" }}
-                />
-              </>
-            )}
-          </Stack.Navigator>
-        </NavigationContainer>
+            />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
       </View>
     </View>
   );

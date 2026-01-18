@@ -31,16 +31,15 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import ModernInput from "../../components/ui/ModernInput";
-import SelectionGroup from "../../components/ui/SelectionGroup";
 import {
   getFamilyMembers,
   getFamilyDetails,
   createInvitation,
   removeMember,
   updateFamilySettings,
+  updateMemberDetails,
   FamilyMember,
 } from "../../services/family";
-import { updatePreferences } from "../../services/settings";
 import * as ImagePicker from "expo-image-picker";
 
 export default function FamilyManagementScreen({ navigation }: any) {
@@ -62,17 +61,6 @@ export default function FamilyManagementScreen({ navigation }: any) {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [selectedMemberDetail, setSelectedMemberDetail] =
     useState<FamilyMember | null>(null);
-  const [mealPrefsMember, setMealPrefsMember] = useState<FamilyMember | null>(
-    null
-  );
-  const [mealPrefsModalOpen, setMealPrefsModalOpen] = useState(false);
-  const [mealPreferences, setMealPreferences] = useState({
-    cuisine: "world",
-    calories: "",
-    avoid: "",
-    diet: "standard",
-    notes: "",
-  });
 
   const isAdmin = ["owner", "admin"].includes(myProfile?.role || "");
 
@@ -152,40 +140,40 @@ export default function FamilyManagementScreen({ navigation }: any) {
           const res = await removeMember(member.id);
           if (res.success) {
             loadData();
-            setSelectedMember(null);
+            setSelectedMemberDetail(null);
           } else Alert.alert("Hata", res.error);
         },
       },
     ]);
   };
 
-  const openMealPrefs = (member: FamilyMember) => {
-    setMealPrefsMember(member);
-    setMealPreferences({
-      cuisine: member?.meal_preferences?.cuisine || "world",
-      calories: member?.meal_preferences?.calories || "",
-      avoid: member?.meal_preferences?.avoid || "",
-      diet: member?.meal_preferences?.diet || "standard",
-      notes: member?.meal_preferences?.notes || "",
-    });
-    setMealPrefsModalOpen(true);
+  const handleToggleRole = (member: FamilyMember) => {
+    const nextRole = member.role === "admin" ? "member" : "admin";
+    const actionLabel = nextRole === "admin" ? "Yönetici Yap" : "Yöneticiliği Kaldır";
+    Alert.alert(
+      "Rolü Güncelle",
+      `${member.full_name} için rolü "${nextRole === "admin" ? "Yönetici" : "Üye"}" olarak güncellemek istiyor musun?`,
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: actionLabel,
+          onPress: async () => {
+            const res = await updateMemberDetails(member.id, { role: nextRole });
+            if (res.success) {
+              setSelectedMemberDetail(prev =>
+                prev ? { ...prev, role: nextRole } : prev
+              );
+              loadData();
+              Alert.alert("Başarılı", "Rol güncellendi.");
+            } else {
+              Alert.alert("Hata", res.error || "Rol güncellenemedi.");
+            }
+          },
+        },
+      ]
+    );
   };
 
-  const handleSaveMealPrefs = async () => {
-    if (!mealPrefsMember) return;
-    const res = await updatePreferences({
-      mealPreferences,
-      userIdOverride: mealPrefsMember.id,
-    } as any);
-    if (res?.success) {
-      Alert.alert("Başarılı", "Yemek tercihleri güncellendi.");
-      setMealPrefsModalOpen(false);
-      setMealPrefsMember(null);
-      loadData();
-    } else {
-      Alert.alert("Hata", res?.error || "Güncellenemedi.");
-    }
-  };
 
   // HEADER KISMI (ListHeaderComponent olarak kullanılacak)
   const ListHeader = () => (
@@ -314,16 +302,6 @@ export default function FamilyManagementScreen({ navigation }: any) {
         </View>
       </View>
       </TouchableOpacity>
-      {isAdmin && (
-        <TouchableOpacity
-          onPress={() => openMealPrefs(item)}
-          style={[styles.mealPrefButton, { borderColor: colors.border }]}
-        >
-          <Text style={[styles.mealPrefText, { color: colors.text }]}>
-            Yemek Tercihi
-          </Text>
-        </TouchableOpacity>
-      )}
       <TouchableOpacity
         onPress={() => navigation.navigate("MemberDetail", { member: item })}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -474,124 +452,29 @@ export default function FamilyManagementScreen({ navigation }: any) {
             {isAdmin &&
               selectedMemberDetail?.id !== myProfile?.id &&
               selectedMemberDetail?.role !== "owner" && (
-                <TouchableOpacity
-                  style={styles.removeBtn}
-                  onPress={() => handleRemove(selectedMemberDetail!)}
-                >
-                  <Trash2 size={20} color="#ef4444" />
-                  <Text style={styles.removeBtnText}>Aileden Çıkar</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={styles.roleBtn}
+                    onPress={() => handleToggleRole(selectedMemberDetail!)}
+                  >
+                    <Shield size={20} color="#2563eb" />
+                    <Text style={styles.roleBtnText}>
+                      {selectedMemberDetail?.role === "admin"
+                        ? "Yöneticiliği Kaldır"
+                        : "Yönetici Yap"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.removeBtn}
+                    onPress={() => handleRemove(selectedMemberDetail!)}
+                  >
+                    <Trash2 size={20} color="#ef4444" />
+                    <Text style={styles.removeBtnText}>Aileden Çıkar</Text>
+                  </TouchableOpacity>
+                </>
               )}
           </View>
         </View>
-      </Modal>
-
-      <Modal visible={mealPrefsModalOpen} animationType="fade" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-        >
-          <ScrollView
-            contentContainerStyle={styles.modalOverlay}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-              <View style={styles.modalHeader}>
-                <View>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>
-                    Yemek Tercihleri
-                  </Text>
-                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                    {mealPrefsMember?.full_name || "Üye"}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    setMealPrefsModalOpen(false);
-                    setMealPrefsMember(null);
-                  }}
-                >
-                  <X color={colors.text} />
-                </TouchableOpacity>
-              </View>
-
-              <SelectionGroup
-                label="Mutfak"
-                options={[
-                  { label: "Dünya", value: "world" },
-                  { label: "Türk", value: "turkish" },
-                  { label: "İtalyan", value: "italian" },
-                  { label: "Meksika", value: "mexican" },
-                  { label: "Asya", value: "asian" },
-                ]}
-                selectedValue={mealPreferences.cuisine}
-                onSelect={(val: any) =>
-                  setMealPreferences(prev => ({ ...prev, cuisine: val }))
-                }
-              />
-
-              <SelectionGroup
-                label="Diyet tipi"
-                options={[
-                  { label: "Standart", value: "standard" },
-                  { label: "Vejetaryen", value: "vegetarian" },
-                  { label: "Vegan", value: "vegan" },
-                  { label: "Keto", value: "keto" },
-                  { label: "Glutensiz", value: "gluten_free" },
-                ]}
-                selectedValue={mealPreferences.diet}
-                onSelect={(val: any) =>
-                  setMealPreferences(prev => ({ ...prev, diet: val }))
-                }
-              />
-
-              <ModernInput
-                label="Kalori hedefi"
-                value={mealPreferences.calories}
-                onChangeText={val =>
-                  setMealPreferences(prev => ({ ...prev, calories: val }))
-                }
-                keyboardType="numeric"
-              />
-              <ModernInput
-                label="Yemediği içerikler"
-                value={mealPreferences.avoid}
-                onChangeText={val =>
-                  setMealPreferences(prev => ({ ...prev, avoid: val }))
-                }
-                placeholder="Örn: mantar, deniz ürünleri"
-              />
-              <ModernInput
-                label="Notlar / Özel istekler"
-                value={mealPreferences.notes}
-                onChangeText={val =>
-                  setMealPreferences(prev => ({ ...prev, notes: val }))
-                }
-                multiline
-              />
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: colors.border }]}
-                  onPress={() => {
-                    setMealPrefsModalOpen(false);
-                    setMealPrefsMember(null);
-                  }}
-                >
-                  <Text style={{ color: colors.text }}>İptal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: colors.primary }]}
-                  onPress={handleSaveMealPrefs}
-                >
-                  <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                    Kaydet
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -706,14 +589,6 @@ const styles = StyleSheet.create({
   avatar: { width: 50, height: 50, borderRadius: 25 },
   memberInfo: { flex: 1, marginLeft: 15 },
   memberName: { fontSize: 17, fontWeight: "700" },
-  mealPrefButton: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 8,
-  },
-  mealPrefText: { fontSize: 11, fontWeight: "700" },
   roleTag: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   roleText: { fontSize: 12, fontWeight: "700" },
 
@@ -754,6 +629,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   healthValue: { fontSize: 15, fontWeight: "800", marginTop: 2 },
+  roleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    marginBottom: 6,
+  },
+  roleBtnText: { color: "#2563eb", fontWeight: "bold" },
   removeBtn: {
     flexDirection: "row",
     alignItems: "center",

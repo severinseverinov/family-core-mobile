@@ -33,7 +33,7 @@ FN:ACIL - ${profile?.full_name || "Kullanıcı"}
 TEL;TYPE=CELL:${profile?.phone || ""}
 NOTE:Kan Grubu: ${profile?.blood_type || "Bilinmiyor"}\\nAlerjiler: ${
     profile?.allergies || "Yok"
-  }\\nKronik: ${profile?.chronic_diseases || "Yok"}
+  }\\nİlaçlar: ${profile?.medications || "Yok"}
 END:VCARD`;
 
   return (

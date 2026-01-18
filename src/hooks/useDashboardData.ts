@@ -76,7 +76,7 @@ export function useDashboardData(dateStr?: string) {
 async function fetchKitchenData(familyId: string) {
   const [inv, list, budget] = await Promise.all([
     supabase
-      .from("kitchen_inventory")
+      .from("inventory")
       .select("*")
       .eq("family_id", familyId)
       .lt("quantity", 2),
@@ -84,7 +84,7 @@ async function fetchKitchenData(familyId: string) {
       .from("shopping_list")
       .select("*")
       .eq("family_id", familyId)
-      .eq("is_bought", false),
+      .eq("is_completed", false),
     supabase
       .from("family_budgets")
       .select("*")

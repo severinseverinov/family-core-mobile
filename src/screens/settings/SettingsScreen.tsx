@@ -19,13 +19,12 @@ import {
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPreferences, updatePreferences } from "../../services/settings";
-import ModernInput from "../../components/ui/ModernInput";
 import SelectionGroup from "../../components/ui/SelectionGroup";
 import { useNavigation } from "@react-navigation/native";
 
 export default function SettingsScreen() {
   const { colors, themeMode, setThemeMode } = useTheme();
-  const { signOut, profile } = useAuth();
+  const { signOut } = useAuth();
   const navigation = useNavigation<any>();
 
   const [lang, setLang] = useState("tr");
@@ -33,12 +32,6 @@ export default function SettingsScreen() {
   const [themeColor, setThemeColor] = useState("blue");
 
   const [loading, setLoading] = useState(false);
-  const [mealPreferences, setMealPreferences] = useState({
-    cuisine: "world",
-    calories: "",
-    avoid: "",
-  });
-
   useEffect(() => {
     loadPrefs();
   }, []);
@@ -49,9 +42,6 @@ export default function SettingsScreen() {
       setLang(prefs.preferred_language || "tr");
       setCurrency(prefs.preferred_currency || "TL");
       setThemeColor(prefs.theme_color || "blue");
-      if (prefs.meal_preferences) {
-        setMealPreferences(prev => ({ ...prev, ...prefs.meal_preferences }));
-      }
     }
   };
 
@@ -62,7 +52,6 @@ export default function SettingsScreen() {
       language: lang,
       currency,
       themeColor,
-      mealPreferences,
     });
     setLoading(false);
     if (res.success) {
@@ -81,7 +70,7 @@ export default function SettingsScreen() {
           >
             <ChevronLeft size={22} color={colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.mainTitle, { color: colors.text }]}>Ayarlar</Text>
+        <Text style={[styles.mainTitle, { color: colors.text }]}>Ayarlar</Text>
         </View>
 
         {/* YÖNETİM PANELİ (YENİ BÖLÜM) */}
@@ -98,58 +87,13 @@ export default function SettingsScreen() {
               <Users size={20} color={colors.primary} />
               <Text style={[styles.menuText, { color: colors.text }]}>
                 Aileyi Yönet
-              </Text>
+            </Text>
             </View>
             <ChevronRight size={18} color={colors.textMuted} />
           </TouchableOpacity>
 
           {/* Evcil Hayvan Ekleme */}
         </View>
-
-        <Text
-          style={[
-            styles.sectionTitle,
-            { color: colors.textMuted, marginTop: 20 },
-          ]}
-        >
-          YEMEK TERCİHLERİM
-        </Text>
-
-        <View style={[styles.memberPrefCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <Text style={[styles.memberPrefTitle, { color: colors.text }]}>
-            Yemek Tercihlerim
-          </Text>
-          <SelectionGroup
-            label="Mutfak"
-            options={[
-              { label: "Dünya", value: "world" },
-              { label: "Türk", value: "turkish" },
-              { label: "İtalyan", value: "italian" },
-              { label: "Meksika", value: "mexican" },
-              { label: "Asya", value: "asian" },
-            ]}
-            selectedValue={mealPreferences.cuisine}
-            onSelect={(val: any) =>
-              setMealPreferences(prev => ({ ...prev, cuisine: val }))
-            }
-          />
-          <ModernInput
-            label="Kalori hedefi"
-            value={mealPreferences.calories}
-            onChangeText={val =>
-              setMealPreferences(prev => ({ ...prev, calories: val }))
-            }
-            keyboardType="numeric"
-          />
-          <ModernInput
-            label="Yemediği içerikler"
-            value={mealPreferences.avoid}
-            onChangeText={val =>
-              setMealPreferences(prev => ({ ...prev, avoid: val }))
-            }
-          />
-        </View>
-
 
         <Text
           style={[
@@ -276,14 +220,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  memberPrefCard: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 12,
-    marginTop: 12,
-  },
-  memberPrefTitle: { fontSize: 13, fontWeight: "700", marginBottom: 8 },
-
   saveBtn: {
     flexDirection: "row",
     padding: 16,

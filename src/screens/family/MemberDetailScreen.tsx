@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -7,32 +7,106 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  SafeAreaView,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
 import ModernInput from "../../components/ui/ModernInput";
-import { updateMemberDetails, FamilyMember } from "../../services/family";
+import {
+  updateMemberDetails,
+  FamilyMember,
+  getMemberById,
+} from "../../services/family";
 import {
   ShieldAlert,
   Save,
   Share2,
   Activity,
   GraduationCap,
-  Syringe,
+  Utensils,
+  ChevronLeft,
 } from "lucide-react-native";
 import SelectionGroup from "../../components/ui/SelectionGroup";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function MemberDetailScreen({ route, navigation }: any) {
   const { member }: { member: FamilyMember } = route.params;
   const { colors } = useTheme();
   const [editMember, setEditMember] = useState<FamilyMember>(member);
   const [qrVisible, setQrVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const centeredInputStyle = { textAlignVertical: "center" as const };
+  const centeredMultilineStyle = {
+    textAlignVertical: "center" as const,
+    paddingVertical: 14,
+  };
+  const resolveInfoMode = useCallback((target: FamilyMember) => {
+    const hasSchool = Boolean(
+      target?.school_name || target?.school_class || target?.school_no
+    );
+    const hasWork = Boolean(target?.workplace || target?.occupation);
+    if (target?.role === "member") return "school";
+    if (hasSchool && hasWork) return "both";
+    if (hasWork) return "work";
+    return "school";
+  }, []);
+  const [infoMode, setInfoMode] = useState<"school" | "work" | "both">(
+    resolveInfoMode(member)
+  );
+  const [mealPreferences, setMealPreferences] = useState({
+    cuisine: member?.meal_preferences?.cuisine || "world",
+    calories: member?.meal_preferences?.calories || "",
+    avoid: member?.meal_preferences?.avoid || "",
+    diet: member?.meal_preferences?.diet || "standard",
+    notes: member?.meal_preferences?.notes || "",
+  });
+
+  const hydrateFromMember = useCallback(
+    (next: FamilyMember) => {
+      setEditMember(next);
+      setInfoMode(resolveInfoMode(next));
+      setMealPreferences({
+        cuisine: next?.meal_preferences?.cuisine || "world",
+        calories: next?.meal_preferences?.calories || "",
+        avoid: next?.meal_preferences?.avoid || "",
+        diet: next?.meal_preferences?.diet || "standard",
+        notes: next?.meal_preferences?.notes || "",
+      });
+    },
+    [resolveInfoMode]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      const load = async () => {
+        const res = await getMemberById(member.id);
+        if (active && res.member) hydrateFromMember(res.member as FamilyMember);
+      };
+      load();
+      return () => {
+        active = false;
+      };
+    }, [member.id, hydrateFromMember])
+  );
 
   const handleSave = async () => {
-    const res = await updateMemberDetails(member.id, editMember);
+    try {
+      setSaving(true);
+      const res = await updateMemberDetails(member.id, {
+        ...editMember,
+        meal_preferences: mealPreferences,
+      });
     if (res.success) {
       Alert.alert("Başarılı", "Bilgiler güncellendi.");
       navigation.goBack();
+        return;
+      }
+      Alert.alert("Hata", res.error || "Bilgiler güncellenemedi.");
+    } catch (error: any) {
+      Alert.alert("Hata", error?.message || "Bilgiler güncellenemedi.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -42,7 +116,7 @@ export default function MemberDetailScreen({ route, navigation }: any) {
   TEL;TYPE=CELL:${editMember.phone || ""}
   NOTE:Kan Grubu: ${editMember.blood_type || "Bilinmiyor"}\\
   nAlerjiler: ${editMember.allergies || "Yok"}\\
-  nKronik: ${editMember.chronic_diseases || "Yok"}
+  nİlaçlar: ${editMember.medications || "Yok"}
   END:VCARD`;
 
   const SectionTitle = ({ icon: Icon, title }: any) => (
@@ -55,21 +129,82 @@ export default function MemberDetailScreen({ route, navigation }: any) {
   );
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={[styles.backButton, { borderColor: colors.border }]}
+          >
+            <ChevronLeft size={22} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.mainTitle, { color: colors.text }]}>
+            Üye Detayları
+          </Text>
+        </View>
+
       {/* GENEL BİLGİLER */}
       <SectionTitle icon={GraduationCap} title="Genel ve Eğitim" />
-      <ModernInput
-        label="Okul / Kurum"
-        value={editMember.school}
-        onChangeText={t => setEditMember({ ...editMember, school: t })}
-      />
+      {editMember.role !== "member" ? (
+        <SelectionGroup
+          label="Bilgi tipi"
+          options={[
+            { label: "Okul", value: "school" },
+            { label: "İş", value: "work" },
+            { label: "İkisi de", value: "both" },
+          ]}
+          selectedValue={infoMode}
+          onSelect={(val: any) => setInfoMode(val)}
+        />
+      ) : (
+        <Text style={[styles.helperText, { color: colors.textMuted }]}>
+          Çocuk profillerinde iş yeri bilgisi istenmez.
+        </Text>
+      )}
+      {infoMode !== "work" && (
+        <>
+          <ModernInput
+            label="Okul / Kurum"
+            value={editMember.school_name}
+            onChangeText={t => setEditMember({ ...editMember, school_name: t })}
+            style={centeredInputStyle}
+          />
+          <ModernInput
+            label="Sınıf"
+            value={editMember.school_class}
+            onChangeText={t => setEditMember({ ...editMember, school_class: t })}
+            style={centeredInputStyle}
+          />
+          <ModernInput
+            label="Okul No"
+            value={editMember.school_no}
+            onChangeText={t => setEditMember({ ...editMember, school_no: t })}
+            style={centeredInputStyle}
+          />
+        </>
+      )}
+      {editMember.role !== "member" && infoMode !== "school" && (
+        <>
+          <ModernInput
+            label="İş Yeri"
+            value={editMember.workplace}
+            onChangeText={t => setEditMember({ ...editMember, workplace: t })}
+            style={centeredInputStyle}
+          />
+          <ModernInput
+            label="Meslek"
+            value={editMember.occupation}
+            onChangeText={t => setEditMember({ ...editMember, occupation: t })}
+            style={centeredInputStyle}
+          />
+        </>
+      )}
       <ModernInput
         label="Telefon"
         value={editMember.phone}
         onChangeText={t => setEditMember({ ...editMember, phone: t })}
         keyboardType="phone-pad"
+        style={centeredInputStyle}
       />
 
       {/* FİZİKSEL BİLGİLER */}
@@ -87,18 +222,19 @@ export default function MemberDetailScreen({ route, navigation }: any) {
       <View style={styles.row}>
         <View style={{ flex: 1, marginRight: 10 }}>
           <ModernInput
-            label="Boy (cm)"
-            value={editMember.height}
-            onChangeText={t => setEditMember({ ...editMember, height: t })}
-            keyboardType="numeric"
+            label="Tişört Bedeni"
+            value={editMember.tshirt_size}
+            onChangeText={t => setEditMember({ ...editMember, tshirt_size: t })}
+            style={centeredInputStyle}
           />
         </View>
         <View style={{ flex: 1 }}>
           <ModernInput
-            label="Kilo (kg)"
-            value={editMember.weight}
-            onChangeText={t => setEditMember({ ...editMember, weight: t })}
+            label="Ayakkabı No"
+            value={editMember.shoe_size}
+            onChangeText={t => setEditMember({ ...editMember, shoe_size: t })}
             keyboardType="numeric"
+            style={centeredInputStyle}
           />
         </View>
       </View>
@@ -109,41 +245,82 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         label="Kan Grubu"
         value={editMember.blood_type}
         onChangeText={t => setEditMember({ ...editMember, blood_type: t })}
+        style={centeredInputStyle}
       />
       <ModernInput
         label="Alerjiler"
         value={editMember.allergies}
         onChangeText={t => setEditMember({ ...editMember, allergies: t })}
         multiline
+        style={centeredMultilineStyle}
       />
       <ModernInput
-        label="Kronik Hastalıklar"
-        value={editMember.chronic_diseases}
-        onChangeText={t =>
-          setEditMember({ ...editMember, chronic_diseases: t })
-        }
+        label="Kullandığı İlaçlar"
+        value={editMember.medications}
+        onChangeText={t => setEditMember({ ...editMember, medications: t })}
         multiline
+        style={centeredMultilineStyle}
       />
       <ModernInput
-        label="Geçirilmiş Ameliyatlar"
-        value={editMember.surgeries}
-        onChangeText={t => setEditMember({ ...editMember, surgeries: t })}
+        label="Notlar"
+        value={editMember.notes}
+        onChangeText={t => setEditMember({ ...editMember, notes: t })}
         multiline
+        style={centeredMultilineStyle}
       />
 
-      {/* AŞI VE GEÇMİŞ HASTALIKLAR */}
-      <SectionTitle icon={Syringe} title="Aşı ve Tıbbi Geçmiş" />
-      <ModernInput
-        label="Aşı Bilgileri"
-        value={editMember.vaccinations}
-        onChangeText={t => setEditMember({ ...editMember, vaccinations: t })}
-        multiline
+      {/* YEMEK TERCİHLERİ */}
+      <SectionTitle icon={Utensils} title="Yemek Tercihleri" />
+      <SelectionGroup
+        label="Mutfak"
+        options={[
+          { label: "Dünya", value: "world" },
+          { label: "Türk", value: "turkish" },
+          { label: "İtalyan", value: "italian" },
+          { label: "Meksika", value: "mexican" },
+          { label: "Asya", value: "asian" },
+        ]}
+        selectedValue={mealPreferences.cuisine}
+        onSelect={(val: any) =>
+          setMealPreferences(prev => ({ ...prev, cuisine: val }))
+        }
+      />
+      <SelectionGroup
+        label="Diyet tipi"
+        options={[
+          { label: "Standart", value: "standard" },
+          { label: "Vejetaryen", value: "vegetarian" },
+          { label: "Vegan", value: "vegan" },
+          { label: "Keto", value: "keto" },
+          { label: "Glutensiz", value: "gluten_free" },
+        ]}
+        selectedValue={mealPreferences.diet}
+        onSelect={(val: any) =>
+          setMealPreferences(prev => ({ ...prev, diet: val }))
+        }
       />
       <ModernInput
-        label="Geçirilmiş Hastalıklar"
-        value={editMember.past_illnesses}
-        onChangeText={t => setEditMember({ ...editMember, past_illnesses: t })}
+        label="Kalori hedefi"
+        value={mealPreferences.calories}
+        onChangeText={t =>
+          setMealPreferences(prev => ({ ...prev, calories: t }))
+        }
+        keyboardType="numeric"
+        style={centeredInputStyle}
+      />
+      <ModernInput
+        label="Yemediği içerikler"
+        value={mealPreferences.avoid}
+        onChangeText={t => setMealPreferences(prev => ({ ...prev, avoid: t }))}
+        placeholder="Örn: mantar, deniz ürünleri"
+        style={centeredInputStyle}
+      />
+      <ModernInput
+        label="Notlar / Özel istekler"
+        value={mealPreferences.notes}
+        onChangeText={t => setMealPreferences(prev => ({ ...prev, notes: t }))}
         multiline
+        style={centeredMultilineStyle}
       />
 
       {/* AKSİYON BUTONLARI */}
@@ -151,9 +328,12 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         <TouchableOpacity
           style={[styles.btn, { backgroundColor: colors.primary }]}
           onPress={handleSave}
+          disabled={saving}
         >
           <Save size={20} color="#fff" />
-          <Text style={styles.btnText}>Kaydet</Text>
+          <Text style={styles.btnText}>
+            {saving ? "Kaydediliyor..." : "Kaydet"}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -195,17 +375,38 @@ export default function MemberDetailScreen({ route, navigation }: any) {
 
       <View style={{ height: 100 }} />
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: { padding: 20 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mainTitle: {
+    fontSize: 26,
+    fontWeight: "900",
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginVertical: 15,
     gap: 10,
   },
+  helperText: { fontSize: 12, marginBottom: 10, marginLeft: 4 },
   sectionTitle: { fontSize: 16, fontWeight: "800", textTransform: "uppercase" },
   row: { flexDirection: "row" },
   actions: { gap: 12, marginTop: 20 },

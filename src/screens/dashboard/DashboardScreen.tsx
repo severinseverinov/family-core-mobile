@@ -53,7 +53,7 @@ export default function DashboardScreen({ navigation }: any) {
     >
       <StatusBar animated translucent backgroundColor={colors.background} />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-        <ScrollView
+      <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
@@ -101,11 +101,11 @@ export default function DashboardScreen({ navigation }: any) {
                     fontWeight: "600",
                     fontSize: 13,
                   }}
-                >
-                  Tümünü Gör
-                </Text>
+          >
+            Tümünü Gör
+            </Text>
               </TouchableOpacity>
-            </View>
+          </View>
 
             {/* Görevler alanı */}
             <View
@@ -128,7 +128,7 @@ export default function DashboardScreen({ navigation }: any) {
         <TouchableOpacity
           style={[styles.mainFab, { backgroundColor: colors.primary }]}
           onPress={() => setTaskModalVisible(true)}
-        >
+          >
           <Plus size={26} color="#fff" />
         </TouchableOpacity>
       </View>
