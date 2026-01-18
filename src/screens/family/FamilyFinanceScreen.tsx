@@ -188,12 +188,12 @@ export default function FamilyFinanceScreen({ navigation }: any) {
             <ChevronLeft size={22} color={colors.text} />
           </TouchableOpacity>
           <View>
-            <Text style={[styles.title, { color: colors.text }]}>
-              Aile Finans Merkezi
-            </Text>
-            <Text style={{ color: colors.textMuted }}>
-              {selectedYear} Genel Bakış
-            </Text>
+          <Text style={[styles.title, { color: colors.text }]}>
+            Aile Finans Merkezi
+          </Text>
+          <Text style={{ color: colors.textMuted }}>
+            {selectedYear} Genel Bakış
+          </Text>
           </View>
         </View>
 

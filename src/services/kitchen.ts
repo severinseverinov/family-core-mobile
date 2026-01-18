@@ -23,7 +23,7 @@ function normalizeProductName(value: string) {
     .trim();
 }
 
-function isProductMatch(source: string, target: string) {
+export function isProductMatch(source: string, target: string) {
   const a = normalizeProductName(source);
   const b = normalizeProductName(target);
   if (!a || !b) return false;
@@ -304,6 +304,7 @@ export async function createMealPoll(input: {
   endAt?: string | null;
   audience: "parents" | "members";
   memberIds?: string[];
+  mealType?: "cook" | "delivery" | "restaurant";
 }) {
   try {
     const {
@@ -319,7 +320,7 @@ export async function createMealPoll(input: {
 
     if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
 
-    const { error } = await supabase.from("meal_polls").insert({
+    const { data: newPoll, error } = await supabase.from("meal_polls").insert({
       family_id: profile.family_id,
       created_by: user.id,
       title: input.title,
@@ -329,11 +330,13 @@ export async function createMealPoll(input: {
       end_at: input.endAt || null,
       audience: input.audience,
       member_ids: input.audience === "members" ? input.memberIds || [] : null,
+      meal_type: input.mealType || "cook",
       is_approved: false,
+      is_active: true,
       votes: {},
-    });
+    }).select().single();
 
-    if (!error) {
+    if (!error && newPoll) {
       await notifyFamilyMembers(
         profile.family_id,
         "Yemek anketi yayınlandı",
@@ -343,7 +346,7 @@ export async function createMealPoll(input: {
       );
     }
 
-    return { success: !error, error: error?.message };
+    return { success: !error, poll: newPoll || null, error: error?.message };
   } catch (error: any) {
     return { error: error.message };
   }
@@ -365,7 +368,7 @@ export async function getActiveMealPoll() {
     if (!profile?.family_id) return { poll: null, error: "Aile bulunamadı." };
 
     const nowIso = new Date().toISOString();
-    const { data } = await supabase
+    const { data, error: queryError } = await supabase
       .from("meal_polls")
       .select("*")
       .eq("family_id", profile.family_id)
@@ -375,7 +378,36 @@ export async function getActiveMealPoll() {
       .limit(1)
       .maybeSingle();
 
-    if (!data) return { poll: null };
+    if (queryError) {
+      console.error("getActiveMealPoll query error:", queryError);
+    }
+
+    // Eğer aktif anket yoksa, sonlandırılmış son anketi getir
+    if (!data) {
+      const { data: lastPoll } = await supabase
+        .from("meal_polls")
+        .select("*")
+        .eq("family_id", profile.family_id)
+        .eq("is_active", false)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!lastPoll) return { poll: null };
+
+      // Audience kontrolü
+      if (lastPoll.audience === "parents") {
+        if (!["owner", "admin"].includes(profile.role || "")) {
+          return { poll: null };
+        }
+      }
+      if (lastPoll.audience === "members") {
+        const memberIds = lastPoll.member_ids || [];
+        if (!memberIds.includes(profile.id)) return { poll: null };
+      }
+
+      return { poll: lastPoll };
+    }
 
     if (data.audience === "parents") {
       if (!["owner", "admin"].includes(profile.role || "")) {
@@ -410,7 +442,7 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
 
     const { data: poll } = await supabase
       .from("meal_polls")
-      .select("id, family_id, audience, member_ids, votes, suggestions")
+      .select("id, family_id, audience, member_ids, votes, suggestions, created_by, is_active")
       .eq("id", pollId)
       .eq("family_id", profile.family_id)
       .single();
@@ -476,7 +508,57 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
       .eq("id", pollId)
       .eq("family_id", profile.family_id);
 
-    return { success: !error, error: error?.message };
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    // Oy verdikten sonra herkes oy verdi mi kontrol et
+    if (poll.is_active) {
+      let targetMemberIds: string[] = [];
+      
+      if (poll.audience === "parents") {
+        // Ebeveynlerin ID'lerini al
+        const { data: parents } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("family_id", profile.family_id)
+          .in("role", ["owner", "admin"]);
+        targetMemberIds = (parents || []).map((p: any) => p.id);
+      } else if (poll.audience === "members") {
+        targetMemberIds = poll.member_ids || [];
+      }
+
+      // Oy veren tüm kullanıcıları topla
+      const votedMemberIds = new Set<string>();
+      Object.keys(votes).forEach(key => {
+        const entry = votes[key] || {};
+        const memberIds = entry.memberIds || [];
+        memberIds.forEach((id: string) => votedMemberIds.add(id));
+      });
+
+      // Herkes oy verdi mi kontrol et
+      const allVoted = targetMemberIds.length > 0 && 
+        targetMemberIds.every(id => votedMemberIds.has(id));
+
+      if (allVoted) {
+        // Anketi otomatik sonlandır
+        await supabase
+          .from("meal_polls")
+          .update({ is_active: false })
+          .eq("id", pollId);
+
+        // Anket oluşturana bildirim gönder
+        await notifyFamilyMembers(
+          profile.family_id,
+          "Anket tamamlandı",
+          "Ankette herkes oy verdi. Sonuçları onaylayabilirsiniz.",
+          "members",
+          [poll.created_by]
+        );
+      }
+    }
+
+    return { success: true };
   } catch (error: any) {
     return { error: error.message };
   }
@@ -532,10 +614,70 @@ export async function approveMealPoll(pollId: string) {
       return { error: "Seçili yemek bulunamadı." };
     }
 
-    const matchedSuggestion = (poll.suggestions || []).find(
+    let matchedSuggestion = (poll.suggestions || []).find(
       (item: any) => (item.title || item) === winningTitle
     );
-    const missingItems = matchedSuggestion?.missing || [];
+    let missingItems = matchedSuggestion?.missing || [];
+    
+    // Eğer manuel anketten geliyorsa (missing array boş), AI ile tarif ve eksik malzemeleri bul
+    if (missingItems.length === 0 && geminiApiKey) {
+      try {
+        // Envanter bilgilerini al
+        const { data: inventoryData } = await supabase
+          .from("inventory")
+          .select("product_name, quantity, unit, category")
+          .eq("family_id", profile.family_id)
+          .eq("is_approved", true)
+          .limit(80);
+        
+        const inventoryItems = (inventoryData || []).map((item: any) => ({
+          product_name: item.product_name,
+          quantity: item.quantity,
+          unit: item.unit,
+          category: item.category,
+        }));
+        
+        // Kullanıcı dilini al
+        const { data: userProfile } = await supabase
+          .from("profiles")
+          .select("language")
+          .eq("id", user.id)
+          .single();
+        
+        const aiResult = await getMealRecipeAndMissingItems(
+          winningTitle,
+          inventoryItems,
+          userProfile?.language || "tr"
+        );
+        
+        if (!aiResult.error) {
+          missingItems = aiResult.missing || [];
+          
+          // Anketi güncelle - suggestions array'inde bu yemeğin missing ve recipe bilgilerini ekle
+          const updatedSuggestions = (poll.suggestions || []).map((s: any) => {
+            const sTitle = s.title || s;
+            if (sTitle === winningTitle) {
+              return {
+                title: sTitle,
+                missing: missingItems,
+                recipe: aiResult.recipe || "",
+              };
+            }
+            return s;
+          });
+          
+          // Anketi güncelle (missing ve recipe bilgileriyle)
+          await supabase
+            .from("meal_polls")
+            .update({ suggestions: updatedSuggestions })
+            .eq("id", pollId)
+            .eq("family_id", profile.family_id);
+        }
+      } catch (aiError) {
+        console.warn("AI ile eksik malzeme bulunamadı:", aiError);
+      }
+    }
+    
     for (const name of missingItems) {
       await supabase.from("shopping_list").insert({
         family_id: profile.family_id,
@@ -574,6 +716,148 @@ export async function approveMealPoll(pollId: string) {
     }
 
     return { success: !error, error: error?.message };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+export async function deleteMealPoll(pollId: string) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { error: "Aile bulunamadı." };
+
+    const { data: poll } = await supabase
+      .from("meal_polls")
+      .select("created_by")
+      .eq("id", pollId)
+      .eq("family_id", profile.family_id)
+      .single();
+
+    if (!poll) return { error: "Anket bulunamadı." };
+    if (poll.created_by !== user.id) {
+      return { error: "Bu anketi sadece oluşturan kişi silebilir." };
+    }
+
+    const { error } = await supabase
+      .from("meal_polls")
+      .delete()
+      .eq("id", pollId)
+      .eq("family_id", profile.family_id);
+
+    return { success: !error, error: error?.message };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+export async function endMealPoll(pollId: string) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { error: "Aile bulunamadı." };
+
+    const { data: poll } = await supabase
+      .from("meal_polls")
+      .select("created_by")
+      .eq("id", pollId)
+      .eq("family_id", profile.family_id)
+      .single();
+
+    if (!poll) return { error: "Anket bulunamadı." };
+    if (poll.created_by !== user.id) {
+      return { error: "Bu anketi sadece oluşturan kişi sonlandırabilir." };
+    }
+
+    const { error } = await supabase
+      .from("meal_polls")
+      .update({ is_active: false })
+      .eq("id", pollId)
+      .eq("family_id", profile.family_id);
+
+    return { success: !error, error: error?.message };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+export async function updateMealPoll(
+  pollId: string,
+  input: {
+    title: string;
+    suggestions: { title: string; missing: string[] }[];
+    missingItems: string[];
+    extraNotes?: string;
+    endAt?: string | null;
+    audience: "parents" | "members";
+    memberIds?: string[];
+    mealType?: "cook" | "delivery" | "restaurant";
+  }
+) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
+
+    const { data: existingPoll } = await supabase
+      .from("meal_polls")
+      .select("created_by")
+      .eq("id", pollId)
+      .eq("family_id", profile.family_id)
+      .single();
+
+    if (!existingPoll) return { error: "Anket bulunamadı." };
+    if (existingPoll.created_by !== user.id) {
+      return { error: "Bu anketi sadece oluşturan kişi düzenleyebilir." };
+    }
+
+    const { data: updatedPoll, error } = await supabase
+      .from("meal_polls")
+      .update({
+        title: input.title,
+        suggestions: input.suggestions,
+        missing_items: input.missingItems,
+        extra_notes: input.extraNotes || null,
+        end_at: input.endAt || null,
+        audience: input.audience,
+        member_ids: input.audience === "members" ? input.memberIds || [] : null,
+        meal_type: input.mealType || "cook",
+        // Oy verilerini sıfırla (düzenlemede oylar temizlenir)
+        votes: {},
+      })
+      .eq("id", pollId)
+      .eq("family_id", profile.family_id)
+      .select()
+      .single();
+
+    return { success: !error, poll: updatedPoll || null, error: error?.message };
   } catch (error: any) {
     return { error: error.message };
   }
@@ -858,6 +1142,69 @@ ${JSON.stringify(input.groups)}`;
     return { groups: cleaned };
   } catch (error: any) {
     return { error: error.message };
+  }
+}
+
+export async function getMealRecipeAndMissingItems(
+  mealTitle: string,
+  inventoryItems: Array<{
+    product_name?: string;
+    quantity?: string | number;
+    unit?: string;
+    category?: string;
+  }>,
+  language?: string
+) {
+  try {
+    if (!geminiApiKey) {
+      return { error: "Gemini API key tanımlı değil." };
+    }
+    const lang = resolveMealLanguage(language);
+    const inventoryList = (inventoryItems || [])
+      .filter(item => item.product_name)
+      .slice(0, 80)
+      .map(item => {
+        const qty = item.quantity ? `${item.quantity}` : "";
+        const unit = item.unit ? ` ${item.unit}` : "";
+        const cat = item.category ? ` (${item.category})` : "";
+        return `${item.product_name}${qty || unit ? ` • ${qty}${unit}` : ""}${cat}`;
+      })
+      .join("\n");
+
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const prompt = `You are a meal assistant. Respond strictly in ${lang}.
+
+Meal name: "${mealTitle}"
+
+Available inventory items:
+${inventoryList || "No items in inventory"}
+
+Analyze this meal and:
+1. Check which ingredients are available in the inventory
+2. List any missing ingredients needed for this meal
+3. Return ONLY a JSON object in this exact format:
+
+{
+  "missing": ["ingredient1", "ingredient2"],
+  "recipe": "Brief recipe description"
+}
+
+Return ONLY the JSON, no other text.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response
+      .text()
+      .replace(/```json|```/g, "")
+      .trim();
+    const parsed = JSON.parse(text);
+    
+    return {
+      missing: Array.isArray(parsed?.missing) ? parsed.missing.map((m: any) => String(m)) : [],
+      recipe: String(parsed?.recipe || ""),
+    };
+  } catch (error: any) {
+    return { error: error.message, missing: [], recipe: "" };
   }
 }
 

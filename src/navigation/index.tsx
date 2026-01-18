@@ -198,7 +198,7 @@ export default function AppNavigator() {
                   }}
                 />
                 <Stack.Screen
-                  name="TestRecipe"
+                  name="Recipe"
                   component={TestRecipeScreen}
                   options={{ headerShown: false, title: "Tarif" }}
                 />

@@ -23,6 +23,8 @@ import {
   ChevronRight,
   Edit2,
   Trash2,
+  Utensils,
+  Store,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -36,15 +38,20 @@ import {
   toggleShoppingItem,
   analyzeReceiptMobile,
   findMatchingShoppingItems,
+  isProductMatch,
   removeShoppingItemsByIds,
   getShoppingListItems,
   generateMealSuggestionsAI,
+  getMealRecipeAndMissingItems,
   approveInventoryItem,
   notifyMealPollPublished,
   createMealPoll,
   getActiveMealPoll,
   approveMealPoll,
   submitMealPollVote,
+  deleteMealPoll,
+  endMealPoll,
+  updateMealPoll,
 } from "../../services/kitchen";
 import { getFamilyMembers } from "../../services/family";
 import { getPreferences } from "../../services/settings";
@@ -92,21 +99,27 @@ export default function KitchenScreen({ navigation, route }: any) {
   const [publishModalVisible, setPublishModalVisible] = useState(false);
   const [publishGroupLabel, setPublishGroupLabel] = useState("");
   const [publishExtraNotes, setPublishExtraNotes] = useState("");
-  const [publishEndTime, setPublishEndTime] = useState("");
+  const [publishEndTime, setPublishEndTime] = useState("15:00");
   const [manualPollVisible, setManualPollVisible] = useState(false);
   const [manualPollTitle, setManualPollTitle] = useState("Bugün ne pişirelim?");
-  const [manualPollOptions, setManualPollOptions] = useState("");
-  const [manualMealShare, setManualMealShare] = useState("");
-  const [manualPollNotes, setManualPollNotes] = useState("");
-  const [manualPollEndTime, setManualPollEndTime] = useState("");
+  const [manualPollOptions, setManualPollOptions] = useState<string[]>(["", ""]);
+  const [manualPollEndTime, setManualPollEndTime] = useState("12:00");
+  const [deliveryRestaurantPollVisible, setDeliveryRestaurantPollVisible] = useState(false);
+  const [deliveryRestaurantType, setDeliveryRestaurantType] = useState<"delivery" | "restaurant" | null>(null);
+  const [deliveryRestaurantOptions, setDeliveryRestaurantOptions] = useState<string[]>(["", ""]);
   const [pollAudience, setPollAudience] = useState<"parents" | "members">(
     "parents"
   );
   const [pollMemberIds, setPollMemberIds] = useState<string[]>([]);
+  const [pollMealType, setPollMealType] = useState<"cook" | "delivery" | "restaurant">("cook");
   const [activeMealPoll, setActiveMealPoll] = useState<any>(null);
   const [dailyPollSelection, setDailyPollSelection] = useState<string | null>(
     null
   );
+  const [editingPollId, setEditingPollId] = useState<string | null>(null);
+  const [approvedMealTitle, setApprovedMealTitle] = useState<string | null>(null);
+  const [approvingMealPoll, setApprovingMealPoll] = useState(false);
+  const [addedToShoppingList, setAddedToShoppingList] = useState<Set<string>>(new Set());
   const [recipeConfirmVisible, setRecipeConfirmVisible] = useState(false);
   const [recipeConfirmTitle, setRecipeConfirmTitle] = useState("Tavuk sote");
   const [recipeConfirmCheck, setRecipeConfirmCheck] = useState<{
@@ -251,7 +264,16 @@ export default function KitchenScreen({ navigation, route }: any) {
           onPress: async () => {
             const result = await deleteInventoryItem(item.id, "consumed");
             if (result?.success) {
-              loadData();
+              // State'i hemen güncelle
+              setData((prev: any) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  items: (prev.items || []).filter((i: any) => i.id !== item.id),
+                };
+              });
+              // Veriyi yeniden yükle
+              await loadData();
             } else {
               Alert.alert("Hata", result?.error || "Ürün silinemedi.");
             }
@@ -263,7 +285,16 @@ export default function KitchenScreen({ navigation, route }: any) {
           onPress: async () => {
             const result = await deleteInventoryItem(item.id, "mistake");
             if (result?.success) {
-              loadData();
+              // State'i hemen güncelle
+              setData((prev: any) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  items: (prev.items || []).filter((i: any) => i.id !== item.id),
+                };
+              });
+              // Veriyi yeniden yükle
+              await loadData();
             } else {
               Alert.alert("Hata", result?.error || "Ürün silinemedi.");
             }
@@ -349,44 +380,185 @@ export default function KitchenScreen({ navigation, route }: any) {
     return selected;
   };
 
-  const handleAddMissingItems = async (missing: string[]) => {
+  const handleAddMissingItems = async (missing: string[], mealTitle: string, showUrgentOption: boolean = false) => {
     if (!missing || missing.length === 0) {
       Alert.alert("Bilgi", "Eksik malzeme bulunmuyor.");
       return;
     }
+    
+    // İlk kontrol - Alert gösterilmeden önce
     const matchRes = await findMatchingShoppingItems(missing);
-    const existingNames = new Set(
-      (matchRes?.matches || [])
-        .map((item: any) => String(item.product_name || "").toLowerCase())
-        .filter(Boolean)
-    );
-    const toAdd = missing.filter(
-      name => !existingNames.has(name.toLowerCase())
-    );
+    const existingMatches = matchRes?.matches || [];
+    
+    // Her bir missing ürünü için eşleşme var mı kontrol et
+    const toAdd: string[] = [];
+    const alreadyInList: string[] = [];
+    
+    missing.forEach(name => {
+      const hasMatch = existingMatches.some((item: any) => 
+        isProductMatch(name, item.product_name)
+      );
+      if (hasMatch) {
+        alreadyInList.push(name);
+      } else {
+        toAdd.push(name);
+      }
+    });
+    
     if (toAdd.length === 0) {
       Alert.alert("Bilgi", "Eksik malzemeler zaten listede.");
+      setAddedToShoppingList(prev => {
+        const newSet = new Set(prev);
+        newSet.add(mealTitle);
+        return newSet;
+      });
       return;
     }
-    Alert.alert(
-      "Eksik malzemeleri ekle",
-      `${toAdd.join(", ")} listeye eklensin mi?`,
-      [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Ekle",
-          onPress: async () => {
-            for (const name of toAdd) {
-              await addShoppingItem(name, 1, "adet", undefined, true);
-            }
-            Alert.alert("Başarılı", "Eksik malzemeler listeye eklendi.");
-            loadData();
+    
+    let message = "";
+    if (alreadyInList.length > 0) {
+      message = `${alreadyInList.join(", ")} zaten listede.\n\n`;
+    }
+    message += `${toAdd.join(", ")} listeye eklensin mi?`;
+    
+    if (showUrgentOption) {
+      Alert.alert(
+        "Eksik malzemeleri ekle",
+        message,
+        [
+          { text: "Vazgeç", style: "cancel" },
+          {
+            text: "Normal ekle",
+            onPress: async () => {
+              // Ekle butonuna basıldığında tekrar kontrol et
+              const finalCheck = await findMatchingShoppingItems(toAdd);
+              const finalMatches = finalCheck?.matches || [];
+              
+              const finalToAdd = toAdd.filter(name => {
+                const hasMatch = finalMatches.some((item: any) => 
+                  isProductMatch(name, item.product_name)
+                );
+                return !hasMatch;
+              });
+              
+              if (finalToAdd.length === 0) {
+                Alert.alert("Bilgi", "Tüm ürünler zaten listede.");
+                return;
+              }
+              
+              for (const name of finalToAdd) {
+                await addShoppingItem(name, 1, "adet", undefined, false);
+              }
+              Alert.alert("Başarılı", `${finalToAdd.length} ürün listeye eklendi.`);
+              setAddedToShoppingList(prev => {
+                const newSet = new Set(prev);
+                newSet.add(mealTitle);
+                return newSet;
+              });
+              loadData();
+            },
           },
-        },
-      ]
-    );
+          {
+            text: "Acil olarak ekle",
+            style: "default",
+            onPress: async () => {
+              // Ekle butonuna basıldığında tekrar kontrol et
+              const finalCheck = await findMatchingShoppingItems(toAdd);
+              const finalMatches = finalCheck?.matches || [];
+              
+              const finalToAdd = toAdd.filter(name => {
+                const hasMatch = finalMatches.some((item: any) => 
+                  isProductMatch(name, item.product_name)
+                );
+                return !hasMatch;
+              });
+              
+              if (finalToAdd.length === 0) {
+                Alert.alert("Bilgi", "Tüm ürünler zaten listede.");
+                return;
+              }
+              
+              for (const name of finalToAdd) {
+                await addShoppingItem(name, 1, "adet", undefined, true);
+              }
+              Alert.alert("Başarılı", `${finalToAdd.length} ürün listeye acil olarak eklendi.`);
+              setAddedToShoppingList(prev => {
+                const newSet = new Set(prev);
+                newSet.add(mealTitle);
+                return newSet;
+              });
+              loadData();
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        "Eksik malzemeleri ekle",
+        message,
+        [
+          { text: "Vazgeç", style: "cancel" },
+          {
+            text: "Ekle",
+            onPress: async () => {
+              // Ekle butonuna basıldığında tekrar kontrol et
+              const finalCheck = await findMatchingShoppingItems(toAdd);
+              const finalMatches = finalCheck?.matches || [];
+              
+              const finalToAdd = toAdd.filter(name => {
+                const hasMatch = finalMatches.some((item: any) => 
+                  isProductMatch(name, item.product_name)
+                );
+                return !hasMatch;
+              });
+              
+              if (finalToAdd.length === 0) {
+                Alert.alert("Bilgi", "Tüm ürünler zaten listede.");
+                return;
+              }
+              
+              for (const name of finalToAdd) {
+                await addShoppingItem(name, 1, "adet", undefined, true);
+              }
+              Alert.alert("Başarılı", `${finalToAdd.length} ürün listeye eklendi.`);
+              setAddedToShoppingList(prev => {
+                const newSet = new Set(prev);
+                newSet.add(mealTitle);
+                return newSet;
+              });
+              loadData();
+            },
+          },
+        ]
+      );
+    }
   };
 
   const handleOpenRecipeConfirm = (title: string, missing: string[]) => {
+    // Sadece tarif göster
+    navigation.navigate("Recipe", { title, showCookingButton: false });
+  };
+
+  const detectMealType = (title: string, suggestions: string[], extraNotes?: string): "cook" | "delivery" | "restaurant" => {
+    const textToCheck = `${title} ${suggestions.join(" ")} ${extraNotes || ""}`.toLowerCase();
+    
+    // Restoran anahtar kelimeleri
+    const restaurantKeywords = ["restoran", "restaurant", "dışarıda", "dışarıda yemek", "dışarıda yiyelim", "dışarıda yiyelim", "dışarı çıkalım"];
+    // Paket servis anahtar kelimeleri
+    const deliveryKeywords = ["sipariş", "paket", "getir", "yemeksepeti", "trendyol", "dışarıdan", "sipariş verelim", "paket servis"];
+    
+    if (restaurantKeywords.some(keyword => textToCheck.includes(keyword))) {
+      return "restaurant";
+    }
+    if (deliveryKeywords.some(keyword => textToCheck.includes(keyword))) {
+      return "delivery";
+    }
+    
+    // Varsayılan olarak evde pişir
+    return "cook";
+  };
+
+  const handleStartCooking = (title: string, missing: string[]) => {
     const inventoryNames = (data?.items || []).map((item: any) =>
       String(item.product_name || "").toLowerCase()
     );
@@ -401,9 +573,27 @@ export default function KitchenScreen({ navigation, route }: any) {
         }
       });
     }
-    setRecipeConfirmTitle(title || "Tarif");
-    setRecipeConfirmCheck({ have, missing: missing || [] });
-    setRecipeConfirmVisible(true);
+    const stillMissing = normalizedMissing.filter(
+      name => !have.includes(name)
+    );
+    
+    if (stillMissing.length > 0) {
+      Alert.alert(
+        "Eksik malzemeler var",
+        `Şu malzemeler envanterde yok: ${stillMissing.join(", ")}. Yine de yemek yapmaya başlamak ister misiniz?`,
+        [
+          { text: "Vazgeç", style: "cancel" },
+          {
+            text: "Onayla",
+            onPress: () => {
+              navigation.navigate("Recipe", { title, showCookingButton: true });
+            },
+          },
+        ]
+      );
+    } else {
+      navigation.navigate("Recipe", { title, showCookingButton: true });
+    }
   };
   const resetMealSectionState = () => {
     setMealSuggestionGroups([]);
@@ -414,13 +604,12 @@ export default function KitchenScreen({ navigation, route }: any) {
     setPublishEndTime("");
     setManualPollVisible(false);
     setManualPollTitle("Bugün ne pişirelim?");
-    setManualPollOptions("");
-    setManualMealShare("");
-    setManualPollNotes("");
-    setManualPollEndTime("");
+    setManualPollOptions(["", ""]);
+    setManualPollEndTime("12:00");
     setPollAudience("parents");
     setPollMemberIds([]);
     setActiveMealPoll(null);
+    setApprovedMealTitle(null);
     setRecipeConfirmVisible(false);
   };
 
@@ -434,6 +623,48 @@ export default function KitchenScreen({ navigation, route }: any) {
   useEffect(() => {
     setDailyPollSelection(null);
   }, [activeMealPoll?.id]);
+
+  // Eksik malzemelerin listede olup olmadığını kontrol et
+  useEffect(() => {
+    const checkMissingItemsInList = async () => {
+      if (!activeMealPoll || activeMealPoll.is_active) return;
+      
+      const suggestions = activeMealPoll.suggestions || [];
+      const newAddedSet = new Set<string>();
+      
+      for (const item of suggestions) {
+        const optionTitle = item.title || item;
+        const missingItems = item.missing || [];
+        
+        if (missingItems.length === 0 || addedToShoppingList.has(optionTitle)) {
+          continue;
+        }
+        
+        const matchRes = await findMatchingShoppingItems(missingItems);
+        const existingMatches = matchRes?.matches || [];
+        
+        const allInList = missingItems.every((name: string) => {
+          return existingMatches.some((listItem: any) => 
+            isProductMatch(name, listItem.product_name)
+          );
+        });
+        
+        if (allInList) {
+          newAddedSet.add(optionTitle);
+        }
+      }
+      
+      if (newAddedSet.size > 0) {
+        setAddedToShoppingList(prev => {
+          const newSet = new Set(prev);
+          newAddedSet.forEach(title => newSet.add(title));
+          return newSet;
+        });
+      }
+    };
+    
+    checkMissingItemsInList();
+  }, [activeMealPoll, data?.items]);
 
   const submitInventoryItem = async () => {
     if (!inventoryName.trim()) {
@@ -809,7 +1040,7 @@ export default function KitchenScreen({ navigation, route }: any) {
                           {pending ? (
                             <View style={styles.pendingBadge}>
                               <Text style={styles.pendingText}>Onay Bekliyor</Text>
-                            </View>
+        </View>
                           ) : null}
                         </View>
                         <View style={styles.itemRight}>
@@ -944,7 +1175,7 @@ export default function KitchenScreen({ navigation, route }: any) {
                 shoppingUrgentOnly ? !!item.is_urgent : true
               )
               .map((item: any) => (
-                <TouchableOpacity
+                <View
                   key={item.id}
                   style={[
                     styles.itemCard,
@@ -952,72 +1183,120 @@ export default function KitchenScreen({ navigation, route }: any) {
                     {
                       backgroundColor: colors.card,
                       opacity: item.is_completed ? 0.6 : 1,
+                      flexDirection: "row",
+                      alignItems: "center",
                     },
                   ]}
-                  onPress={() =>
-                    toggleShoppingItem(item.id, !item.is_completed)
-                  }
                 >
-                  {item.is_completed ? (
-                    <CheckCircle2 size={22} color={colors.primary} />
-                  ) : (
-                    <Circle size={22} color={colors.border} />
-                  )}
-                  <View style={[styles.itemInfo, { marginLeft: 12 }]}>
-                    <Text
-                      style={[
-                        styles.itemName,
-                        {
-                          color: colors.text,
-                          textDecorationLine: item.is_completed
-                            ? "line-through"
-                            : "none",
-                        },
-                      ]}
-                    >
-                      {item.product_name}
-                    </Text>
-                    <Text
-                      style={[styles.itemDetail, { color: colors.textMuted }]}
-                    >
-                      {formatShoppingMeta(item)}
-                    </Text>
-                  </View>
-                  {item.is_urgent ? (
-                    <View
-                      style={[
-                        styles.urgentBadge,
-                        { backgroundColor: colors.error + "20" },
-                      ]}
-                    >
+                  <TouchableOpacity
+                    style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+                    onPress={async () => {
+                      const result = await toggleShoppingItem(item.id, !item.is_completed);
+                      if (result?.success) {
+                        // State'i hemen güncelle
+                        setData((prev: any) => {
+                          if (!prev) return prev;
+                          return {
+                            ...prev,
+                            items: (prev.items || []).map((i: any) =>
+                              i.id === item.id
+                                ? { ...i, is_completed: !item.is_completed }
+                                : i
+                            ),
+                          };
+                        });
+                        // Veriyi yeniden yükle
+                        await loadData();
+                      }
+                    }}
+                  >
+                    {item.is_completed ? (
+                      <CheckCircle2 size={22} color={colors.primary} />
+                    ) : (
+                      <Circle size={22} color={colors.border} />
+                    )}
+                    <View style={[styles.itemInfo, { marginLeft: 12, flex: 1 }]}>
                       <Text
-                        style={[styles.urgentText, { color: colors.error }]}
+                        style={[
+                          styles.itemName,
+                          {
+                            color: colors.text,
+                            textDecorationLine: item.is_completed
+                              ? "line-through"
+                              : "none",
+                          },
+                        ]}
                       >
-                        Acil
+                        {item.product_name}
+                      </Text>
+                      <Text
+                        style={[styles.itemDetail, { color: colors.textMuted }]}
+                      >
+                        {formatShoppingMeta(item)}
                       </Text>
                     </View>
-                  ) : null}
-                </TouchableOpacity>
+                    {item.is_urgent ? (
+                      <View
+                        style={[
+                          styles.urgentBadge,
+                          { backgroundColor: colors.error + "20" },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.urgentText, { color: colors.error }]}
+                        >
+                          Acil
+                        </Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                  {item.is_completed && (
+                    <TouchableOpacity
+                      style={{
+                        padding: 8,
+                        marginLeft: 8,
+                      }}
+                      onPress={async () => {
+                        Alert.alert(
+                          "Ürünü sil",
+                          `"${item.product_name}" listeden tamamen kaldırılsın mı?`,
+                          [
+                            { text: "Vazgeç", style: "cancel" },
+                            {
+                              text: "Sil",
+                              style: "destructive",
+                              onPress: async () => {
+                                const result = await removeShoppingItemsByIds([item.id]);
+                                if (result?.success) {
+                                  // State'i hemen güncelle
+                                  setData((prev: any) => {
+                                    if (!prev) return prev;
+                                    return {
+                                      ...prev,
+                                      items: (prev.items || []).filter(
+                                        (i: any) => i.id !== item.id
+                                      ),
+                                    };
+                                  });
+                                  // Veriyi yeniden yükle
+                                  await loadData();
+                                } else {
+                                  Alert.alert("Hata", result?.error || "Ürün silinemedi.");
+                                }
+                              },
+                            },
+                          ]
+                        );
+                      }}
+                    >
+                      <Trash2 size={20} color={colors.error} />
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
           </>
         ) : (
           <>
-            <View
-              style={[
-                styles.mealCard,
-                isLight && styles.surfaceLift,
-                { backgroundColor: colors.card },
-              ]}
-            >
-              <Sparkles size={20} color={colors.primary} />
-              <Text style={[styles.mealTitle, { color: colors.text }]}>
-                Akşam yemeği önerileri
-              </Text>
-              <Text style={[styles.mealBody, { color: colors.textMuted }]}>
-                Stoktaki ürünlere göre öneriler hazırlanır.
-              </Text>
-        </View>
-
             <View
               style={[
                 styles.infoCard,
@@ -1025,117 +1304,672 @@ export default function KitchenScreen({ navigation, route }: any) {
                 { backgroundColor: colors.card },
               ]}
             >
-              <Text style={[styles.infoTitle, { color: colors.text }]}>
-                Günlük anket
-              </Text>
               {activeMealPoll ? (
                 <>
-                  <Text style={[styles.infoBody, { color: colors.textMuted }]}>
-                    {activeMealPoll.title}
-                  </Text>
-                  <View style={styles.selectionList}>
-                    {(activeMealPoll.suggestions || []).map(
-                      (item: any, idx: number) => {
-                        const optionTitle = item.title || item;
-                        const selected = dailyPollSelection === optionTitle;
-                        return (
-                          <TouchableOpacity
-                            key={`${activeMealPoll.id}-${idx}`}
-                            style={[
-                              styles.selectionItem,
-                              {
-                                borderColor: selected
-                                  ? colors.primary
-                                  : colors.border,
-                                backgroundColor: colors.background,
-                              },
-                            ]}
-                            onPress={async () => {
-                              if (dailyPollSelection === optionTitle) return;
-                              setDailyPollSelection(optionTitle);
-                              const res = await submitMealPollVote(
-                                activeMealPoll.id,
-                                optionTitle
-                              );
-                              if (res?.error) {
-                                Alert.alert("Hata", res.error);
-                                setDailyPollSelection(null);
-                              }
-                            }}
-                          >
-                            {selected ? (
-                              <CheckCircle2 size={20} color={colors.primary} />
-                            ) : (
-                              <Circle size={20} color={colors.border} />
-                            )}
-                            <View style={styles.selectionInfo}>
-                              <Text
-                                style={[styles.selectionName, { color: colors.text }]}
-                              >
-                                {optionTitle}
-                              </Text>
-                              {selected ? (
-                                <Text
-                                  style={[
-                                    styles.selectionMeta,
-                                    { color: colors.textMuted },
-                                  ]}
-                                >
-                                  Seçildi
-                                </Text>
-                              ) : null}
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      }
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>
+                      {activeMealPoll.title}
+                    </Text>
+                    {!activeMealPoll.is_active && (
+                      <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "600" }}>
+                        (Anket sonlandı)
+                      </Text>
                     )}
                   </View>
-                  {activeMealPoll.created_by === user?.id &&
-                  (!activeMealPoll.end_at ||
-                    new Date(activeMealPoll.end_at).getTime() <= Date.now()) ? (
-                    <TouchableOpacity
-                      style={[
-                        styles.mealPublishBtn,
-                        { backgroundColor: colors.primary },
-                      ]}
-                      onPress={async () => {
-                        const res = await approveMealPoll(activeMealPoll.id);
-                        if (res?.success) {
+                  {(() => {
+                    const mealType = activeMealPoll.meal_type || "cook";
+                    const isDeliveryRestaurant = mealType === "delivery" || mealType === "restaurant";
+                    // Paket/restoran anketleri için her zaman aktif anket görünümünde kal (sonuç ekranına geçme)
+                    const showActiveView = activeMealPoll.is_active || isDeliveryRestaurant;
+                    
+                    return showActiveView ? (
+                      // Aktif anket - oy verme (paket/restoran için oy verenlerin isimlerini de göster)
+                      <View style={styles.selectionList}>
+                        {(activeMealPoll.suggestions || []).map(
+                          (item: any, idx: number) => {
+                            const optionTitle = item.title || item;
+                            const selected = dailyPollSelection === optionTitle;
+                            const votes = activeMealPoll.votes || {};
+                            const voteEntry = votes[optionTitle] || {};
+                            const votedMemberIds = voteEntry.memberIds || [];
+                            
+                            // Oy veren kişilerin isimlerini al
+                            const votedNames = votedMemberIds
+                              .map((id: string) => {
+                                const member = familyMembers.find(m => m.id === id);
+                                return member?.full_name || member?.email || "Bilinmeyen";
+                              })
+                              .join(", ");
+                            
+                            return (
+                              <TouchableOpacity
+                                key={`${activeMealPoll.id}-${idx}`}
+                                style={[
+                                  styles.selectionItem,
+                                  {
+                                    borderColor: selected
+                                      ? colors.primary
+                                      : colors.border,
+                                    backgroundColor: colors.background,
+                                  },
+                                ]}
+                                onPress={async () => {
+                                  if (dailyPollSelection === optionTitle) return;
+                                  setDailyPollSelection(optionTitle);
+                                  const res = await submitMealPollVote(
+                                    activeMealPoll.id,
+                                    optionTitle
+                                  );
+                                  if (res?.error) {
+                                    Alert.alert("Hata", res.error);
+                                    setDailyPollSelection(null);
+                                  } else {
+                                    // Oy verdikten sonra anket durumunu güncelle
+                                    const pollRes = await getActiveMealPoll();
+                                    setActiveMealPoll(pollRes?.poll || null);
+                                  }
+                                }}
+                              >
+                                {selected ? (
+                                  <CheckCircle2 size={20} color={colors.primary} />
+                                ) : (
+                                  <Circle size={20} color={colors.border} />
+                                )}
+                                <View style={styles.selectionInfo}>
+                                  <Text
+                                    style={[styles.selectionName, { color: colors.text }]}
+                                  >
+                                    {optionTitle}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.selectionMeta,
+                                      { color: colors.textMuted },
+                                    ]}
+                                  >
+                                    {selected 
+                                      ? "Seçildi" 
+                                      : (isDeliveryRestaurant && votedNames 
+                                          ? `İsteyenler: ${votedNames}` 
+                                          : (isDeliveryRestaurant ? "Henüz kimse seçmedi" : null))}
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          }
+                        )}
+                        
+                        {/* Paket/restoran anketleri için "Tamam" butonu */}
+                        {isDeliveryRestaurant && isParent ? (
+                          <View style={styles.selectionActions}>
+                            <TouchableOpacity
+                              style={[
+                                styles.selectionActionBtn,
+                                styles.mealActionPrimary,
+                                {
+                                  backgroundColor: colors.primary,
+                                  flex: 1,
+                                  paddingVertical: 12,
+                                  marginTop: 16,
+                                },
+                              ]}
+                              onPress={() => {
+                                Alert.alert(
+                                  "Tamam",
+                                  "Anketi tamamlayıp ilk ekrana dönmek istiyor musunuz?",
+                                  [
+                                    { text: "Vazgeç", style: "cancel" },
+                                    {
+                                      text: "Tamam",
+                                      onPress: async () => {
+                                        // Anketi sil ve ilk ekrana dön
+                                        const res = await deleteMealPoll(activeMealPoll.id);
+                                        if (res?.success) {
+                                          resetMealSectionState();
+                                        } else {
+                                          Alert.alert("Hata", res?.error || "Anket silinemedi.");
+                                        }
+                                      },
+                                    },
+                                  ]
+                                );
+                              }}
+                            >
+                              <Text style={[styles.mealActionTextPrimary, { fontSize: 16 }]}>
+                                Tamam
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : (
+                      // Sonlandırılmış anket - sonuçları göster
+                      <>
+                      {(() => {
+                        // En fazla oy alan yemeği bul
+                        const votes = activeMealPoll.votes || {};
+                        let maxVotes = -1;
+                        let mostVotedTitle: string | null = null;
+                        Object.keys(votes).forEach(key => {
+                          const entry = votes[key] || {};
+                          const count = entry.count || 0;
+                          if (count > maxVotes) {
+                            maxVotes = count;
+                            mostVotedTitle = key;
+                          }
+                        });
+                        
+                        // Onaylanmış yemek varsa sadece onu göster, yoksa tüm seçenekleri göster
+                        const approvedMeal = approvedMealTitle || activeMealPoll.approved_meal;
+                        const suggestionsToShow = approvedMeal
+                          ? (activeMealPoll.suggestions || []).filter(
+                              (item: any) => (item.title || item) === approvedMeal
+                            )
+                          : (activeMealPoll.suggestions || []);
+                        
+                        return (
+                          <View style={styles.selectionList}>
+                            {suggestionsToShow.map((item: any, idx: number) => {
+                              const optionTitle = item.title || item;
+                              const missingItems = item.missing || [];
+                              const voteEntry = votes[optionTitle] || {};
+                              const voteCount = voteEntry.count || 0;
+                              const votedMemberIds = voteEntry.memberIds || [];
+                              const isWinner = activeMealPoll.approved_meal === optionTitle;
+                              const isMostVoted = optionTitle === mostVotedTitle;
+                              
+                              // Oy veren kişilerin isimlerini al
+                              const votedNames = votedMemberIds
+                                .map((id: string) => {
+                                  const member = familyMembers.find(m => m.id === id);
+                                  return member?.full_name || member?.email || "Bilinmeyen";
+                                })
+                                .join(", ");
+                              
+                              return (
+                                <View key={`${activeMealPoll.id}-${idx}`}>
+                                  <View
+                                    style={[
+                                      styles.selectionItem,
+                                      {
+                                        borderColor: isWinner ? colors.primary : colors.border,
+                                        backgroundColor: isWinner ? colors.primary + "10" : colors.background,
+                                      },
+                                    ]}
+                                  >
+                                    {isWinner ? (
+                                      (() => {
+                                        const mealType = activeMealPoll.meal_type || "cook";
+                                        if (mealType === "delivery") {
+                                          return <Package size={20} color={colors.primary} />;
+                                        } else if (mealType === "restaurant") {
+                                          return <Store size={20} color={colors.primary} />;
+                                        } else {
+                                          return <Utensils size={20} color={colors.primary} />;
+                                        }
+                                      })()
+                                    ) : (
+                                      <Circle size={20} color={colors.border} />
+                                    )}
+                                    <View style={styles.selectionInfo}>
+                                      <Text
+                                        style={[styles.selectionName, { color: colors.text }]}
+                                      >
+                                        {optionTitle}
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.selectionMeta,
+                                          { color: colors.textMuted },
+                                        ]}
+                                      >
+                                        {(() => {
+                                          const mealType = activeMealPoll?.meal_type || "cook";
+                                          // Paket servis/restoran anketlerinde "Kazanan" metni gösterilmesin
+                                          if ((mealType === "delivery" || mealType === "restaurant") && isWinner) {
+                                            return voteCount > 0 ? votedNames : "Henüz oy yok";
+                                          }
+                                          return `${voteCount > 0 ? votedNames : "Henüz oy yok"}${isWinner ? " • Kazanan" : ""}`;
+                                        })()}
+                                      </Text>
+                                    </View>
+                                    {!approvedMeal && isMostVoted && isParent && (() => {
+                                      // Seçenek metninde paket/restoran kontrolü
+                                      const optionLower = optionTitle.toLowerCase();
+                                      const isDeliveryOption = optionLower.includes("paket") || optionLower.includes("delivery") || optionLower.includes("sipariş");
+                                      const isRestaurantOption = optionLower.includes("restoran") || optionLower.includes("restaurant") || optionLower.includes("dışarı");
+                                      
+                                      // Eğer paket/restoran seçeneği kazandıysa, "Paket/Restoran Anketi Oluştur" butonu göster
+                                      if (isDeliveryOption || isRestaurantOption) {
+                                        const detectedType = isDeliveryOption ? "delivery" : "restaurant";
+                                        return (
+                                          <TouchableOpacity
+                                            style={[
+                                              styles.mealActionBtn,
+                                              {
+                                                backgroundColor: colors.primary,
+                                                marginLeft: "auto",
+                                                paddingVertical: 6,
+                                                paddingHorizontal: 12,
+                                              },
+                                            ]}
+                                            onPress={() => {
+                                              // Modal'ı aç ve seçenekleri boş olarak hazırla
+                                              setDeliveryRestaurantType(detectedType);
+                                              setDeliveryRestaurantOptions(["", ""]);
+                                              setDeliveryRestaurantPollVisible(true);
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                color: "#fff",
+                                                fontSize: 12,
+                                                fontWeight: "700",
+                                              }}
+                                            >
+                                              {isDeliveryOption ? "Paket Anketi Oluştur" : "Restoran Anketi Oluştur"}
+                                            </Text>
+                                          </TouchableOpacity>
+                                        );
+                                      }
+                                      
+                                      // Normal anket için "Onayla" butonu
+                                      return (
+                                        <TouchableOpacity
+                                          style={[
+                                            styles.mealActionBtn,
+                                            {
+                                              backgroundColor: colors.primary,
+                                              marginLeft: "auto",
+                                              paddingVertical: 6,
+                                              paddingHorizontal: 12,
+                                              opacity: approvingMealPoll ? 0.6 : 1,
+                                            },
+                                          ]}
+                                          onPress={async () => {
+                                          setApprovingMealPoll(true);
+                                          try {
+                                            // meal_type'ı sakla (onaylandıktan sonra kullanmak için)
+                                            const currentMealType = activeMealPoll?.meal_type || "cook";
+                                            const result = await approveMealPoll(activeMealPoll.id);
+                                            if (result?.success) {
+                                              setApprovedMealTitle(optionTitle);
+                                              // Anketi yeniden yükle (AI ile güncellenmiş missing bilgileriyle)
+                                              // Kısa bir gecikme ekle (database güncellemesinin tamamlanması için)
+                                              await new Promise(resolve => setTimeout(resolve, 300));
+                                              const pollRes = await getActiveMealPoll();
+                                              if (pollRes?.poll) {
+                                                // meal_type'ı koru (eğer gelmediyse)
+                                                const updatedPoll = {
+                                                  ...pollRes.poll,
+                                                  meal_type: pollRes.poll.meal_type || currentMealType,
+                                                };
+                                                setActiveMealPoll(updatedPoll);
+                                              } else {
+                                                // Fallback: Eğer poll gelmediyse, mevcut poll'u güncelle
+                                                setActiveMealPoll({
+                                                  ...activeMealPoll,
+                                                  approved_meal: optionTitle,
+                                                  is_approved: true,
+                                                  is_active: false,
+                                                  meal_type: currentMealType,
+                                                });
+                                              }
+                                            } else {
+                                              Alert.alert("Hata", result?.error || "Onaylama başarısız.");
+                                            }
+                                          } finally {
+                                            setApprovingMealPoll(false);
+                                          }
+                                        }}
+                                        disabled={approvingMealPoll}
+                                      >
+                                        <Text
+                                          style={{
+                                            color: "#fff",
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                          }}
+                                        >
+                                          {approvingMealPoll ? "Onaylanıyor..." : "Onayla"}
+                                        </Text>
+                                      </TouchableOpacity>
+                                      );
+                                    })()}
+                                  </View>
+                                  {isParent && approvedMeal && optionTitle === approvedMeal && (
+                                    <View style={styles.mealSuggestionActions}>
+                                      {(() => {
+                                        // meal_type kontrolü - eğer undefined/null ise "cook" varsayalım
+                                        const mealType = activeMealPoll?.meal_type || "cook";
+                                        // Paket servis veya restoran anketlerinde onaylandıktan sonra buton gösterilmesin
+                                        // Sadece alttaki "Tamam" butonu kullanılacak
+                                        if (mealType === "delivery" || mealType === "restaurant") {
+                                          return null;
+                                        }
+                                        // Evde pişir için normal butonlar
+                                        return (
+                                          <>
+                                          <TouchableOpacity
+                                            style={[
+                                              styles.mealActionBtn,
+                                              { borderColor: colors.border },
+                                            ]}
+                                            onPress={() =>
+                                              handleOpenRecipeConfirm(optionTitle, missingItems)
+                                            }
+                                          >
+                                            <Text
+                                              style={[
+                                                styles.mealActionText,
+                                                { color: colors.text },
+                                              ]}
+                                            >
+                                              Tarif
+                                            </Text>
+                                          </TouchableOpacity>
+                                          <TouchableOpacity
+                                            style={[
+                                              styles.mealActionBtn,
+                                              styles.mealActionPrimary,
+                                              { backgroundColor: colors.primary },
+                                            ]}
+                                            onPress={() =>
+                                              handleStartCooking(optionTitle, missingItems)
+                                            }
+                                          >
+                                            <Text style={styles.mealActionTextPrimary}>
+                                              Yemeğe Başla
+                                            </Text>
+                                          </TouchableOpacity>
+                                          {missingItems.length > 0 && !addedToShoppingList.has(optionTitle) && (
+                                            <TouchableOpacity
+                                              style={[
+                                                styles.mealActionBtn,
+                                                styles.mealActionPrimary,
+                                                { backgroundColor: colors.primary },
+                                              ]}
+                                              onPress={() => handleAddMissingItems(missingItems, optionTitle, true)}
+                                            >
+                                              <Text style={styles.mealActionTextPrimary}>
+                                                Listeye ekle
+                                              </Text>
+                                            </TouchableOpacity>
+                                          )}
+                                          <TouchableOpacity
+                                            style={[
+                                              styles.mealActionBtn,
+                                              styles.mealActionPrimary,
+                                              { backgroundColor: colors.primary },
+                                            ]}
+                                            onPress={() => {
+                                              Alert.alert(
+                                                "Yemek Hazır",
+                                                "Yemeğin hazır olduğunu onaylıyor musunuz?",
+                                                [
+                                                  { text: "Vazgeç", style: "cancel" },
+                                                  {
+                                                    text: "Onayla",
+                                                    onPress: () => {
+                                                      Alert.alert("Afiyet olsun", "", [
+                                                        {
+                                                          text: "Tamam",
+                                                          onPress: () => {
+                                                            resetMealSectionState();
+                                                          },
+                                                        },
+                                                      ]);
+                                                    },
+                                                  },
+                                                ]
+                                              );
+                                            }}
+                                          >
+                                            <Text style={styles.mealActionTextPrimary}>
+                                              Yemek Hazır
+                                            </Text>
+                                          </TouchableOpacity>
+                                        </>
+                                        );
+                                      })()}
+                                    </View>
+                                  )}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        );
+                      })()}
+                    </>
+                    );
+                  })()}
+                  {activeMealPoll.is_active && activeMealPoll.created_by === user?.id ? (
+                    <View style={styles.selectionActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.selectionActionBtn,
+                          { borderColor: colors.error || "#ef4444", flex: 1 },
+                        ]}
+                        onPress={async () => {
                           Alert.alert(
-                            "Başarılı",
-                            "Eksik malzemeler listeye eklendi."
+                            "Anketi Sil",
+                            "Bu anketi silmek istediğinize emin misiniz?",
+                            [
+                              { text: "Vazgeç", style: "cancel" },
+                              {
+                                text: "Sil",
+                                style: "destructive",
+                                onPress: async () => {
+                                  const res = await deleteMealPoll(activeMealPoll.id);
+                                  if (res?.success) {
+                                    const pollRes = await getActiveMealPoll();
+                                    setActiveMealPoll(pollRes?.poll || null);
+                                    Alert.alert("Başarılı", "Anket silindi.");
+                                  } else {
+                                    Alert.alert("Hata", res?.error || "Anket silinemedi.");
+                                  }
+                                },
+                              },
+                            ]
                           );
-                          const pollRes = await getActiveMealPoll();
-                          setActiveMealPoll(pollRes?.poll || null);
-                          loadData();
-                        } else {
+                        }}
+                      >
+                        <Text style={[styles.selectionActionText, { color: colors.error || "#ef4444" }]}>
+                          Sil
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.selectionActionBtn,
+                          { borderColor: colors.primary, flex: 1 },
+                        ]}
+                        onPress={() => {
+                          // Mevcut anket verilerini modal'a yükle
+                          const suggestions = activeMealPoll.suggestions || [];
+                          const options = suggestions.map((s: any) => s.title || s).filter(Boolean);
+                          // En az 2, en fazla 5 seçenek için array doldur
+                          const optionsArray: string[] = [];
+                          for (let i = 0; i < Math.max(2, Math.min(5, options.length)); i++) {
+                            optionsArray.push(options[i] || "");
+                          }
+                          // Eğer 5'ten az varsa, boş string'ler ekle
+                          while (optionsArray.length < 2) {
+                            optionsArray.push("");
+                          }
+                          
+                          setManualPollTitle(activeMealPoll.title || "Bugün ne pişirelim?");
+                          setManualPollOptions(optionsArray);
+                          
+                          // End time formatını dönüştür (ISO -> HH:MM)
+                          if (activeMealPoll.end_at) {
+                            const endDate = new Date(activeMealPoll.end_at);
+                            const hours = String(endDate.getHours()).padStart(2, "0");
+                            const minutes = String(endDate.getMinutes()).padStart(2, "0");
+                            setManualPollEndTime(`${hours}:${minutes}`);
+                          } else {
+                            setManualPollEndTime("12:00");
+                          }
+                          
+                          setPollAudience(activeMealPoll.audience || "parents");
+                          setPollMemberIds(activeMealPoll.member_ids || []);
+                          setPollMealType(activeMealPoll.meal_type || "cook");
+                          setEditingPollId(activeMealPoll.id);
+                          setManualPollVisible(true);
+                        }}
+                      >
+                        <Text style={[styles.selectionActionText, { color: colors.primary }]}>
+                          Değiştir
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.selectionActionBtn,
+                          { borderColor: colors.warning || "#f59e0b", flex: 1 },
+                        ]}
+                        onPress={async () => {
                           Alert.alert(
-                            "Hata",
-                            res?.error || "Anket onaylanamadı."
+                            "Anketi Erken Bitir",
+                            "Bu anketi şimdi sonlandırmak istediğinize emin misiniz?",
+                            [
+                              { text: "Vazgeç", style: "cancel" },
+                              {
+                                text: "Bitir",
+                                style: "default",
+                                onPress: async () => {
+                                  const res = await endMealPoll(activeMealPoll.id);
+                                  if (res?.success) {
+                                    const pollRes = await getActiveMealPoll();
+                                    setActiveMealPoll(pollRes?.poll || null);
+                                    Alert.alert("Başarılı", "Anket sonlandırıldı.");
+                                  } else {
+                                    Alert.alert("Hata", res?.error || "Anket sonlandırılamadı.");
+                                  }
+                                },
+                              },
+                            ]
                           );
-                        }
-                      }}
-                    >
-                      <Text style={styles.mealPublishText}>Onayla</Text>
-                    </TouchableOpacity>
-                  ) : activeMealPoll.created_by === user?.id ? (
-                    <Text style={[styles.infoBody, { color: colors.textMuted }]}>
-                      Anket bitince onaylayabilirsiniz.
-                    </Text>
+                        }}
+                      >
+                        <Text style={[styles.selectionActionText, { color: colors.warning || "#f59e0b" }]}>
+                          Erken Bitir
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   ) : null}
                 </>
               ) : (
-                <Text style={[styles.infoBody, { color: colors.textMuted }]}>
-                  Henüz aktif anket yok.
-                </Text>
+                <>
+                  <Text style={[styles.infoBody, { color: colors.textMuted, marginBottom: 16 }]}>
+                    Henüz aktif anket yok.
+                  </Text>
+                  
+                  {/* Yeni anket oluştur butonları */}
+                  {isParent && (
+                    <View style={{ gap: 12, marginTop: 8 }}>
+                      <TouchableOpacity
+                        style={[
+                          styles.selectionActionBtn,
+                          {
+                            backgroundColor: colors.primary,
+                            borderWidth: 0,
+                            paddingVertical: 14,
+                          },
+                        ]}
+                        onPress={handleMealSuggest}
+                        disabled={mealLoading}
+                      >
+                        {mealLoading ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Sparkles size={18} color="#fff" />
+                            <Text
+                              style={[
+                                styles.selectionActionText,
+                                {
+                                  color: "#fff",
+                                  marginLeft: 8,
+                                  fontWeight: "600",
+                                },
+                              ]}
+                            >
+                              AI ile yemek öner
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[
+                          styles.selectionActionBtn,
+                          {
+                            borderColor: colors.primary,
+                            backgroundColor: colors.card,
+                            paddingVertical: 14,
+                          },
+                        ]}
+                        onPress={() => {
+                          setManualPollTitle("Bugün ne pişirelim?");
+                          setManualPollOptions(["", ""]);
+                          setManualPollEndTime("12:00");
+                          setPollAudience("parents");
+                          setPollMemberIds([]);
+                          setPollMealType("cook");
+                          setEditingPollId(null);
+                          setManualPollVisible(true);
+                        }}
+                      >
+                        <Plus size={18} color={colors.primary} />
+                        <Text
+                          style={[
+                            styles.selectionActionText,
+                            {
+                              color: colors.primary,
+                              marginLeft: 8,
+                              fontWeight: "600",
+                            },
+                          ]}
+                        >
+                          Manuel anket oluştur
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[
+                          styles.selectionActionBtn,
+                          {
+                            borderColor: colors.primary,
+                            backgroundColor: colors.card,
+                            paddingVertical: 14,
+                          },
+                        ]}
+                        onPress={() => {
+                          setDeliveryRestaurantType(null);
+                          setDeliveryRestaurantOptions(["", ""]);
+                          setDeliveryRestaurantPollVisible(true);
+                        }}
+                      >
+                        <Package size={18} color={colors.primary} />
+                        <Text
+                          style={[
+                            styles.selectionActionText,
+                            {
+                              color: colors.primary,
+                              marginLeft: 8,
+                              fontWeight: "600",
+                            },
+                          ]}
+                        >
+                          Paket yada restoranda yiyelim
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
               )}
             </View>
 
-            {isParent && mealSuggestionGroups.length === 0 ? (
-              <Text style={[styles.mealHint, { color: colors.textMuted }]}>
-                Öneri için alttaki yapay zeka butonuna basın.
-              </Text>
-            ) : isParent ? (
+            {isParent && mealSuggestionGroups.length > 0 && !approvedMealTitle && !activeMealPoll?.approved_meal ? (
               <View style={styles.mealList}>
                 {mealSuggestionGroups.map(group => (
                   <View key={group.label}>
@@ -1196,40 +2030,6 @@ export default function KitchenScreen({ navigation, route }: any) {
                               Eksik: {item.missing.join(", ")}
                             </Text>
                           ) : null}
-                          <View style={styles.mealSuggestionActions}>
-                            <TouchableOpacity
-                              style={[
-                                styles.mealActionBtn,
-                                { borderColor: colors.border },
-                              ]}
-                              onPress={() =>
-                                handleOpenRecipeConfirm(item.title, item.missing || [])
-                              }
-                            >
-                              <Text
-                                style={[
-                                  styles.mealActionText,
-                                  { color: colors.text },
-                                ]}
-                              >
-                                Tarif
-                              </Text>
-                            </TouchableOpacity>
-                            {item.missing && item.missing.length > 0 ? (
-                              <TouchableOpacity
-                                style={[
-                                  styles.mealActionBtn,
-                                  styles.mealActionPrimary,
-                                  { backgroundColor: colors.primary },
-                                ]}
-                                onPress={() => handleAddMissingItems(item.missing)}
-                              >
-                                <Text style={styles.mealActionTextPrimary}>
-                                  Eksikleri listeye ekle
-                                </Text>
-                              </TouchableOpacity>
-                            ) : null}
-                          </View>
                         </View>
                       );
                     })}
@@ -1247,9 +2047,17 @@ export default function KitchenScreen({ navigation, route }: any) {
                     }
                     setPublishGroupLabel("Ebeveynler");
                     setPublishExtraNotes("");
-                    setPublishEndTime("");
+                    setPublishEndTime("15:00");
                     setPollAudience("parents");
                     setPollMemberIds([]);
+                    // Seçili önerilere göre otomatik meal type belirleme
+                    const selections = getSelectedMealsForPublish();
+                    const detectedMealType = detectMealType(
+                      "Yemek anketi",
+                      selections.map(s => s.title),
+                      undefined
+                    );
+                    setPollMealType(detectedMealType);
                     setPublishModalVisible(true);
                   }}
                 >
@@ -1257,23 +2065,6 @@ export default function KitchenScreen({ navigation, route }: any) {
                 </TouchableOpacity>
               </View>
             ) : null}
-            {isParent && (
-              <TouchableOpacity
-                style={[styles.mealPublishBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
-                onPress={() => {
-                  setManualPollTitle("Bugün ne pişirelim?");
-                  setManualPollOptions("");
-                  setManualMealShare("");
-                  setManualPollNotes("");
-                  setManualPollEndTime("");
-                  setManualPollVisible(true);
-                }}
-              >
-                <Text style={[styles.mealPublishText, { color: colors.text }]}>
-                  Manuel anket oluştur / Yemek paylaş
-                </Text>
-              </TouchableOpacity>
-            )}
           </>
         )}
         <View style={{ height: 150 }} />
@@ -1326,26 +2117,6 @@ export default function KitchenScreen({ navigation, route }: any) {
         </View>
       )}
 
-      {activeTab === "meal" && isParent && (
-        <View style={styles.fabWrapper}>
-          <TouchableOpacity
-            style={[
-              styles.fabBase,
-              {
-                backgroundColor: colors.primary,
-              },
-            ]}
-            onPress={handleMealSuggest}
-            disabled={mealLoading}
-          >
-            {mealLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Sparkles size={22} color="#fff" />
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
 
       <Modal
         visible={shoppingModalVisible}
@@ -1832,15 +2603,47 @@ export default function KitchenScreen({ navigation, route }: any) {
                 label="Ekstra ankete eklemek istedikleriniz"
                 value={publishExtraNotes}
                 onChangeText={setPublishExtraNotes}
-                placeholder="Örn: Tatlı önerisi, içecek..."
+                placeholder="Örn: Dışarıdan..."
                 multiline
               />
-              <ModernInput
-                label="Anket bitiş saati (yerel)"
-                value={publishEndTime}
-                onChangeText={setPublishEndTime}
-                placeholder="Örn: 22:00"
-              />
+              <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 8 }]}>
+                Anket bitiş saati (yerel)
+              </Text>
+              <View style={[styles.timePickerContainer, { borderColor: colors.border }]}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.timePickerScroll}
+                >
+                  {Array.from({ length: 8 }, (_, i) => {
+                    const hour = 15 + i;
+                    const timeStr = `${String(hour).padStart(2, "0")}:00`;
+                    const isSelected = publishEndTime === timeStr;
+                    return (
+                      <TouchableOpacity
+                        key={timeStr}
+                        style={[
+                          styles.timeOption,
+                          {
+                            backgroundColor: isSelected ? colors.primary : colors.card,
+                            borderColor: isSelected ? colors.primary : colors.border,
+                          },
+                        ]}
+                        onPress={() => setPublishEndTime(timeStr)}
+                      >
+                        <Text
+                          style={[
+                            styles.timeOptionText,
+                            { color: isSelected ? "#fff" : colors.text },
+                          ]}
+                        >
+                          {timeStr}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
@@ -1858,36 +2661,58 @@ export default function KitchenScreen({ navigation, route }: any) {
                     { backgroundColor: colors.primary },
                   ]}
                   onPress={async () => {
-                    const timeOk =
-                      !publishEndTime ||
-                      /^\d{2}:\d{2}$/.test(publishEndTime.trim());
-                    if (!timeOk) {
-                      Alert.alert(
-                        "Hata",
-                        "Bitiş saati formatı HH:MM olmalı. Örn: 22:00"
-                      );
-                      return;
-                    }
-                    if (getSelectedMealsForPublish().length === 0) {
-                      Alert.alert("Hata", "Seçili öneri bulunamadı.");
-                      return;
-                    }
                     const endAt = resolveEndAt(publishEndTime);
                     const selections = getSelectedMealsForPublish();
                     const missing = selections
                       .flatMap(item => item.missing || [])
                       .filter(Boolean);
-                    await createMealPoll({
+                    
+                    // Ekstra notlardan seçenekleri parse et (virgülle ayrılmış)
+                    let extraOptions = publishExtraNotes
+                      .split(",")
+                      .map(v => v.trim())
+                      .filter(Boolean)
+                      .map(title => ({ title, missing: [] }));
+                    
+                    // Eğer hiç AI önerisi seçilmemişse ve ekstra notlar tek bir seçenek içeriyorsa, otomatik ekle
+                    if (selections.length === 0 && publishExtraNotes.trim() && extraOptions.length === 0) {
+                      extraOptions = [{ title: publishExtraNotes.trim(), missing: [] }];
+                    }
+                    
+                    // Tüm seçenekleri birleştir (AI önerileri + ekstra seçenekler)
+                    const allSuggestions = [...selections, ...extraOptions];
+                    
+                    // En az bir seçenek olmalı (AI önerisi veya ekstra seçenek)
+                    if (allSuggestions.length === 0) {
+                      Alert.alert("Hata", "En az bir anket seçeneği gerekli.");
+                      return;
+                    }
+                    
+                    // AI anketi için meal_type her zaman "cook"
+                    const finalMealType = "cook";
+                    
+                    const createRes = await createMealPoll({
                       title: "Yemek anketi",
-                      suggestions: selections,
+                      suggestions: allSuggestions,
                       missingItems: missing,
                       extraNotes: publishExtraNotes,
                       endAt,
                       audience: pollAudience,
                       memberIds: pollMemberIds,
+                      mealType: finalMealType,
                     });
-                    const pollRes = await getActiveMealPoll();
-                    setActiveMealPoll(pollRes?.poll || null);
+                    if (createRes.error) {
+                      Alert.alert("Hata", createRes.error);
+                      return;
+                    }
+                    // Yeni oluşturulan anketi direkt state'e set et
+                    if (createRes.poll) {
+                      setActiveMealPoll(createRes.poll);
+                    } else {
+                      // Fallback: Eğer poll döndürülmediyse getActiveMealPoll ile al
+                      const pollRes = await getActiveMealPoll();
+                      setActiveMealPoll(pollRes?.poll || null);
+                    }
                     setMealSuggestionGroups([]);
                     setSelectedSuggestionIds([]);
                     setPublishModalVisible(false);
@@ -1924,7 +2749,7 @@ export default function KitchenScreen({ navigation, route }: any) {
               ]}
             >
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                Manuel anket / yemek paylaş
+                {editingPollId ? "Anketi Düzenle" : "Manuel Anket Paylaş"}
               </Text>
               <Text style={[styles.modalHint, { color: colors.textMuted }]}>
                 Hedef seçimi
@@ -2010,35 +2835,71 @@ export default function KitchenScreen({ navigation, route }: any) {
                 onChangeText={setManualPollTitle}
                 placeholder="Örn: Bugün ne pişirelim?"
               />
-              <ModernInput
-                label="Anket seçenekleri (virgülle)"
-                value={manualPollOptions}
-                onChangeText={setManualPollOptions}
-                placeholder="Örn: Menemen, Mercimek çorbası"
-              />
-              <ModernInput
-                label="Yapılacak yemek (paylaşım)"
-                value={manualMealShare}
-                onChangeText={setManualMealShare}
-                placeholder="Örn: Fırında tavuk"
-              />
-              <ModernInput
-                label="Ekstra ankete eklemek istedikleriniz"
-                value={manualPollNotes}
-                onChangeText={setManualPollNotes}
-                placeholder="Örn: Tatlı önerisi..."
-                multiline
-              />
-              <ModernInput
-                label="Anket bitiş saati (yerel)"
-                value={manualPollEndTime}
-                onChangeText={setManualPollEndTime}
-                placeholder="Örn: 22:00"
-              />
+              <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 8 }]}>
+                Anket seçenekleri (en fazla 5)
+              </Text>
+              {manualPollOptions.map((option, index) => (
+                <ModernInput
+                  key={index}
+                  label={`Seçenek ${index + 1}`}
+                  value={option}
+                  onChangeText={(text) => {
+                    const newOptions = [...manualPollOptions];
+                    newOptions[index] = text;
+                    // Eğer bu son input doluysa ve 5'ten az seçenek varsa yeni boş input ekle
+                    if (text.trim() && index === newOptions.length - 1 && newOptions.length < 5) {
+                      newOptions.push("");
+                    }
+                    setManualPollOptions(newOptions);
+                  }}
+                  placeholder={`Örn: ${index === 0 ? "Menemen" : index === 1 ? "Mercimek çorbası" : "Yemek adı"}`}
+                />
+              ))}
+              <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 8 }]}>
+                Anket bitiş saati (yerel)
+              </Text>
+              <View style={[styles.timePickerContainer, { borderColor: colors.border }]}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.timePickerScroll}
+                >
+                  {Array.from({ length: 11 }, (_, i) => {
+                    const hour = 12 + i;
+                    const timeStr = `${String(hour).padStart(2, "0")}:00`;
+                    const isSelected = manualPollEndTime === timeStr;
+                    return (
+                      <TouchableOpacity
+                        key={timeStr}
+                        style={[
+                          styles.timeOption,
+                          {
+                            backgroundColor: isSelected ? colors.primary : colors.card,
+                            borderColor: isSelected ? colors.primary : colors.border,
+                          },
+                        ]}
+                        onPress={() => setManualPollEndTime(timeStr)}
+                      >
+                        <Text
+                          style={[
+                            styles.timeOptionText,
+                            { color: isSelected ? "#fff" : colors.text },
+                          ]}
+                        >
+                          {timeStr}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
               <View style={styles.modalActions}>
                 <TouchableOpacity
                   style={[styles.modalButton, { borderColor: colors.border }]}
-                  onPress={() => setManualPollVisible(false)}
+                  onPress={() => {
+                    setManualPollVisible(false);
+                    setEditingPollId(null);
+                  }}
                 >
                   <Text style={[styles.modalButtonText, { color: colors.text }]}>
                     Vazgeç
@@ -2052,57 +2913,290 @@ export default function KitchenScreen({ navigation, route }: any) {
                   ]}
                   onPress={async () => {
                     const pollOptions = manualPollOptions
-                      .split(",")
                       .map(v => v.trim())
                       .filter(Boolean);
-                    const hasPoll = pollOptions.length > 0;
-                    const hasShare = manualMealShare.trim().length > 0;
-                    const timeOk =
-                      !manualPollEndTime ||
-                      /^\d{2}:\d{2}$/.test(manualPollEndTime.trim());
-                    if (!timeOk) {
-                      Alert.alert(
-                        "Hata",
-                        "Bitiş saati formatı HH:MM olmalı. Örn: 22:00"
-                      );
-                      return;
-                    }
-                    if (!hasPoll && !hasShare) {
+                    if (pollOptions.length < 2) {
                       Alert.alert(
                         "Eksik",
-                        "Anket seçenekleri veya paylaşılacak yemek girin."
+                        "En az 2 anket seçeneği girin."
                       );
                       return;
                     }
                     const endAt = resolveEndAt(manualPollEndTime);
-                    const optionSuggestions = pollOptions.map(title => ({
+                    const suggestions = pollOptions.map(title => ({
                       title,
                       missing: [],
                     }));
-                    const suggestions =
-                      optionSuggestions.length > 0
-                        ? optionSuggestions
-                        : [{ title: manualMealShare.trim(), missing: [] }];
-                    await createMealPoll({
-                      title: manualPollTitle.trim() || "Yemek anketi",
-                      suggestions,
-                      missingItems: [],
-                      extraNotes: manualPollNotes,
-                      endAt,
-                      audience: pollAudience,
-                      memberIds: pollMemberIds,
-                    });
-                    const pollRes = await getActiveMealPoll();
-                    setActiveMealPoll(pollRes?.poll || null);
+                    
+                    let result;
+                    if (editingPollId) {
+                      // Düzenleme modu - kullanıcı seçimini koru
+                      result = await updateMealPoll(editingPollId, {
+                        title: manualPollTitle.trim() || "Yemek anketi",
+                        suggestions,
+                        missingItems: [],
+                        endAt,
+                        audience: pollAudience,
+                        memberIds: pollMemberIds,
+                        mealType: pollMealType,
+                      });
+                      if (result.error) {
+                        Alert.alert("Hata", result.error);
+                        return;
+                      }
+                      // Güncellenmiş anketi state'e set et
+                      if (result.poll) {
+                        setActiveMealPoll(result.poll);
+                      } else {
+                        const pollRes = await getActiveMealPoll();
+                        setActiveMealPoll(pollRes?.poll || null);
+                      }
+                      Alert.alert("Başarılı", "Anket güncellendi.");
+                    } else {
+                      // Yeni anket oluşturma - meal_type her zaman "cook"
+                      result = await createMealPoll({
+                        title: manualPollTitle.trim() || "Yemek anketi",
+                        suggestions,
+                        missingItems: [],
+                        endAt,
+                        audience: pollAudience,
+                        memberIds: pollMemberIds,
+                        mealType: "cook",
+                      });
+                      if (result.error) {
+                        Alert.alert("Hata", result.error);
+                        return;
+                      }
+                      Alert.alert("Başarılı", "Anket yayınlandı.");
+                    }
+                    
+                    // Yeni oluşturulan anketi direkt state'e set et
+                    if (result.poll) {
+                      setActiveMealPoll(result.poll);
+                    } else {
+                      // Fallback: Eğer poll döndürülmediyse getActiveMealPoll ile al
+                      const pollRes = await getActiveMealPoll();
+                      setActiveMealPoll(pollRes?.poll || null);
+                    }
                     setMealSuggestionGroups([]);
                     setSelectedSuggestionIds([]);
+                    setEditingPollId(null);
                     setManualPollVisible(false);
-                    Alert.alert("Başarılı", "Anket yayınlandı.");
                   }}
                 >
-                  <Text style={styles.modalButtonTextPrimary}>Yayınla</Text>
+                  <Text style={styles.modalButtonTextPrimary}>
+                    {editingPollId ? "Güncelle" : "Yayınla"}
+                  </Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Restoran/Paket Servis Anket Modal */}
+      <Modal
+        visible={deliveryRestaurantPollVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeliveryRestaurantPollVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalOverlay}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View
+              style={[
+                styles.modalCard,
+                isLight && styles.surfaceLift,
+                { backgroundColor: colors.card },
+              ]}
+            >
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Restoran/Paket Servis Anketi
+              </Text>
+
+              {!deliveryRestaurantType ? (
+                <>
+                  <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 16 }]}>
+                    Anket türünü seçin
+                  </Text>
+                  <View style={{ flexDirection: "row", gap: 12, marginBottom: 20 }}>
+                    <TouchableOpacity
+                      style={[
+                        styles.selectionActionBtn,
+                        {
+                          flex: 1,
+                          borderColor: colors.border,
+                          backgroundColor: colors.card,
+                        },
+                      ]}
+                      onPress={() => {
+                        setDeliveryRestaurantType("delivery");
+                        setDeliveryRestaurantOptions(["", ""]);
+                      }}
+                    >
+                      <Package size={20} color={colors.primary} />
+                      <Text
+                        style={[
+                          styles.selectionActionText,
+                          {
+                            color: colors.text,
+                            marginLeft: 6,
+                          },
+                        ]}
+                      >
+                        Paket Servis
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.selectionActionBtn,
+                        {
+                          flex: 1,
+                          borderColor: colors.border,
+                          backgroundColor: colors.card,
+                        },
+                      ]}
+                      onPress={() => {
+                        setDeliveryRestaurantType("restaurant");
+                        setDeliveryRestaurantOptions(["", ""]);
+                      }}
+                    >
+                      <Store size={20} color={colors.primary} />
+                      <Text
+                        style={[
+                          styles.selectionActionText,
+                          {
+                            color: colors.text,
+                            marginLeft: 6,
+                          },
+                        ]}
+                      >
+                        Restoran
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 16 }]}>
+                    {deliveryRestaurantType === "delivery" 
+                      ? "Dışarıdan ne söylemek istesiniz?" 
+                      : "Hangi restoran?"}
+                  </Text>
+                  
+                  {deliveryRestaurantOptions.map((option, idx) => (
+                    <View key={idx} style={{ marginBottom: 12 }}>
+                      <ModernInput
+                        label={`Seçenek ${idx + 1}`}
+                        value={option}
+                        onChangeText={(text) => {
+                          const newOptions = [...deliveryRestaurantOptions];
+                          newOptions[idx] = text;
+                          // Eğer ilk seçenek doldurulduysa ve son seçenek değilse, yeni bir boş seçenek ekle
+                          if (text && idx === deliveryRestaurantOptions.length - 1 && deliveryRestaurantOptions.length < 5) {
+                            newOptions.push("");
+                          }
+                          setDeliveryRestaurantOptions(newOptions);
+                        }}
+                        placeholder={deliveryRestaurantType === "delivery" ? "Örn: Pizza" : "Örn: Pizza Hut"}
+                      />
+                    </View>
+                  ))}
+
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                    <TouchableOpacity
+                      style={[
+                        styles.modalButton,
+                        { borderColor: colors.border, flex: 1 },
+                      ]}
+                      onPress={() => setDeliveryRestaurantType(null)}
+                    >
+                      <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                        Geri
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.modalButton,
+                        { borderColor: colors.border, flex: 1 },
+                      ]}
+                      onPress={() => {
+                        setDeliveryRestaurantType(null);
+                        setDeliveryRestaurantOptions(["", ""]);
+                        setDeliveryRestaurantPollVisible(false);
+                      }}
+                    >
+                      <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                        Vazgeç
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+
+              {deliveryRestaurantType && (
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonPrimary,
+                      { backgroundColor: colors.primary },
+                    ]}
+                    onPress={async () => {
+                      const filteredOptions = deliveryRestaurantOptions.filter(opt => opt.trim());
+                      if (filteredOptions.length < 2) {
+                        Alert.alert("Hata", "En az 2 seçenek gereklidir.");
+                        return;
+                      }
+
+                      // meal_type kontrolü
+                      if (!deliveryRestaurantType || (deliveryRestaurantType !== "delivery" && deliveryRestaurantType !== "restaurant")) {
+                        Alert.alert("Hata", "Anket türü seçilmemiş.");
+                        return;
+                      }
+
+                      const endAt = resolveEndAt("15:00");
+                      const suggestions = filteredOptions.map(title => ({ title, missing: [] }));
+
+                      const createRes = await createMealPoll({
+                        title: "Yemek anketi",
+                        suggestions,
+                        missingItems: [],
+                        extraNotes: undefined,
+                        endAt,
+                        audience: "parents",
+                        memberIds: [],
+                        mealType: deliveryRestaurantType, // "delivery" veya "restaurant"
+                      });
+
+                      if (createRes.error) {
+                        Alert.alert("Hata", createRes.error);
+                        return;
+                      }
+
+                      if (createRes.poll) {
+                        setActiveMealPoll(createRes.poll);
+                      } else {
+                        const pollRes = await getActiveMealPoll();
+                        setActiveMealPoll(pollRes?.poll || null);
+                      }
+
+                      setDeliveryRestaurantType(null);
+                      setDeliveryRestaurantOptions(["", ""]);
+                      setDeliveryRestaurantPollVisible(false);
+                      Alert.alert("Başarılı", "Anket yayınlandı.");
+                    }}
+                  >
+                    <Text style={styles.modalButtonTextPrimary}>Yayınla</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -2167,7 +3261,7 @@ export default function KitchenScreen({ navigation, route }: any) {
                             text: "Devam",
                             onPress: () => {
                               setRecipeConfirmVisible(false);
-                              navigation.navigate("TestRecipe", {
+                              navigation.navigate("Recipe", {
                                 title: recipeConfirmTitle,
                               });
                             },
@@ -2177,7 +3271,7 @@ export default function KitchenScreen({ navigation, route }: any) {
                       return;
                     }
                     setRecipeConfirmVisible(false);
-                    navigation.navigate("TestRecipe", { title: recipeConfirmTitle });
+                    navigation.navigate("Recipe", { title: recipeConfirmTitle });
                   }}
                 >
                   <Text style={styles.modalButtonTextPrimary}>Evet</Text>
@@ -2408,6 +3502,28 @@ const styles = StyleSheet.create({
   modalButtonTextPrimary: { color: "#fff", fontWeight: "700" },
   modalHint: { fontSize: 12, marginBottom: 12 },
   selectionList: { gap: 10, marginBottom: 12 },
+  timePickerContainer: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 8,
+    marginBottom: 12,
+  },
+  timePickerScroll: {
+    paddingHorizontal: 4,
+    gap: 8,
+  },
+  timeOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 70,
+    alignItems: "center",
+  },
+  timeOptionText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
   selectionItem: {
     borderWidth: 1,
     borderRadius: 16,
@@ -2425,7 +3541,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 8,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
   },
   selectionActionText: { fontSize: 12, fontWeight: "700" },
   mealSuggestionHeader: {

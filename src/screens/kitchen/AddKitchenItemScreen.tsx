@@ -70,17 +70,17 @@ export default function AddKitchenItemScreen({ navigation }: any) {
               label="Ürün adı"
               placeholder="Örn: Domates"
               value={product_name}
-              onChangeText={setProductName}
-            />
+        onChangeText={setProductName}
+      />
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <ModernInput
                   label="Miktar"
                   placeholder="1"
-                  keyboardType="numeric"
-                  value={quantity}
-                  onChangeText={setQuantity}
-                />
+        keyboardType="numeric"
+        value={quantity}
+        onChangeText={setQuantity}
+      />
               </View>
               <View style={{ flex: 1 }}>
                 <ModernInput
@@ -96,13 +96,13 @@ export default function AddKitchenItemScreen({ navigation }: any) {
         </ScrollView>
 
         <View style={[styles.footer, { borderTopColor: colors.border }]}>
-          <TouchableOpacity
+      <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: colors.primary }]}
-            onPress={handleSave}
-          >
+        onPress={handleSave}
+      >
             <Text style={styles.saveBtnText}>Stoka Ekle</Text>
-          </TouchableOpacity>
-        </View>
+      </TouchableOpacity>
+    </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

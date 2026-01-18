@@ -20,6 +20,7 @@ export default function TestRecipeScreen({ navigation, route }: any) {
   const { colors, themeMode } = useTheme();
   const isLight = themeMode === "light";
   const title = route?.params?.title || "Tavuk sote";
+  const showCookingButton = route?.params?.showCookingButton !== false; // Default true
 
   const [cookingActive, setCookingActive] = useState(false);
   const [cookingElapsed, setCookingElapsed] = useState(0);
@@ -421,31 +422,33 @@ export default function TestRecipeScreen({ navigation, route }: any) {
                   </Text>
                 </View>
               </View>
-              <View style={styles.recipeAssistantActions}>
-                {cookingActive ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.saveBtn,
-                      { backgroundColor: colors.card, borderColor: colors.border },
-                    ]}
-                    onPress={handleStopCooking}
-                  >
-                    <Text style={[styles.saveBtnText, { color: colors.text }]}>
-                      Durdur
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.saveBtn,
-                      { backgroundColor: colors.primary },
-                    ]}
-                    onPress={handleStartCooking}
-                  >
-                    <Text style={styles.saveBtnText}>Yemek yapmaya başla</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              {showCookingButton && (
+                <View style={styles.recipeAssistantActions}>
+                  {cookingActive ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.saveBtn,
+                        { backgroundColor: colors.card, borderColor: colors.border },
+                      ]}
+                      onPress={handleStopCooking}
+                    >
+                      <Text style={[styles.saveBtnText, { color: colors.text }]}>
+                        Durdur
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.saveBtn,
+                        { backgroundColor: colors.primary },
+                      ]}
+                      onPress={handleStartCooking}
+                    >
+                      <Text style={styles.saveBtnText}>Yemek yapmaya başla</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
             </View>
             <View
               style={[

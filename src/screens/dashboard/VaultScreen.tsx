@@ -98,16 +98,16 @@ export default function VaultScreen() {
     return <Lock size={22} color={colors.primary} />;
   };
 
-  return (
+    return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={styles.screenHeader}>
         <View style={styles.headerRow}>
-          <TouchableOpacity
+        <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={[styles.backButton, { borderColor: colors.border }]}
-          >
+        >
             <ChevronLeft size={22} color={colors.text} />
-          </TouchableOpacity>
+        </TouchableOpacity>
           <View>
             <Text style={[styles.screenTitle, { color: colors.text }]}>Kasa</Text>
             <Text style={[styles.screenSub, { color: colors.textMuted }]}>
@@ -161,14 +161,14 @@ export default function VaultScreen() {
                 ) : (
                   <Text style={[styles.secret, { color: colors.textMuted }]}>
                     {revealedId === item.id ? secretValue : "••••••••••••"}
-                  </Text>
+                </Text>
                 )}
               </View>
               {item.type === "text" && (
                 <TouchableOpacity onPress={() => handleReveal(item.id)}>
                   <Eye size={22} color={colors.primary} />
                 </TouchableOpacity>
-              )}
+            )}
             </View>
           </View>
         )}
@@ -197,7 +197,7 @@ export default function VaultScreen() {
               {previewData?.title}
             </Text>
             <View style={{ width: 28 }} />
-          </View>
+    </View>
           {previewData?.type?.startsWith("image/") ? (
             <Image
               source={{ uri: previewData.url }}
