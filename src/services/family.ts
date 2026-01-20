@@ -47,6 +47,8 @@ export interface FamilyMember {
   allergies?: string;
   medications?: string;
   gender?: string;
+  weight?: number; // Kilo (kg)
+  height?: number; // Boy (cm)
   school_name?: string;
   school_class?: string;
   school_no?: string;

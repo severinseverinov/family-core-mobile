@@ -73,37 +73,6 @@ export default function SettingsScreen() {
         <Text style={[styles.mainTitle, { color: colors.text }]}>Ayarlar</Text>
         </View>
 
-        {/* YÖNETİM PANELİ (YENİ BÖLÜM) */}
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
-          YÖNETİM PANELİ
-        </Text>
-        <View style={[styles.managementCard, { backgroundColor: colors.card }]}>
-          {/* Aile Üyeleri */}
-          <TouchableOpacity
-            style={[styles.menuItem, { borderBottomColor: colors.border }]}
-            onPress={() => navigation.navigate("FamilyManagement")}
-          >
-            <View style={styles.menuRow}>
-              <Users size={20} color={colors.primary} />
-              <Text style={[styles.menuText, { color: colors.text }]}>
-                Aileyi Yönet
-            </Text>
-            </View>
-            <ChevronRight size={18} color={colors.textMuted} />
-          </TouchableOpacity>
-
-          {/* Evcil Hayvan Ekleme */}
-        </View>
-
-        <Text
-          style={[
-            styles.sectionTitle,
-            { color: colors.textMuted, marginTop: 20 },
-          ]}
-        >
-          UYGULAMA TERCİHLERİ
-        </Text>
-
         <SelectionGroup
           label="Uygulama Dili"
           options={[

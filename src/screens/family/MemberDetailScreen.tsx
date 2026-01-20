@@ -110,6 +110,26 @@ export default function MemberDetailScreen({ route, navigation }: any) {
     }
   };
 
+  // BMI hesaplama fonksiyonu
+  const calculateBMI = (weight: number | undefined, height: number | undefined) => {
+    if (!weight || !height || height === 0) return null;
+    // Boy cm cinsinden, metreye çevir
+    const heightInMeters = height / 100;
+    const bmi = weight / (heightInMeters * heightInMeters);
+    return Math.round(bmi * 10) / 10; // 1 ondalık basamak
+  };
+
+  // BMI değerlendirme fonksiyonu
+  const getBMICategory = (bmi: number) => {
+    if (bmi < 18.5) return { status: "Zayıf", color: "#3b82f6", advice: "Sağlıklı kilo almak için dengeli beslenme önerilir." };
+    if (bmi < 25) return { status: "Normal", color: "#10b981", advice: "Harika! Sağlıklı kilo aralığındasınız." };
+    if (bmi < 30) return { status: "Fazla Kilolu", color: "#f59e0b", advice: "Sağlıklı kilo vermek için diyet ve egzersiz önerilir." };
+    return { status: "Obez", color: "#ef4444", advice: "Sağlıklı kilo vermek için bir doktora danışmanız önerilir." };
+  };
+
+  const bmi = calculateBMI(editMember.weight, editMember.height);
+  const bmiCategory = bmi ? getBMICategory(bmi) : null;
+
   const vCardData = `BEGIN:VCARD
   VERSION:3.0
   FN:ACIL - ${editMember.full_name}
@@ -222,6 +242,34 @@ export default function MemberDetailScreen({ route, navigation }: any) {
       <View style={styles.row}>
         <View style={{ flex: 1, marginRight: 10 }}>
           <ModernInput
+            label="Kilo (kg) *"
+            value={editMember.weight ? String(editMember.weight) : ""}
+            onChangeText={t => {
+              const num = t.replace(/[^0-9.]/g, '');
+              setEditMember({ ...editMember, weight: num ? Number(num) : undefined });
+            }}
+            keyboardType="numeric"
+            style={centeredInputStyle}
+            placeholder="Örn: 70"
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <ModernInput
+            label="Boy (cm) *"
+            value={editMember.height ? String(editMember.height) : ""}
+            onChangeText={t => {
+              const num = t.replace(/[^0-9.]/g, '');
+              setEditMember({ ...editMember, height: num ? Number(num) : undefined });
+            }}
+            keyboardType="numeric"
+            style={centeredInputStyle}
+            placeholder="Örn: 175"
+          />
+        </View>
+      </View>
+      <View style={styles.row}>
+        <View style={{ flex: 1, marginRight: 10 }}>
+          <ModernInput
             label="Tişört Bedeni"
             value={editMember.tshirt_size}
             onChangeText={t => setEditMember({ ...editMember, tshirt_size: t })}
@@ -238,6 +286,42 @@ export default function MemberDetailScreen({ route, navigation }: any) {
           />
         </View>
       </View>
+
+      {/* BMI GÖSTERİMİ */}
+      {editMember.weight && editMember.height && bmi && bmiCategory && (
+        <View style={{
+          padding: 16,
+          borderRadius: 16,
+          marginTop: 12,
+          backgroundColor: bmiCategory.color + "15",
+          borderWidth: 1,
+          borderColor: bmiCategory.color + "40",
+        }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <View>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+                Vücut Kitle İndeksi (BMI)
+              </Text>
+              <Text style={{ fontSize: 24, fontWeight: "800", color: bmiCategory.color }}>
+                {bmi}
+              </Text>
+            </View>
+            <View style={{
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 20,
+              backgroundColor: bmiCategory.color,
+            }}>
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
+                {bmiCategory.status}
+              </Text>
+            </View>
+          </View>
+          <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 18 }}>
+            {bmiCategory.advice}
+          </Text>
+        </View>
+      )}
 
       {/* SAĞLIK VE GEÇMİŞ */}
       <SectionTitle icon={ShieldAlert} title="Sağlık ve Kritik Bilgiler" />

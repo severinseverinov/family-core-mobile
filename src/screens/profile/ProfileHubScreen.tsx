@@ -16,16 +16,19 @@ import {
   X,
   Landmark, // Finans ikonu
   ChevronRight,
+  Users,
 } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
+import { getMemberById } from "../../services/family";
 
 export default function ProfileHubScreen({ navigation }: any) {
   const { colors, themeMode } = useTheme();
   const isLight = themeMode === "light";
   const { profile } = useAuth();
   const [qrVisible, setQrVisible] = useState(false);
+  const isParent = ["owner", "admin"].includes(profile?.role || "");
 
   const vCardData = `BEGIN:VCARD
 VERSION:3.0
@@ -108,6 +111,49 @@ END:VCARD`;
             <Text style={[styles.hubTitle, { color: colors.text }]}>
               Ayarlar
             </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* AİLEYİ YÖNET (Sadece Ebeveynler) veya ÜYE DETAYLARI (Diğerleri) */}
+        <View
+          style={[
+            styles.listCard,
+            isLight && styles.surfaceLift,
+            { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={async () => {
+              if (isParent) {
+                // Ebeveynler için: Aileyi Yönet
+                navigation.navigate("FamilyManagement");
+              } else {
+                // Diğer kullanıcılar için: Kendi üye detayları
+                if (profile?.id) {
+                  // Profil verisini tam olarak çek
+                  const memberRes = await getMemberById(profile.id);
+                  if (memberRes.member) {
+                    navigation.navigate("MemberDetail", { member: memberRes.member });
+                  }
+                }
+              }
+            }}
+          >
+            <View
+              style={[styles.iconCircleSmall, { backgroundColor: colors.primary + "20" }]}
+            >
+              <Users size={24} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={[styles.listText, { color: colors.text }]}>
+                {isParent ? "Aileyi Yönet" : "Profil Ayarları"}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                {isParent ? "Üyeler, Roller ve İzinler" : "Kişisel bilgiler ve tercihler"}
+              </Text>
+            </View>
+            <ChevronRight size={18} color={colors.border} />
           </TouchableOpacity>
         </View>
 
