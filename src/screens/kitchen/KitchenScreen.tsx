@@ -25,6 +25,8 @@ import {
   Trash2,
   Utensils,
   Store,
+  Filter,
+  ChevronDown,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -90,6 +92,7 @@ export default function KitchenScreen({ navigation, route }: any) {
   const [shoppingUrgentOnly, setShoppingUrgentOnly] = useState(false);
   const [shoppingSelectionMode, setShoppingSelectionMode] = useState(false);
   const [selectedShoppingItems, setSelectedShoppingItems] = useState<Set<string>>(new Set());
+  const [shoppingFilterModalVisible, setShoppingFilterModalVisible] = useState(false);
   const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
   const [inventoryEditId, setInventoryEditId] = useState<string | null>(null);
   const [inventoryName, setInventoryName] = useState("");
@@ -1152,70 +1155,177 @@ export default function KitchenScreen({ navigation, route }: any) {
               onChangeText={setShoppingFilter}
               placeholder="Ürün adı veya market"
             />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterRow}
-            >
-              {[
-                { id: "all", label: "Tümü" },
-                { id: "active", label: "Aktif" },
-                { id: "done", label: "Tamamlanan" },
-              ].map(option => {
-                const isActive = shoppingStatus === option.id;
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[
-                      styles.filterChip,
-                      isActive && styles.filterChipActive,
-                      {
-                        backgroundColor: isActive
-                          ? colors.primary
-                          : colors.card,
-                        borderColor: isActive ? colors.primary : colors.border,
-                      },
-                    ]}
-                    onPress={() =>
-                      setShoppingStatus(option.id as "all" | "active" | "done")
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        { color: isActive ? "#fff" : colors.text },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, paddingHorizontal: 8, gap: 8 }}>
               <TouchableOpacity
-                style={[
-                  styles.filterChip,
-                  shoppingUrgentOnly && styles.filterChipActive,
-                  {
-                    backgroundColor: shoppingUrgentOnly
-                      ? colors.error
-                      : colors.card,
-                    borderColor: shoppingUrgentOnly
-                      ? colors.error
-                      : colors.border,
-                  },
-                ]}
-                onPress={() => setShoppingUrgentOnly(prev => !prev)}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: shoppingSelectionMode ? colors.primary : colors.border,
+                  backgroundColor: shoppingSelectionMode ? colors.primary + "20" : colors.card,
+                  minWidth: 70,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                onPress={() => {
+                  if (shoppingSelectionMode) {
+                    setSelectedShoppingItems(new Set());
+                  }
+                  setShoppingSelectionMode(prev => !prev);
+                }}
               >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    { color: shoppingUrgentOnly ? "#fff" : colors.text },
-                  ]}
-                >
-                  Acil
+                <Text style={{
+                  color: shoppingSelectionMode ? colors.primary : colors.text,
+                  fontWeight: "700",
+                  fontSize: 13,
+                }}>
+                  {shoppingSelectionMode ? "İptal" : "Seç"}
                 </Text>
               </TouchableOpacity>
-            </ScrollView>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: (shoppingStatus !== "all" || shoppingUrgentOnly) ? colors.primary : colors.border,
+                  backgroundColor: (shoppingStatus !== "all" || shoppingUrgentOnly) ? colors.primary + "20" : colors.card,
+                }}
+                onPress={() => setShoppingFilterModalVisible(true)}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Filter size={16} color={(shoppingStatus !== "all" || shoppingUrgentOnly) ? colors.primary : colors.text} />
+                  <Text style={{
+                    color: (shoppingStatus !== "all" || shoppingUrgentOnly) ? colors.primary : colors.text,
+                    fontWeight: "700",
+                    fontSize: 13,
+                  }}>
+                    {(() => {
+                      if (shoppingUrgentOnly && shoppingStatus === "all") return "Acil";
+                      if (shoppingUrgentOnly && shoppingStatus === "active") return "Acil • Aktif";
+                      if (shoppingUrgentOnly && shoppingStatus === "done") return "Acil • Tamamlanan";
+                      if (shoppingStatus === "active") return "Aktif";
+                      if (shoppingStatus === "done") return "Tamamlanan";
+                      return "Filtrele";
+                    })()}
+                  </Text>
+                </View>
+                <ChevronDown size={16} color={(shoppingStatus !== "all" || shoppingUrgentOnly) ? colors.primary : colors.text} />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Toplu işlem butonları */}
+            {shoppingSelectionMode && selectedShoppingItems.size > 0 && (
+              <View style={{
+                marginBottom: 12,
+                paddingHorizontal: 8,
+                gap: 8,
+              }}>
+                <View style={{
+                  flexDirection: "row",
+                  gap: 8,
+                }}>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      backgroundColor: colors.primary,
+                      borderRadius: 12,
+                      paddingVertical: 12,
+                      alignItems: "center",
+                    }}
+                    onPress={async () => {
+                      const itemIds = Array.from(selectedShoppingItems);
+                      for (const itemId of itemIds) {
+                        await toggleShoppingItem(itemId, true);
+                      }
+                      await loadData();
+                      setSelectedShoppingItems(new Set());
+                      setShoppingSelectionMode(false);
+                      Alert.alert("Başarılı", `${itemIds.length} ürün onaylandı.`);
+                    }}
+                  >
+                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>
+                      Onayla ({selectedShoppingItems.size})
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      backgroundColor: colors.success || "#10b981",
+                      borderRadius: 12,
+                      paddingVertical: 12,
+                      alignItems: "center",
+                    }}
+                    onPress={async () => {
+                      const itemIds = Array.from(selectedShoppingItems);
+                      const selectedItems = data?.shoppingList?.filter((item: any) => 
+                        itemIds.includes(item.id)
+                      ) || [];
+                      
+                      // Her bir ürünü envantere ekle
+                      for (const item of selectedItems) {
+                        await addInventoryItem({
+                          product_name: item.product_name,
+                          quantity: item.quantity || 1,
+                          unit: item.unit || "adet",
+                          price: 0,
+                        });
+                      }
+                      
+                      // Listeden sil
+                      await removeShoppingItemsByIds(itemIds);
+                      await loadData();
+                      setSelectedShoppingItems(new Set());
+                      setShoppingSelectionMode(false);
+                      Alert.alert("Başarılı", `${itemIds.length} ürün envantere eklendi.`);
+                    }}
+                  >
+                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>
+                      Envantere Ekle
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: colors.error || "#ef4444",
+                    borderRadius: 12,
+                    paddingVertical: 12,
+                    alignItems: "center",
+                  }}
+                  onPress={async () => {
+                    Alert.alert(
+                      "Ürünleri sil",
+                      `Seçilen ${selectedShoppingItems.size} ürün listeden kaldırılsın mı?`,
+                      [
+                        { text: "Vazgeç", style: "cancel" },
+                        {
+                          text: "Sil",
+                          style: "destructive",
+                          onPress: async () => {
+                            const itemIds = Array.from(selectedShoppingItems);
+                            await removeShoppingItemsByIds(itemIds);
+                            await loadData();
+                            setSelectedShoppingItems(new Set());
+                            setShoppingSelectionMode(false);
+                            Alert.alert("Başarılı", `${itemIds.length} ürün silindi.`);
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>
+                    Listeden Çıkar ({selectedShoppingItems.size})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
             {data?.shoppingList
               .filter((item: any) => canSeeShoppingItem(item))
               .filter((item: any) => {
@@ -1250,26 +1360,46 @@ export default function KitchenScreen({ navigation, route }: any) {
                   <TouchableOpacity
                     style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
                     onPress={async () => {
-                      const result = await toggleShoppingItem(item.id, !item.is_completed);
-                      if (result?.success) {
-                        // State'i hemen güncelle
-                        setData((prev: any) => {
-                          if (!prev) return prev;
-                          return {
-                            ...prev,
-                            items: (prev.items || []).map((i: any) =>
-                              i.id === item.id
-                                ? { ...i, is_completed: !item.is_completed }
-                                : i
-                            ),
-                          };
+                      if (shoppingSelectionMode) {
+                        // Seçim modunda: checkbox'ı toggle et
+                        setSelectedShoppingItems(prev => {
+                          const next = new Set(prev);
+                          if (next.has(item.id)) {
+                            next.delete(item.id);
+                          } else {
+                            next.add(item.id);
+                          }
+                          return next;
                         });
-                        // Veriyi yeniden yükle
-                        await loadData();
+                      } else {
+                        // Normal modda: onayla/onayı kaldır
+                        const result = await toggleShoppingItem(item.id, !item.is_completed);
+                        if (result?.success) {
+                          // State'i hemen güncelle
+                          setData((prev: any) => {
+                            if (!prev) return prev;
+                            return {
+                              ...prev,
+                              items: (prev.items || []).map((i: any) =>
+                                i.id === item.id
+                                  ? { ...i, is_completed: !item.is_completed }
+                                  : i
+                              ),
+                            };
+                          });
+                          // Veriyi yeniden yükle
+                          await loadData();
+                        }
                       }
                     }}
                   >
-                    {item.is_completed ? (
+                    {shoppingSelectionMode ? (
+                      selectedShoppingItems.has(item.id) ? (
+                        <CheckCircle2 size={22} color={colors.primary} />
+                      ) : (
+                        <Circle size={22} color={colors.border} />
+                      )
+                    ) : item.is_completed ? (
                       <CheckCircle2 size={22} color={colors.primary} />
                     ) : (
                       <Circle size={22} color={colors.border} />
@@ -3454,6 +3584,180 @@ export default function KitchenScreen({ navigation, route }: any) {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={shoppingFilterModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShoppingFilterModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 20,
+          }}
+          activeOpacity={1}
+          onPress={() => setShoppingFilterModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[
+              styles.modalCard,
+              isLight && styles.surfaceLift,
+              { backgroundColor: colors.card, width: "100%", maxWidth: 400 },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Filtrele
+            </Text>
+            
+            <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 8 }]}>
+              Durum
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8, marginBottom: 16, alignItems: "center" }}>
+              {[
+                { id: "all", label: "Tümü" },
+                { id: "active", label: "Aktif" },
+                { id: "done", label: "Tamamlanan" },
+              ].map(option => {
+                const isActive = shoppingStatus === option.id;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[
+                      styles.filterChip,
+                      isActive && styles.filterChipActive,
+                      {
+                        flex: option.id === "done" ? 1.3 : 1,
+                        backgroundColor: isActive
+                          ? colors.primary
+                          : colors.card,
+                        borderColor: isActive ? colors.primary : colors.border,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minHeight: 44,
+                        paddingHorizontal: 8,
+                      },
+                    ]}
+                    onPress={() => setShoppingStatus(option.id as "all" | "active" | "done")}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        { 
+                          color: isActive ? "#fff" : colors.text, 
+                          textAlign: "center",
+                          fontSize: option.id === "done" ? 11 : 12,
+                        },
+                      ]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 8 }]}>
+              Öncelik
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                shoppingUrgentOnly && styles.filterChipActive,
+                {
+                  backgroundColor: shoppingUrgentOnly
+                    ? colors.error
+                    : colors.card,
+                  borderColor: shoppingUrgentOnly
+                    ? colors.error
+                    : colors.border,
+                  marginBottom: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 44,
+                },
+              ]}
+              onPress={() => setShoppingUrgentOnly(prev => !prev)}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  { color: shoppingUrgentOnly ? "#fff" : colors.text, textAlign: "center" },
+                ]}
+              >
+                Sadece Acil Ürünler
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 8 }]}>
+              Sıralama
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+              {[
+                { id: "date_desc", label: "Yeni → Eski" },
+                { id: "date_asc", label: "Eski → Yeni" },
+                { id: "name_az", label: "A-Z" },
+                { id: "name_za", label: "Z-A" },
+              ].map(option => {
+                const isActive = false; // Burada sıralama state'i eklenebilir
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[
+                      styles.filterChip,
+                      isActive && styles.filterChipActive,
+                      {
+                        backgroundColor: isActive
+                          ? colors.primary
+                          : colors.card,
+                        borderColor: isActive ? colors.primary : colors.border,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minHeight: 44,
+                        flex: 1,
+                        minWidth: "47%",
+                      },
+                    ]}
+                    onPress={() => {
+                      // Sıralama işlemi burada yapılabilir
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        { color: isActive ? "#fff" : colors.text, textAlign: "center" },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonPrimary,
+                  { backgroundColor: colors.primary },
+                ]}
+                onPress={() => setShoppingFilterModalVisible(false)}
+              >
+                <Text style={styles.modalButtonTextPrimary}>Tamam</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       <Modal
