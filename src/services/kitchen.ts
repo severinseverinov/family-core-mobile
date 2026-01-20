@@ -368,13 +368,13 @@ export async function getActiveMealPoll() {
     if (!profile?.family_id) return { poll: null, error: "Aile bulunamadı." };
 
     const nowIso = new Date().toISOString();
+    
+    // Önce aktif anketleri getir (onaylanmış veya onaylanmamış)
     const { data, error: queryError } = await supabase
       .from("meal_polls")
       .select("*")
       .eq("family_id", profile.family_id)
       .eq("is_active", true)
-      .eq("is_approved", false) // Onaylanmamış anketleri getir
-      .is("approved_meal", null) // Onaylanmamış anketleri getir
       .or(`end_at.is.null,end_at.gte.${nowIso}`)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -384,46 +384,50 @@ export async function getActiveMealPoll() {
       console.error("getActiveMealPoll query error:", queryError);
     }
 
-    // Eğer aktif anket yoksa, sonlandırılmış son anketi getir (onaylanmamış olanları)
-    if (!data) {
-      const { data: lastPoll } = await supabase
-        .from("meal_polls")
-        .select("*")
-        .eq("family_id", profile.family_id)
-        .eq("is_active", false)
-        .eq("is_approved", false) // Onaylanmamış anketleri getir
-        .is("approved_meal", null) // Onaylanmamış anketleri getir
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!lastPoll) return { poll: null };
-
+    // Eğer aktif anket varsa, kontrol et ve dön
+    if (data) {
       // Audience kontrolü
-      if (lastPoll.audience === "parents") {
+      if (data.audience === "parents") {
         if (!["owner", "admin"].includes(profile.role || "")) {
           return { poll: null };
         }
       }
-      if (lastPoll.audience === "members") {
-        const memberIds = lastPoll.member_ids || [];
+      if (data.audience === "members") {
+        const memberIds = data.member_ids || [];
         if (!memberIds.includes(profile.id)) return { poll: null };
       }
 
-      return { poll: lastPoll };
+      return { poll: data };
     }
 
-    if (data.audience === "parents") {
+    // Aktif anket yoksa, sonlandırılmış son anketi getir (onaylanmamış olanları)
+    // Onaylanmış anketler "Yemek Hazır" butonuna basıldıktan sonra silindiği için
+    // sonlandırılmış onaylanmış anket olmamalı, ama yine de kontrol edelim
+    const { data: lastPoll } = await supabase
+      .from("meal_polls")
+      .select("*")
+      .eq("family_id", profile.family_id)
+      .eq("is_active", false)
+      .eq("is_approved", false) // Sonlandırılmış ama onaylanmamış anketleri getir
+      .is("approved_meal", null) // Onaylanmamış anketleri getir
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!lastPoll) return { poll: null };
+
+    // Audience kontrolü
+    if (lastPoll.audience === "parents") {
       if (!["owner", "admin"].includes(profile.role || "")) {
         return { poll: null };
       }
     }
-    if (data.audience === "members") {
-      const memberIds = data.member_ids || [];
+    if (lastPoll.audience === "members") {
+      const memberIds = lastPoll.member_ids || [];
       if (!memberIds.includes(profile.id)) return { poll: null };
     }
 
-    return { poll: data };
+    return { poll: lastPoll };
   } catch (error: any) {
     return { poll: null, error: error.message };
   }
@@ -701,7 +705,8 @@ export async function approveMealPoll(pollId: string) {
       .from("meal_polls")
       .update({
         is_approved: true,
-        is_active: false,
+        // is_active: true kalmalı - anket onaylandıktan sonra da aktif kalmalı
+        // Sadece "Yemek Hazır" butonuna basıldığında silinecek
         approved_meal: winningTitle,
         approved_by: user.id,
         approved_at: new Date().toISOString(),
@@ -803,6 +808,126 @@ export async function endMealPoll(pollId: string) {
       .eq("family_id", profile.family_id);
 
     return { success: !error, error: error?.message };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+// Envanterden malzeme miktarını düşür
+export async function reduceInventoryQuantity(
+  productName: string,
+  usedQuantity: number,
+  usedUnit: string
+) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
+
+    // Envanterde eşleşen ürünleri bul
+    const { data: inventoryItems } = await supabase
+      .from("inventory")
+      .select("*")
+      .eq("family_id", profile.family_id)
+      .eq("is_approved", true);
+
+    if (!inventoryItems || inventoryItems.length === 0) {
+      return { error: "Envanterde ürün bulunamadı." };
+    }
+
+    // Ürün adına göre eşleşen ürünleri bul
+    const matchedItems = inventoryItems.filter((item: any) =>
+      isProductMatch(item.product_name, productName)
+    );
+
+    if (matchedItems.length === 0) {
+      return { error: `Envanterde "${productName}" bulunamadı.` };
+    }
+
+    // Kullanılan miktarı birimlere göre dönüştür (basit dönüşüm)
+    const results: Array<{ id: string; reduced: number; remaining: number }> = [];
+
+    for (const item of matchedItems) {
+      const currentQty = Number(item.quantity) || 0;
+      const itemUnit = (item.unit || "adet").toLowerCase().trim();
+      const usedUnitLower = usedUnit.toLowerCase().trim();
+
+      // Birim dönüşümü: kullanılan miktarı envanter birimine dönüştür
+      let convertedUsedQty = usedQuantity;
+      
+      if (usedUnitLower !== itemUnit) {
+        // Gram -> Kilogram (1 gr = 0.001 kg)
+        if ((usedUnitLower === "gr" || usedUnitLower === "g") && (itemUnit === "kg" || itemUnit === "kilogram")) {
+          convertedUsedQty = usedQuantity * 0.001;
+        }
+        // Kilogram -> Gram (1 kg = 1000 gr)
+        else if ((usedUnitLower === "kg" || usedUnitLower === "kilogram") && (itemUnit === "gr" || itemUnit === "g")) {
+          convertedUsedQty = usedQuantity * 1000;
+        }
+        // Mililitre -> Litre (1 ml = 0.001 lt)
+        else if ((usedUnitLower === "ml") && (itemUnit === "lt" || itemUnit === "litre" || itemUnit === "l")) {
+          convertedUsedQty = usedQuantity * 0.001;
+        }
+        // Litre -> Mililitre (1 lt = 1000 ml)
+        else if ((usedUnitLower === "lt" || usedUnitLower === "litre" || usedUnitLower === "l") && (itemUnit === "ml")) {
+          convertedUsedQty = usedQuantity * 1000;
+        }
+        // Aynı birimler farklı yazılmışsa (adet, ad, piece, pcs) - dönüşüm yok
+        else if (
+          (usedUnitLower === "adet" || usedUnitLower === "ad" || usedUnitLower === "piece" || usedUnitLower === "pcs") &&
+          (itemUnit === "adet" || itemUnit === "ad" || itemUnit === "piece" || itemUnit === "pcs")
+        ) {
+          convertedUsedQty = usedQuantity;
+        }
+        // Birimler uyumsuzsa direkt kullan (kullanıcı dikkatli olmalı)
+        else {
+          convertedUsedQty = usedQuantity;
+        }
+      }
+
+      // Envanterden düşülecek miktar (envanter biriminde)
+      const reduceAmount = Math.min(convertedUsedQty, currentQty);
+      const newQty = Math.max(0, currentQty - reduceAmount);
+
+      if (newQty > 0) {
+        // Miktarı güncelle
+        await supabase
+          .from("inventory")
+          .update({ quantity: newQty })
+          .eq("id", item.id)
+          .eq("family_id", profile.family_id);
+        
+        results.push({
+          id: item.id,
+          reduced: reduceAmount,
+          remaining: newQty,
+        });
+      } else {
+        // Ürünü sil (miktar 0 oldu)
+        await supabase
+          .from("inventory")
+          .delete()
+          .eq("id", item.id)
+          .eq("family_id", profile.family_id);
+        
+        results.push({
+          id: item.id,
+          reduced: currentQty,
+          remaining: 0,
+        });
+      }
+    }
+
+    return { success: true, results };
   } catch (error: any) {
     return { error: error.message };
   }

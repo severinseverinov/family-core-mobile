@@ -53,6 +53,7 @@ import {
   deleteMealPoll,
   endMealPoll,
   updateMealPoll,
+  reduceInventoryQuantity,
 } from "../../services/kitchen";
 import { getFamilyMembers } from "../../services/family";
 import { getPreferences } from "../../services/settings";
@@ -87,6 +88,8 @@ export default function KitchenScreen({ navigation, route }: any) {
     "all" | "active" | "done"
   >("all");
   const [shoppingUrgentOnly, setShoppingUrgentOnly] = useState(false);
+  const [shoppingSelectionMode, setShoppingSelectionMode] = useState(false);
+  const [selectedShoppingItems, setSelectedShoppingItems] = useState<Set<string>>(new Set());
   const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
   const [inventoryEditId, setInventoryEditId] = useState<string | null>(null);
   const [inventoryName, setInventoryName] = useState("");
@@ -135,6 +138,13 @@ export default function KitchenScreen({ navigation, route }: any) {
   const [shoppingRemoveMatched, setShoppingRemoveMatched] = useState<string[]>([]);
   const [shoppingRemoveLabel, setShoppingRemoveLabel] = useState("");
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
+  const [finishCookingModalVisible, setFinishCookingModalVisible] = useState(false);
+  const [finishCookingIngredients, setFinishCookingIngredients] = useState<Array<{
+    name: string;
+    usedQuantity: string;
+    usedUnit: string;
+    inventoryItem?: any;
+  }>>([]);
   const isParent = ["owner", "admin"].includes(profile?.role || "");
   const defaultMealSettings = {
     visibility: "family",
@@ -1761,36 +1771,86 @@ export default function KitchenScreen({ navigation, route }: any) {
                                               styles.mealActionPrimary,
                                               { backgroundColor: colors.primary },
                                             ]}
-                                            onPress={() => {
-                                              Alert.alert(
-                                                "Yemek Hazır",
-                                                "Yemeğin hazır olduğunu onaylıyor musunuz?",
-                                                [
-                                                  { text: "Vazgeç", style: "cancel" },
-                                                  {
-                                                    text: "Onayla",
-                                                    onPress: async () => {
-                                                      // Aktif anketi kapat (veritabanında)
-                                                      if (activeMealPoll?.id) {
-                                                        try {
-                                                          // Yemek hazır olduğunda anketi sil (skipOwnerCheck: true)
-                                                          await deleteMealPoll(activeMealPoll.id, true);
-                                                        } catch (error) {
-                                                          console.error("Anket kapatma hatası:", error);
-                                                        }
-                                                      }
-                                                      Alert.alert("Afiyet olsun", "", [
-                                                        {
-                                                          text: "Tamam",
-                                                          onPress: () => {
-                                                            resetMealSectionState();
-                                                          },
-                                                        },
-                                                      ]);
-                                                    },
-                                                  },
-                                                ]
+                                            onPress={async () => {
+                                              // Yemeğin malzemelerini bul
+                                              const approvedMeal = approvedMealTitle || activeMealPoll.approved_meal;
+                                              const mealSuggestion = (activeMealPoll.suggestions || []).find(
+                                                (item: any) => (item.title || item) === approvedMeal
                                               );
+                                              
+                                              // Malzemeleri al (missing array'inden veya tariften parse et)
+                                              const missingItems = Array.isArray(mealSuggestion?.missing) 
+                                                ? mealSuggestion.missing 
+                                                : [];
+                                              
+                                              // Envanterdeki mevcut malzemeleri eşleştir
+                                              const inventoryItems = data?.items || [];
+                                              const ingredients: Array<{
+                                                name: string;
+                                                usedQuantity: string;
+                                                usedUnit: string;
+                                                inventoryItem?: any;
+                                              }> = [];
+                                              
+                                              for (const missingItem of missingItems) {
+                                                // Envanterde eşleşen ürünü bul
+                                                const matchedInventory = inventoryItems.find((inv: any) =>
+                                                  isProductMatch(inv.product_name, missingItem)
+                                                );
+                                                
+                                                if (matchedInventory) {
+                                                  // Varsayılan olarak envanterdeki miktarın tamamını kullan
+                                                  ingredients.push({
+                                                    name: missingItem,
+                                                    usedQuantity: String(matchedInventory.quantity || "1"),
+                                                    usedUnit: matchedInventory.unit || "adet",
+                                                    inventoryItem: matchedInventory,
+                                                  });
+                                                } else {
+                                                  // Envanterde yoksa varsayılan değerler
+                                                  ingredients.push({
+                                                    name: missingItem,
+                                                    usedQuantity: "1",
+                                                    usedUnit: "adet",
+                                                  });
+                                                }
+                                              }
+                                              
+                                              // Eğer malzeme yoksa direkt onayla
+                                              if (ingredients.length === 0) {
+                                                Alert.alert(
+                                                  "Yemek Hazır",
+                                                  "Yemeğin hazır olduğunu onaylıyor musunuz?",
+                                                  [
+                                                    { text: "Vazgeç", style: "cancel" },
+                                                    {
+                                                      text: "Onayla",
+                                                      onPress: async () => {
+                                                        if (activeMealPoll?.id) {
+                                                          try {
+                                                            await deleteMealPoll(activeMealPoll.id, true);
+                                                          } catch (error) {
+                                                            console.error("Anket kapatma hatası:", error);
+                                                          }
+                                                        }
+                                                        Alert.alert("Afiyet olsun", "", [
+                                                          {
+                                                            text: "Tamam",
+                                                            onPress: () => {
+                                                              resetMealSectionState();
+                                                            },
+                                                          },
+                                                        ]);
+                                                      },
+                                                    },
+                                                  ]
+                                                );
+                                                return;
+                                              }
+                                              
+                                              // Modal'ı aç
+                                              setFinishCookingIngredients(ingredients);
+                                              setFinishCookingModalVisible(true);
                                             }}
                                           >
                                             <Text style={styles.mealActionTextPrimary}>
@@ -3243,6 +3303,154 @@ export default function KitchenScreen({ navigation, route }: any) {
                   </TouchableOpacity>
                 </View>
               )}
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={finishCookingModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFinishCookingModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalOverlay}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View
+              style={[
+                styles.modalCard,
+                isLight && styles.surfaceLift,
+                { backgroundColor: colors.card },
+              ]}
+            >
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Kullanılan Malzemeler
+              </Text>
+              <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 16 }]}>
+                Yemek hazır! Kullandığınız malzeme miktarlarını düzenleyin.
+              </Text>
+
+              {finishCookingIngredients.map((ingredient, index) => (
+                <View
+                  key={index}
+                  style={[
+                    {
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: 12,
+                      padding: 12,
+                      marginBottom: 12,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.modalHint, { color: colors.text, marginBottom: 8, fontWeight: "700" }]}>
+                    {ingredient.name}
+                  </Text>
+                  {ingredient.inventoryItem && (
+                    <Text style={[styles.modalHint, { color: colors.textMuted, fontSize: 11, marginBottom: 8 }]}>
+                      Envanterde: {ingredient.inventoryItem.quantity} {ingredient.inventoryItem.unit}
+                    </Text>
+                  )}
+                  <View style={styles.modalRow}>
+                    <View style={{ flex: 1 }}>
+                      <ModernInput
+                        label="Kullanılan Miktar"
+                        value={ingredient.usedQuantity}
+                        onChangeText={(text) => {
+                          const newIngredients = [...finishCookingIngredients];
+                          newIngredients[index].usedQuantity = text;
+                          setFinishCookingIngredients(newIngredients);
+                        }}
+                        placeholder="1"
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ModernInput
+                        label="Birim"
+                        value={ingredient.usedUnit}
+                        onChangeText={(text) => {
+                          const newIngredients = [...finishCookingIngredients];
+                          newIngredients[index].usedUnit = text;
+                          setFinishCookingIngredients(newIngredients);
+                        }}
+                        placeholder="adet / kg / gr"
+                      />
+                    </View>
+                  </View>
+                </View>
+              ))}
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { borderColor: colors.border }]}
+                  onPress={() => setFinishCookingModalVisible(false)}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                    Vazgeç
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonPrimary,
+                    { backgroundColor: colors.primary },
+                  ]}
+                  onPress={async () => {
+                    // Her malzeme için envanterden düş
+                    let hasError = false;
+                    for (const ingredient of finishCookingIngredients) {
+                      const usedQty = Number(ingredient.usedQuantity);
+                      if (isNaN(usedQty) || usedQty <= 0) {
+                        Alert.alert("Hata", `"${ingredient.name}" için geçerli bir miktar girin.`);
+                        hasError = true;
+                        break;
+                      }
+
+                      const result = await reduceInventoryQuantity(
+                        ingredient.name,
+                        usedQty,
+                        ingredient.usedUnit
+                      );
+
+                      if (result.error) {
+                        Alert.alert("Hata", result.error);
+                        hasError = true;
+                        break;
+                      }
+                    }
+
+                    if (hasError) return;
+
+                    // Anketi kapat
+                    if (activeMealPoll?.id) {
+                      try {
+                        await deleteMealPoll(activeMealPoll.id, true);
+                      } catch (error) {
+                        console.error("Anket kapatma hatası:", error);
+                      }
+                    }
+
+                    setFinishCookingModalVisible(false);
+                    Alert.alert("Afiyet olsun", "", [
+                      {
+                        text: "Tamam",
+                        onPress: () => {
+                          resetMealSectionState();
+                        },
+                      },
+                    ]);
+                  }}
+                >
+                  <Text style={styles.modalButtonTextPrimary}>Onayla</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
