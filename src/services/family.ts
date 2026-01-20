@@ -70,6 +70,8 @@ export interface FamilyMember {
     avoid?: string;
     diet?: string;
     notes?: string;
+    diet_start_date?: string; // ISO date string
+    diet_active?: boolean;
   };
 }
 

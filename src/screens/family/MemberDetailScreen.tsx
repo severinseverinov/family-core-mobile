@@ -8,6 +8,7 @@ import {
   Alert,
   Modal,
   SafeAreaView,
+  Switch,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -17,6 +18,7 @@ import {
   FamilyMember,
   getMemberById,
 } from "../../services/family";
+import { generateDietPlan } from "../../services/kitchen";
 import {
   ShieldAlert,
   Save,
@@ -25,6 +27,7 @@ import {
   GraduationCap,
   Utensils,
   ChevronLeft,
+  Apple,
 } from "lucide-react-native";
 import SelectionGroup from "../../components/ui/SelectionGroup";
 import { useFocusEffect } from "@react-navigation/native";
@@ -35,6 +38,9 @@ export default function MemberDetailScreen({ route, navigation }: any) {
   const [editMember, setEditMember] = useState<FamilyMember>(member);
   const [qrVisible, setQrVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dietModalVisible, setDietModalVisible] = useState(false);
+  const [dietLoading, setDietLoading] = useState(false);
+  const [monthlyDietApproved, setMonthlyDietApproved] = useState(false);
   const centeredInputStyle = { textAlignVertical: "center" as const };
   const centeredMultilineStyle = {
     textAlignVertical: "center" as const,
@@ -59,7 +65,11 @@ export default function MemberDetailScreen({ route, navigation }: any) {
     avoid: member?.meal_preferences?.avoid || "",
     diet: member?.meal_preferences?.diet || "standard",
     notes: member?.meal_preferences?.notes || "",
+    diet_start_date: member?.meal_preferences?.diet_start_date || "",
+    diet_active: member?.meal_preferences?.diet_active || false,
   });
+  
+  const [dietRenewalModalVisible, setDietRenewalModalVisible] = useState(false);
 
   const hydrateFromMember = useCallback(
     (next: FamilyMember) => {
@@ -71,7 +81,23 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         avoid: next?.meal_preferences?.avoid || "",
         diet: next?.meal_preferences?.diet || "standard",
         notes: next?.meal_preferences?.notes || "",
+        diet_start_date: next?.meal_preferences?.diet_start_date || "",
+        diet_active: next?.meal_preferences?.diet_active || false,
       });
+      
+      // 30 gün kontrolü
+      if (next?.meal_preferences?.diet_start_date && next?.meal_preferences?.diet_active) {
+        const startDate = new Date(next.meal_preferences.diet_start_date);
+        const now = new Date();
+        const daysDiff = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysDiff >= 30) {
+          // 30 gün geçmişse kontrol modalını göster
+          setTimeout(() => {
+            setDietRenewalModalVisible(true);
+          }, 500);
+        }
+      }
     },
     [resolveInfoMode]
   );
@@ -323,6 +349,30 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         </View>
       )}
 
+      {/* DİYET BUTONU */}
+      {editMember.weight && editMember.height && bmi && bmiCategory && (
+        <TouchableOpacity
+          style={{
+            marginTop: 12,
+            padding: 16,
+            borderRadius: 16,
+            backgroundColor: colors.primary + "15",
+            borderWidth: 1,
+            borderColor: colors.primary + "40",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+          }}
+          onPress={() => setDietModalVisible(true)}
+        >
+          <Apple size={20} color={colors.primary} />
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.primary }}>
+            Diyet Programı Oluştur
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* SAĞLIK VE GEÇMİŞ */}
       <SectionTitle icon={ShieldAlert} title="Sağlık ve Kritik Bilgiler" />
       <ModernInput
@@ -428,6 +478,294 @@ export default function MemberDetailScreen({ route, navigation }: any) {
           <Text style={styles.btnText}>Acil Durum QR</Text>
         </TouchableOpacity>
       </View>
+
+      {/* DİYET MODAL */}
+      <Modal visible={dietModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.qrCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.qrTitle, { color: colors.text }]}>
+              Diyet Programı Oluştur
+            </Text>
+            <Text style={[styles.qrDesc, { color: colors.textMuted, marginBottom: 20 }]}>
+              BMI değerinize göre kişiselleştirilmiş bir aylık diyet programı hazırlanacak ve yemek tercihleriniz buna göre otomatik olarak güncellenecektir.
+            </Text>
+            
+            {/* 1 Aylık Diyet Onay Checkbox */}
+            <View style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              borderRadius: 12,
+              backgroundColor: colors.background,
+              marginBottom: 20,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 4 }}>
+                  1 Aylık Diyet Programı
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                  Yemek tercihleri otomatik olarak bu programa göre ayarlanacak
+                </Text>
+              </View>
+              <Switch
+                value={monthlyDietApproved}
+                onValueChange={setMonthlyDietApproved}
+                trackColor={{ false: colors.border, true: colors.primary + "80" }}
+                thumbColor={monthlyDietApproved ? colors.primary : "#f4f3f4"}
+              />
+            </View>
+            
+            <View style={{ gap: 12, width: "100%" }}>
+              <TouchableOpacity
+                style={[
+                  styles.btn, 
+                  { 
+                    backgroundColor: monthlyDietApproved ? colors.primary : colors.border,
+                    opacity: monthlyDietApproved ? 1 : 0.5,
+                  }
+                ]}
+                onPress={async () => {
+                  if (!monthlyDietApproved) {
+                    Alert.alert(
+                      "Onay Gerekli",
+                      "Lütfen 1 aylık diyet programını onaylayın."
+                    );
+                    return;
+                  }
+                  
+                  if (!bmi || !editMember.weight || !editMember.height) return;
+                  
+                  setDietLoading(true);
+                  try {
+                    const result = await generateDietPlan({
+                      bmi,
+                      weight: editMember.weight,
+                      height: editMember.height,
+                      gender: editMember.gender,
+                      currentDiet: mealPreferences.diet,
+                      currentCuisine: mealPreferences.cuisine,
+                      currentAvoid: mealPreferences.avoid,
+                    });
+                    
+                    if (result.error) {
+                      Alert.alert("Hata", result.error);
+                      setDietModalVisible(false);
+                      setDietLoading(false);
+                      setMonthlyDietApproved(false);
+                      return;
+                    }
+                    
+                    if (!result.needsDiet) {
+                      Alert.alert(
+                        "Bilgi",
+                        result.message || "BMI değeriniz sağlıklı aralıkta. Özel bir diyet programına gerek yok."
+                      );
+                      setDietModalVisible(false);
+                      setDietLoading(false);
+                      setMonthlyDietApproved(false);
+                      return;
+                    }
+                    
+                    // 1 aylık onay verildiğinde yemek tercihlerini otomatik güncelle
+                    if (result.updatedPreferences && monthlyDietApproved) {
+                      // Diyet tipi güncelle
+                      let newDiet = result.updatedPreferences.diet || mealPreferences.diet;
+                      
+                      // BMI'ye göre diyet tipini belirle
+                      if (bmi < 18.5) {
+                        // Kilo alma için protein ağırlıklı standart diyet
+                        newDiet = "standard";
+                      } else if (bmi >= 25) {
+                        // Kilo verme için düşük karbonhidrat veya standart
+                        if (mealPreferences.diet === "keto" || mealPreferences.diet === "low_carb") {
+                          newDiet = mealPreferences.diet;
+                        } else {
+                          newDiet = "standard";
+                        }
+                      }
+                      
+                      // Kalori hedefi BMI'ye göre hesaplanacak (AI'dan gelen değer)
+                      const newCalories = result.updatedPreferences.calories || "";
+                      
+                      // Yemek tercihlerini güncelle ve diyet başlangıç tarihini kaydet
+                      setMealPreferences(prev => ({
+                        ...prev,
+                        diet: newDiet,
+                        calories: newCalories,
+                        cuisine: result.updatedPreferences?.cuisine || prev.cuisine,
+                        avoid: result.updatedPreferences?.avoid || prev.avoid,
+                        notes: result.updatedPreferences?.notes 
+                          ? (prev.notes ? prev.notes + "\n\n" : "") + result.updatedPreferences.notes
+                          : prev.notes,
+                        diet_start_date: new Date().toISOString(), // Diyet başlangıç tarihi
+                        diet_active: true, // Diyet aktif
+                      }));
+                      
+                      Alert.alert(
+                        "Başarılı",
+                        "Bir aylık diyet programınız hazırlandı ve yemek tercihleriniz otomatik olarak güncellendi:\n\n" +
+                        `• Diyet Tipi: ${newDiet === "standard" ? "Standart" : newDiet}\n` +
+                        `• Günlük Kalori Hedefi: ${newCalories} kcal\n\n` +
+                        "Lütfen değişiklikleri kaydedin."
+                      );
+                    }
+                    
+                    setDietModalVisible(false);
+                    setMonthlyDietApproved(false);
+                  } catch (error: any) {
+                    Alert.alert("Hata", error.message || "Diyet programı oluşturulamadı.");
+                  } finally {
+                    setDietLoading(false);
+                  }
+                }}
+                disabled={dietLoading || !monthlyDietApproved}
+              >
+                {dietLoading ? (
+                  <Text style={styles.btnText}>Hazırlanıyor...</Text>
+                ) : (
+                  <>
+                    <Apple size={20} color="#fff" />
+                    <Text style={styles.btnText}>Onayla ve Oluştur</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.border }]}
+                onPress={() => {
+                  setDietModalVisible(false);
+                  setMonthlyDietApproved(false);
+                }}
+                disabled={dietLoading}
+              >
+                <Text style={[styles.btnText, { color: colors.text }]}>İptal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* DİYET YENİLEME MODAL (30 Gün Sonra) */}
+      <Modal visible={dietRenewalModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.qrCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.qrTitle, { color: colors.text }]}>
+              Diyet Programı Süresi Doldu
+            </Text>
+            <Text style={[styles.qrDesc, { color: colors.textMuted, marginBottom: 20, textAlign: "left" }]}>
+              Bir aylık diyet programınız tamamlandı. Devam etmek istiyor musunuz?
+            </Text>
+            
+            <View style={{ gap: 12, width: "100%" }}>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.primary }]}
+                onPress={async () => {
+                  // Devam et - Yeni BMI hesaplaması yap ve tercihleri güncelle
+                  if (!bmi || !editMember.weight || !editMember.height) {
+                    setDietRenewalModalVisible(false);
+                    return;
+                  }
+                  
+                  setDietLoading(true);
+                  try {
+                    const result = await generateDietPlan({
+                      bmi,
+                      weight: editMember.weight,
+                      height: editMember.height,
+                      gender: editMember.gender,
+                      currentDiet: mealPreferences.diet,
+                      currentCuisine: mealPreferences.cuisine,
+                      currentAvoid: mealPreferences.avoid,
+                    });
+                    
+                    if (result.error || !result.needsDiet) {
+                      Alert.alert("Bilgi", result.message || "Diyet programı oluşturulamadı.");
+                      setDietRenewalModalVisible(false);
+                      setDietLoading(false);
+                      return;
+                    }
+                    
+                    if (result.updatedPreferences) {
+                      let newDiet = result.updatedPreferences.diet || mealPreferences.diet;
+                      if (bmi < 18.5) {
+                        newDiet = "standard";
+                      } else if (bmi >= 25) {
+                        if (mealPreferences.diet === "keto" || mealPreferences.diet === "low_carb") {
+                          newDiet = mealPreferences.diet;
+                        } else {
+                          newDiet = "standard";
+                        }
+                      }
+                      
+                      const newCalories = result.updatedPreferences.calories || "";
+                      
+                      setMealPreferences(prev => ({
+                        ...prev,
+                        diet: newDiet,
+                        calories: newCalories,
+                        cuisine: result.updatedPreferences?.cuisine || prev.cuisine,
+                        avoid: result.updatedPreferences?.avoid || prev.avoid,
+                        notes: result.updatedPreferences?.notes 
+                          ? (prev.notes ? prev.notes + "\n\n" : "") + result.updatedPreferences.notes
+                          : prev.notes,
+                        diet_start_date: new Date().toISOString(), // Yeni başlangıç tarihi
+                        diet_active: true, // Diyet aktif
+                      }));
+                      
+                      Alert.alert(
+                        "Başarılı",
+                        "Diyet programınız yenilendi ve tercihleriniz güncellendi. Lütfen kaydedin."
+                      );
+                    }
+                    
+                    setDietRenewalModalVisible(false);
+                  } catch (error: any) {
+                    Alert.alert("Hata", error.message || "Diyet programı yenilenemedi.");
+                  } finally {
+                    setDietLoading(false);
+                  }
+                }}
+                disabled={dietLoading}
+              >
+                {dietLoading ? (
+                  <Text style={styles.btnText}>Yenileniyor...</Text>
+                ) : (
+                  <>
+                    <Apple size={20} color="#fff" />
+                    <Text style={styles.btnText}>Evet, Devam Et</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.border }]}
+                onPress={() => {
+                  // Diyeti durdur - diet_active'i false yap
+                  setMealPreferences(prev => ({
+                    ...prev,
+                    diet_active: false,
+                    diet_start_date: "",
+                  }));
+                  
+                  Alert.alert(
+                    "Diyet Durduruldu",
+                    "Diyet programı durduruldu. Yemek tercihlerinizi manuel olarak düzenleyebilirsiniz."
+                  );
+                  
+                  setDietRenewalModalVisible(false);
+                }}
+                disabled={dietLoading}
+              >
+                <Text style={[styles.btnText, { color: colors.text }]}>Hayır, Durdur</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* QR MODAL */}
       <Modal visible={qrVisible} transparent animationType="fade">

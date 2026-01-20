@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   SafeAreaView,
+  Switch,
 } from "react-native";
 import {
   LogOut,
@@ -15,12 +16,14 @@ import {
   PawPrint,
   ChevronRight,
   ChevronLeft,
+  Droplet,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPreferences, updatePreferences } from "../../services/settings";
 import SelectionGroup from "../../components/ui/SelectionGroup";
 import { useNavigation } from "@react-navigation/native";
+import { setupWaterRemindersForFamily } from "../../services/waterReminder";
 
 export default function SettingsScreen() {
   const { colors, themeMode, setThemeMode } = useTheme();
@@ -30,6 +33,7 @@ export default function SettingsScreen() {
   const [lang, setLang] = useState("tr");
   const [currency, setCurrency] = useState("TL");
   const [themeColor, setThemeColor] = useState("blue");
+  const [waterReminderEnabled, setWaterReminderEnabled] = useState(false);
 
   const [loading, setLoading] = useState(false);
   useEffect(() => {
@@ -42,16 +46,25 @@ export default function SettingsScreen() {
       setLang(prefs.preferred_language || "tr");
       setCurrency(prefs.preferred_currency || "TL");
       setThemeColor(prefs.theme_color || "blue");
+      setWaterReminderEnabled(prefs.water_reminder_enabled || false);
     }
   };
 
 
   const handleSave = async () => {
     setLoading(true);
+    
+    // Önce su içme hatırlatıcısını ayarla
+    const waterResult = await setupWaterRemindersForFamily(waterReminderEnabled);
+    if (!waterResult.success && waterReminderEnabled) {
+      Alert.alert("Uyarı", waterResult.error || "Su içme hatırlatıcısı ayarlanamadı.");
+    }
+    
     const res = await updatePreferences({
       language: lang,
       currency,
       themeColor,
+      waterReminderEnabled,
     });
     setLoading(false);
     if (res.success) {
@@ -105,6 +118,36 @@ export default function SettingsScreen() {
           selectedValue={themeMode}
           onSelect={(val: any) => setThemeMode(val)}
         />
+
+        {/* Su İçme Hatırlatıcısı */}
+        <View style={{
+          padding: 16,
+          borderRadius: 16,
+          backgroundColor: colors.card,
+          marginTop: 10,
+          borderWidth: 1,
+          borderColor: colors.border,
+        }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+              <Droplet size={24} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 4 }}>
+                  Su İçme Hatırlatıcısı
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                  Herkes için yaşına göre günlük su içme hatırlatıcıları
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={waterReminderEnabled}
+              onValueChange={setWaterReminderEnabled}
+              trackColor={{ false: colors.border, true: colors.primary + "80" }}
+              thumbColor={waterReminderEnabled ? colors.primary : "#f4f3f4"}
+            />
+          </View>
+        </View>
 
         <TouchableOpacity
           style={[styles.saveBtn, { backgroundColor: colors.primary }]}

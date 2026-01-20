@@ -1342,6 +1342,121 @@ Return ONLY the JSON, no other text.`;
   }
 }
 
+// BMI'ye göre bir aylık diyet programı oluştur
+export async function generateDietPlan(input: {
+  bmi: number;
+  weight: number;
+  height: number;
+  gender?: string;
+  currentDiet?: string;
+  currentCuisine?: string;
+  currentAvoid?: string;
+  language?: string;
+}) {
+  try {
+    if (!geminiApiKey) {
+      return { error: "Gemini API key tanımlı değil." };
+    }
+    
+    const lang = resolveMealLanguage(input.language);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    
+    // BMI'ye göre hedef belirle
+    let goal = "";
+    let calorieTarget = "";
+    let dietType = "";
+    
+    if (input.bmi < 18.5) {
+      goal = lang === "English" ? "weight gain" : lang === "Deutsch" ? "Gewichtszunahme" : "kilo alma";
+      // Sağlıklı kilo alma için günlük +300-500 kalori
+      const baseCalories = input.gender === "female" ? 1800 : 2200;
+      calorieTarget = String(baseCalories + 400);
+      dietType = "weight_gain";
+    } else if (input.bmi >= 25) {
+      goal = lang === "English" ? "weight loss" : lang === "Deutsch" ? "Gewichtsverlust" : "kilo verme";
+      // Sağlıklı kilo verme için günlük -500 kalori (hafif açık)
+      const baseCalories = input.gender === "female" ? 1800 : 2200;
+      calorieTarget = String(Math.max(1200, baseCalories - 500));
+      dietType = "weight_loss";
+    } else {
+      // Normal BMI - diyet gerekmez
+      return { 
+        needsDiet: false, 
+        message: lang === "English" 
+          ? "Your BMI is in the healthy range. No special diet plan needed. Maintain your current eating habits."
+          : lang === "Deutsch"
+          ? "Ihr BMI liegt im gesunden Bereich. Kein spezieller Diätplan erforderlich. Behalten Sie Ihre aktuellen Essgewohnheiten bei."
+          : "BMI değeriniz sağlıklı aralıkta. Özel bir diyet programına gerek yok. Mevcut beslenme alışkanlıklarınızı sürdürün."
+      };
+    }
+    
+    const prompt = `You are a nutritionist and dietitian. Respond strictly in ${lang}.
+
+User profile:
+- BMI: ${input.bmi}
+- Weight: ${input.weight} kg
+- Height: ${input.height} cm
+- Gender: ${input.gender || "not specified"}
+- Goal: ${goal}
+- Daily calorie target: ${calorieTarget} kcal
+- Current diet preference: ${input.currentDiet || "standard"}
+- Current cuisine preference: ${input.currentCuisine || "world"}
+- Foods to avoid: ${input.currentAvoid || "none"}
+
+Create a 1-month (30-day) diet plan for ${goal}. The plan should:
+1. Include balanced meals (breakfast, lunch, dinner, snacks)
+2. Respect the calorie target (${calorieTarget} kcal/day)
+3. Consider the user's current diet type (${input.currentDiet || "standard"})
+4. Consider cuisine preferences (${input.currentCuisine || "world"})
+5. Avoid foods listed: ${input.currentAvoid || "none"}
+6. Be realistic and sustainable
+7. Include variety to prevent boredom
+
+Return ONLY a JSON object in this exact format:
+{
+  "diet_plan": {
+    "goal": "${goal}",
+    "daily_calories": ${calorieTarget},
+    "diet_type": "${dietType}",
+    "weekly_meal_suggestions": [
+      {
+        "day": "Monday",
+        "breakfast": "meal name and brief description",
+        "lunch": "meal name and brief description",
+        "dinner": "meal name and brief description",
+        "snacks": "snack suggestions"
+      }
+    ]
+  },
+  "updated_preferences": {
+    "diet": "updated diet type if needed",
+    "calories": "${calorieTarget}",
+    "cuisine": "preferred cuisine",
+    "avoid": "foods to avoid",
+    "notes": "diet plan notes and recommendations"
+  }
+}
+
+Return ONLY the JSON, no other text.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response
+      .text()
+      .replace(/```json|```/g, "")
+      .trim();
+    const parsed = JSON.parse(text);
+    
+    return {
+      needsDiet: true,
+      dietPlan: parsed.diet_plan || null,
+      updatedPreferences: parsed.updated_preferences || null,
+    };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
 export async function getShoppingListItems() {
   try {
     const {
@@ -1370,6 +1485,181 @@ export async function getShoppingListItems() {
     return { items: data || [] };
   } catch (error: any) {
     return { items: [], error: error.message };
+  }
+}
+
+// Diyet programı aktif olan kullanıcılar için bir aylık ihtiyaç listesi kontrolü
+export async function checkDietShoppingNeeds() {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id) return { success: false, error: "Aile bilgisi bulunamadı." };
+
+    // Ailedeki tüm üyeleri getir
+    const { data: members } = await supabase
+      .from("profiles")
+      .select("id, full_name, weight, height, gender, meal_preferences")
+      .eq("family_id", profile.family_id);
+
+    if (!members || members.length === 0) {
+      return { success: true, message: "Aile üyesi bulunamadı." };
+    }
+
+    // Envanteri getir
+    const { data: inventory } = await supabase
+      .from("inventory")
+      .select("product_name, quantity, unit")
+      .eq("family_id", profile.family_id)
+      .eq("is_approved", true);
+
+    const inventoryItems = (inventory || []).map((item: any) => ({
+      product_name: item.product_name,
+      quantity: item.quantity,
+      unit: item.unit,
+    }));
+
+    // Mevcut shopping list'i getir (tekrar eklemeyi önlemek için)
+    const { data: existingShopping } = await supabase
+      .from("shopping_list")
+      .select("product_name")
+      .eq("family_id", profile.family_id)
+      .eq("is_completed", false);
+
+    const existingProductNames = new Set(
+      (existingShopping || []).map((item: any) => normalizeProductName(item.product_name))
+    );
+
+    let totalAdded = 0;
+
+    // Her üye için kontrol et
+    for (const member of members) {
+      const mealPrefs = member.meal_preferences || {};
+      
+      // Diyet aktif mi kontrol et
+      if (!mealPrefs.diet_active || !mealPrefs.diet_start_date) {
+        continue; // Diyet aktif değilse atla
+      }
+
+      // BMI hesapla
+      if (!member.weight || !member.height) {
+        continue; // Kilo/boy yoksa atla
+      }
+
+      const heightInMeters = member.height / 100;
+      const bmi = member.weight / (heightInMeters * heightInMeters);
+
+      // AI ile bir aylık diyet planı için gerekli malzemeleri belirle
+      if (!geminiApiKey) {
+        continue;
+      }
+
+      try {
+        const lang = resolveMealLanguage(mealPrefs.language);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        
+        const goal = bmi < 18.5 ? "weight gain" : bmi >= 25 ? "weight loss" : "maintain";
+        const calorieTarget = mealPrefs.calories || "2000";
+        
+        const prompt = `You are a nutritionist. Respond strictly in ${lang}.
+
+User profile:
+- BMI: ${bmi.toFixed(1)}
+- Weight: ${member.weight} kg
+- Height: ${member.height} cm
+- Goal: ${goal}
+- Daily calorie target: ${calorieTarget} kcal
+- Diet type: ${mealPrefs.diet || "standard"}
+- Cuisine preference: ${mealPrefs.cuisine || "world"}
+- Foods to avoid: ${mealPrefs.avoid || "none"}
+
+Current inventory:
+${inventoryItems.map((item: any) => `${item.product_name} (${item.quantity} ${item.unit})`).join("\n") || "No items"}
+
+Based on a 1-month diet plan for this user, list ALL ingredients needed that are NOT in the inventory.
+Return ONLY a JSON array of product names (general names, in Turkish if ${lang === "Türkçe"}):
+["product1", "product2", "product3", ...]
+
+Return ONLY the JSON array, no other text.`;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response
+          .text()
+          .replace(/```json|```/g, "")
+          .trim();
+        
+        let neededProducts: string[] = [];
+        try {
+          const parsed = JSON.parse(text);
+          neededProducts = Array.isArray(parsed) 
+            ? parsed.map((p: any) => String(p).trim()).filter(Boolean)
+            : [];
+        } catch (parseError) {
+          // JSON parse hatası - metinden ürün isimlerini çıkarmaya çalış
+          const lines = text.split("\n").filter((line: string) => line.trim());
+          neededProducts = lines
+            .map((line: string) => line.replace(/^[-•*]\s*/, "").trim())
+            .filter((line: string) => line.length > 2);
+        }
+
+        // Shopping list'e ekle (sadece listede olmayanlar)
+        for (const productName of neededProducts) {
+          const normalizedName = normalizeProductName(productName);
+          
+          // Zaten listede var mı kontrol et
+          if (existingProductNames.has(normalizedName)) {
+            continue;
+          }
+
+          // Envanterde var mı kontrol et
+          const inInventory = inventoryItems.some((item: any) =>
+            isProductMatch(item.product_name, productName)
+          );
+          
+          if (inInventory) {
+            continue; // Envanterde varsa ekleme
+          }
+
+          // Shopping list'e ekle
+          await supabase.from("shopping_list").insert({
+            family_id: profile.family_id,
+            product_name: productName,
+            quantity: 1,
+            unit: "adet",
+            market_name: null,
+            is_urgent: false,
+            is_completed: false,
+            is_checked: false,
+            added_by: user.id,
+            created_at: new Date().toISOString(),
+            meta: JSON.stringify({ source: "diet_plan", member_id: member.id }),
+          });
+
+          existingProductNames.add(normalizedName);
+          totalAdded++;
+        }
+      } catch (aiError: any) {
+        console.warn(`AI ile malzeme listesi oluşturulamadı (${member.full_name}):`, aiError);
+        continue;
+      }
+    }
+
+    return {
+      success: true,
+      message: `${totalAdded} ürün ihtiyaç listesine eklendi.`,
+      addedCount: totalAdded,
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 

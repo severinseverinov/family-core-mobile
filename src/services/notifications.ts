@@ -3,16 +3,53 @@ import * as Device from "expo-device";
 import { Platform } from "react-native";
 import { supabase } from "./supabase"; //
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Bildirimlerin nasıl görüneceğini ayarla
+// Su içme hatırlatıcısı için bildirim kategorisi
+Notifications.setNotificationCategoryAsync("water_reminder", [
+  {
+    identifier: "drank",
+    buttonTitle: "İçtim",
+    options: {
+      opensAppToForeground: false,
+    },
+  },
+]);
+
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    // Su içme bildirimi için "içildi" kontrolü
+    const data = notification.request.content.data;
+    if (data?.type === "water_reminder" && data?.memberId && data?.timeSlot) {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const drankKey = `water_drank_slot_${data.memberId}_${today}_${data.timeSlot}`;
+        const drank = await AsyncStorage.getItem(drankKey);
+        
+        // Eğer bugün bu zaman dilimi için su içildiyse bildirimi gösterme
+        if (drank === "true") {
+          return {
+            shouldShowAlert: false,
+            shouldPlaySound: false,
+            shouldSetBadge: false,
+            shouldShowBanner: false,
+            shouldShowList: false,
+          };
+        }
+      } catch (e) {
+        // Hata durumunda bildirimi göster
+      }
+    }
+    
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  },
 });
 
 export async function registerForPushNotificationsAsync() {

@@ -9,7 +9,7 @@ export async function getPreferences() {
   const { data } = await supabase
     .from("profiles")
     .select(
-      "preferred_language, preferred_currency, theme_color, gender, meal_settings, meal_preferences"
+      "preferred_language, preferred_currency, theme_color, gender, meal_settings, meal_preferences, water_reminder_enabled"
     )
     .eq("id", user.id)
     .single();
@@ -24,6 +24,7 @@ export async function updatePreferences(updates: {
   gender?: string;
   mealSettings?: any;
   mealPreferences?: any;
+  waterReminderEnabled?: boolean;
   userIdOverride?: string;
 }) {
   const {
@@ -41,6 +42,7 @@ export async function updatePreferences(updates: {
       gender: updates.gender,
       meal_settings: updates.mealSettings,
       meal_preferences: updates.mealPreferences,
+      water_reminder_enabled: updates.waterReminderEnabled,
     })
     .eq("id", targetUserId);
 

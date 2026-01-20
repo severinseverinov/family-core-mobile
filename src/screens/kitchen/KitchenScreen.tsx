@@ -56,11 +56,13 @@ import {
   endMealPoll,
   updateMealPoll,
   reduceInventoryQuantity,
+  checkDietShoppingNeeds,
 } from "../../services/kitchen";
 import { getFamilyMembers } from "../../services/family";
 import { getPreferences } from "../../services/settings";
 import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import ModernInput from "../../components/ui/ModernInput";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function KitchenScreen({ navigation, route }: any) {
   const { colors, themeMode } = useTheme();
@@ -196,7 +198,34 @@ export default function KitchenScreen({ navigation, route }: any) {
     useCallback(() => {
       loadMealSettings();
       getActiveMealPoll().then(res => setActiveMealPoll(res?.poll || null));
-    }, [])
+      
+      // Diyet programı aktif olanlar için ihtiyaç listesi kontrolü (haftalık)
+      const checkDietNeeds = async () => {
+        try {
+          if (!profile?.family_id) return;
+          
+          const lastCheckKey = `diet_shopping_check_${profile.family_id}`;
+          const lastCheckDate = await AsyncStorage.getItem(lastCheckKey);
+          const now = new Date();
+          const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          
+          // Son kontrol 1 haftadan eskiyse veya hiç yapılmamışsa kontrol et
+          if (!lastCheckDate || new Date(lastCheckDate) < oneWeekAgo) {
+            const result = await checkDietShoppingNeeds();
+            if (result.success && result.addedCount && result.addedCount > 0) {
+              // Sessizce ekle, kullanıcıya bildirim gösterme (arka planda çalışır)
+              console.log(`Diyet ihtiyaç listesi: ${result.addedCount} ürün eklendi`);
+            }
+            // Son kontrol tarihini kaydet
+            await AsyncStorage.setItem(lastCheckKey, now.toISOString());
+          }
+        } catch (error) {
+          console.warn("Diyet ihtiyaç listesi kontrolü hatası:", error);
+        }
+      };
+      
+      checkDietNeeds();
+    }, [profile?.family_id])
   );
   const resolveEndAt = (timeValue: string) => {
     if (!timeValue) return null;
