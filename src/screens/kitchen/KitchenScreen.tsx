@@ -39,6 +39,7 @@ import {
   analyzeReceiptMobile,
   findMatchingShoppingItems,
   isProductMatch,
+  normalizeProductName,
   removeShoppingItemsByIds,
   getShoppingListItems,
   generateMealSuggestionsAI,
@@ -380,7 +381,7 @@ export default function KitchenScreen({ navigation, route }: any) {
     return selected;
   };
 
-  const handleAddMissingItems = async (missing: string[], mealTitle: string, showUrgentOption: boolean = false) => {
+  const handleAddMissingItems = async (missing: string[], mealTitle: string, showUrgentOption: boolean = false, forceUrgent: boolean = false) => {
     if (!missing || missing.length === 0) {
       Alert.alert("Bilgi", "Eksik malzeme bulunmuyor.");
       return;
@@ -421,6 +422,46 @@ export default function KitchenScreen({ navigation, route }: any) {
     }
     message += `${toAdd.join(", ")} listeye eklensin mi?`;
     
+    // Eğer forceUrgent true ise, direkt acil olarak ekle
+    if (forceUrgent) {
+      // Ekle butonuna basıldığında tekrar kontrol et
+      const finalCheck = await findMatchingShoppingItems(toAdd);
+      const finalMatches = finalCheck?.matches || [];
+      
+      const finalToAdd = toAdd.filter(name => {
+        const hasMatch = finalMatches.some((item: any) => 
+          isProductMatch(name, item.product_name)
+        );
+        return !hasMatch;
+      });
+      
+      if (finalToAdd.length === 0) {
+        Alert.alert("Bilgi", "Tüm ürünler zaten listede.");
+        setAddedToShoppingList(prev => {
+          const newSet = new Set(prev);
+          newSet.add(mealTitle);
+          return newSet;
+        });
+        return;
+      }
+      
+      for (const name of finalToAdd) {
+        // Genel isimle ekle (normalize edilmiş)
+        const normalizedName = normalizeProductName(name);
+        // Eğer normalize edilmiş isim boşsa, orijinal ismi kullan
+        const finalName = normalizedName || name;
+        await addShoppingItem(finalName, 1, "adet", undefined, true);
+      }
+      Alert.alert("Başarılı", `${finalToAdd.length} ürün listeye acil olarak eklendi.`);
+      setAddedToShoppingList(prev => {
+        const newSet = new Set(prev);
+        newSet.add(mealTitle);
+        return newSet;
+      });
+      loadData();
+      return;
+    }
+    
     if (showUrgentOption) {
       Alert.alert(
         "Eksik malzemeleri ekle",
@@ -447,7 +488,11 @@ export default function KitchenScreen({ navigation, route }: any) {
               }
               
               for (const name of finalToAdd) {
-                await addShoppingItem(name, 1, "adet", undefined, false);
+                // Genel isimle ekle (normalize edilmiş)
+                const normalizedName = normalizeProductName(name);
+                // Eğer normalize edilmiş isim boşsa, orijinal ismi kullan
+                const finalName = normalizedName || name;
+                await addShoppingItem(finalName, 1, "adet", undefined, false);
               }
               Alert.alert("Başarılı", `${finalToAdd.length} ürün listeye eklendi.`);
               setAddedToShoppingList(prev => {
@@ -479,7 +524,11 @@ export default function KitchenScreen({ navigation, route }: any) {
               }
               
               for (const name of finalToAdd) {
-                await addShoppingItem(name, 1, "adet", undefined, true);
+                // Genel isimle ekle (normalize edilmiş)
+                const normalizedName = normalizeProductName(name);
+                // Eğer normalize edilmiş isim boşsa, orijinal ismi kullan
+                const finalName = normalizedName || name;
+                await addShoppingItem(finalName, 1, "adet", undefined, true);
               }
               Alert.alert("Başarılı", `${finalToAdd.length} ürün listeye acil olarak eklendi.`);
               setAddedToShoppingList(prev => {
@@ -534,9 +583,9 @@ export default function KitchenScreen({ navigation, route }: any) {
     }
   };
 
-  const handleOpenRecipeConfirm = (title: string, missing: string[]) => {
+  const handleOpenRecipeConfirm = (title: string, missing: string[], recipe?: string) => {
     // Sadece tarif göster
-    navigation.navigate("Recipe", { title, showCookingButton: false });
+    navigation.navigate("Recipe", { title, showCookingButton: false, recipe, missingItems: missing });
   };
 
   const detectMealType = (title: string, suggestions: string[], extraNotes?: string): "cook" | "delivery" | "restaurant" => {
@@ -558,7 +607,7 @@ export default function KitchenScreen({ navigation, route }: any) {
     return "cook";
   };
 
-  const handleStartCooking = (title: string, missing: string[]) => {
+  const handleStartCooking = (title: string, missing: string[], recipe?: string) => {
     const inventoryNames = (data?.items || []).map((item: any) =>
       String(item.product_name || "").toLowerCase()
     );
@@ -586,13 +635,13 @@ export default function KitchenScreen({ navigation, route }: any) {
           {
             text: "Onayla",
             onPress: () => {
-              navigation.navigate("Recipe", { title, showCookingButton: true });
+              navigation.navigate("Recipe", { title, showCookingButton: true, recipe, missingItems: missing });
             },
           },
         ]
       );
     } else {
-      navigation.navigate("Recipe", { title, showCookingButton: true });
+      navigation.navigate("Recipe", { title, showCookingButton: true, recipe, missingItems: missing });
     }
   };
   const resetMealSectionState = () => {
@@ -1471,7 +1520,10 @@ export default function KitchenScreen({ navigation, route }: any) {
                           <View style={styles.selectionList}>
                             {suggestionsToShow.map((item: any, idx: number) => {
                               const optionTitle = item.title || item;
-                              const missingItems = item.missing || [];
+                              // missingItems'ı daha güvenli bir şekilde al
+                              const missingItems = Array.isArray(item.missing) ? item.missing : (item.missingItems || []);
+                              // recipe bilgisini al
+                              const recipe = item.recipe || "";
                               const voteEntry = votes[optionTitle] || {};
                               const voteCount = voteEntry.count || 0;
                               const votedMemberIds = voteEntry.memberIds || [];
@@ -1656,7 +1708,7 @@ export default function KitchenScreen({ navigation, route }: any) {
                                               { borderColor: colors.border },
                                             ]}
                                             onPress={() =>
-                                              handleOpenRecipeConfirm(optionTitle, missingItems)
+                                              handleOpenRecipeConfirm(optionTitle, missingItems, recipe)
                                             }
                                           >
                                             <Text
@@ -1675,24 +1727,31 @@ export default function KitchenScreen({ navigation, route }: any) {
                                               { backgroundColor: colors.primary },
                                             ]}
                                             onPress={() =>
-                                              handleStartCooking(optionTitle, missingItems)
+                                              handleStartCooking(optionTitle, missingItems, recipe)
                                             }
                                           >
                                             <Text style={styles.mealActionTextPrimary}>
                                               Yemeğe Başla
                                             </Text>
                                           </TouchableOpacity>
-                                          {missingItems.length > 0 && !addedToShoppingList.has(optionTitle) && (
+                                          {Array.isArray(missingItems) && missingItems.length > 0 && !addedToShoppingList.has(optionTitle) && (
                                             <TouchableOpacity
                                               style={[
                                                 styles.mealActionBtn,
                                                 styles.mealActionPrimary,
                                                 { backgroundColor: colors.primary },
                                               ]}
-                                              onPress={() => handleAddMissingItems(missingItems, optionTitle, true)}
+                                              onPress={() => {
+                                                // Manuel anketten gelen yemek için direkt acil olarak ekle
+                                                // Manuel anketten gelen yemekler genelde AI önerilerinden farklı bir yapıda olur
+                                                // Eğer suggestion'da recipe yoksa veya missing yoksa, manuel anketten gelmiş olabilir
+                                                const suggestion = activeMealPoll?.suggestions?.find((s: any) => s.title === optionTitle);
+                                                const isManualPoll = !suggestion?.recipe || !suggestion?.missing || suggestion.missing.length === 0;
+                                                handleAddMissingItems(missingItems, optionTitle, true, isManualPoll);
+                                              }}
                                             >
                                               <Text style={styles.mealActionTextPrimary}>
-                                                Listeye ekle
+                                                İstek listesine ekle
                                               </Text>
                                             </TouchableOpacity>
                                           )}
@@ -1710,7 +1769,16 @@ export default function KitchenScreen({ navigation, route }: any) {
                                                   { text: "Vazgeç", style: "cancel" },
                                                   {
                                                     text: "Onayla",
-                                                    onPress: () => {
+                                                    onPress: async () => {
+                                                      // Aktif anketi kapat (veritabanında)
+                                                      if (activeMealPoll?.id) {
+                                                        try {
+                                                          // Yemek hazır olduğunda anketi sil (skipOwnerCheck: true)
+                                                          await deleteMealPoll(activeMealPoll.id, true);
+                                                        } catch (error) {
+                                                          console.error("Anket kapatma hatası:", error);
+                                                        }
+                                                      }
                                                       Alert.alert("Afiyet olsun", "", [
                                                         {
                                                           text: "Tamam",
@@ -2599,13 +2667,6 @@ export default function KitchenScreen({ navigation, route }: any) {
                 </Text>
               )}
 
-              <ModernInput
-                label="Ekstra ankete eklemek istedikleriniz"
-                value={publishExtraNotes}
-                onChangeText={setPublishExtraNotes}
-                placeholder="Örn: Dışarıdan..."
-                multiline
-              />
               <Text style={[styles.modalHint, { color: colors.textMuted, marginBottom: 8 }]}>
                 Anket bitiş saati (yerel)
               </Text>
@@ -2667,23 +2728,8 @@ export default function KitchenScreen({ navigation, route }: any) {
                       .flatMap(item => item.missing || [])
                       .filter(Boolean);
                     
-                    // Ekstra notlardan seçenekleri parse et (virgülle ayrılmış)
-                    let extraOptions = publishExtraNotes
-                      .split(",")
-                      .map(v => v.trim())
-                      .filter(Boolean)
-                      .map(title => ({ title, missing: [] }));
-                    
-                    // Eğer hiç AI önerisi seçilmemişse ve ekstra notlar tek bir seçenek içeriyorsa, otomatik ekle
-                    if (selections.length === 0 && publishExtraNotes.trim() && extraOptions.length === 0) {
-                      extraOptions = [{ title: publishExtraNotes.trim(), missing: [] }];
-                    }
-                    
-                    // Tüm seçenekleri birleştir (AI önerileri + ekstra seçenekler)
-                    const allSuggestions = [...selections, ...extraOptions];
-                    
-                    // En az bir seçenek olmalı (AI önerisi veya ekstra seçenek)
-                    if (allSuggestions.length === 0) {
+                    // En az bir seçenek olmalı
+                    if (selections.length === 0) {
                       Alert.alert("Hata", "En az bir anket seçeneği gerekli.");
                       return;
                     }
@@ -2693,9 +2739,9 @@ export default function KitchenScreen({ navigation, route }: any) {
                     
                     const createRes = await createMealPoll({
                       title: "Yemek anketi",
-                      suggestions: allSuggestions,
+                      suggestions: selections,
                       missingItems: missing,
-                      extraNotes: publishExtraNotes,
+                      extraNotes: "",
                       endAt,
                       audience: pollAudience,
                       memberIds: pollMemberIds,

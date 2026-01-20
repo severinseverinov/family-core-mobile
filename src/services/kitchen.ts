@@ -11,7 +11,7 @@ function getCurrentMonthKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function normalizeProductName(value: string) {
+export function normalizeProductName(value: string) {
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
@@ -373,6 +373,8 @@ export async function getActiveMealPoll() {
       .select("*")
       .eq("family_id", profile.family_id)
       .eq("is_active", true)
+      .eq("is_approved", false) // Onaylanmamış anketleri getir
+      .is("approved_meal", null) // Onaylanmamış anketleri getir
       .or(`end_at.is.null,end_at.gte.${nowIso}`)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -382,13 +384,15 @@ export async function getActiveMealPoll() {
       console.error("getActiveMealPoll query error:", queryError);
     }
 
-    // Eğer aktif anket yoksa, sonlandırılmış son anketi getir
+    // Eğer aktif anket yoksa, sonlandırılmış son anketi getir (onaylanmamış olanları)
     if (!data) {
       const { data: lastPoll } = await supabase
         .from("meal_polls")
         .select("*")
         .eq("family_id", profile.family_id)
         .eq("is_active", false)
+        .eq("is_approved", false) // Onaylanmamış anketleri getir
+        .is("approved_meal", null) // Onaylanmamış anketleri getir
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -721,7 +725,7 @@ export async function approveMealPoll(pollId: string) {
   }
 }
 
-export async function deleteMealPoll(pollId: string) {
+export async function deleteMealPoll(pollId: string, skipOwnerCheck: boolean = false) {
   try {
     const {
       data: { user },
@@ -730,7 +734,7 @@ export async function deleteMealPoll(pollId: string) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("family_id")
+      .select("family_id, role")
       .eq("id", user.id)
       .single();
 
@@ -744,8 +748,13 @@ export async function deleteMealPoll(pollId: string) {
       .single();
 
     if (!poll) return { error: "Anket bulunamadı." };
-    if (poll.created_by !== user.id) {
-      return { error: "Bu anketi sadece oluşturan kişi silebilir." };
+    
+    // Eğer skipOwnerCheck false ise ve kullanıcı anketi oluşturan kişi değilse, 
+    // sadece owner/admin ise silme izni ver
+    if (!skipOwnerCheck && poll.created_by !== user.id) {
+      if (!["owner", "admin"].includes(profile.role || "")) {
+        return { error: "Bu anketi sadece oluşturan kişi veya yönetici silebilir." };
+      }
     }
 
     const { error } = await supabase
@@ -1245,7 +1254,7 @@ export async function analyzeReceiptMobile(base64Image: string) {
     if (!geminiApiKey) {
       return { error: "Gemini API key tanımlı değil." };
     }
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" }); // Not: gemini-2.5-flash henüz genel erişimde olmayabilir, stabilite için 1.5-flash önerilir.
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Not: gemini-2.5-flash henüz genel erişimde olmayabilir, stabilite için 1.5-flash önerilir.
     const prompt = `Bu bir market fişi. Lütfen fişteki ürünleri, fiyatları ve toplam tutarı analiz et.
       Sadece saf JSON formatında şu yapıda veri döndür:
       {

@@ -21,6 +21,8 @@ export default function TestRecipeScreen({ navigation, route }: any) {
   const isLight = themeMode === "light";
   const title = route?.params?.title || "Tavuk sote";
   const showCookingButton = route?.params?.showCookingButton !== false; // Default true
+  const recipeText = route?.params?.recipe || "";
+  const missingItems = route?.params?.missingItems || [];
 
   const [cookingActive, setCookingActive] = useState(false);
   const [cookingElapsed, setCookingElapsed] = useState(0);
@@ -29,18 +31,33 @@ export default function TestRecipeScreen({ navigation, route }: any) {
   const cookingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cookingNotifIdsRef = useRef<string[]>([]);
 
-  const cookingSteps = useMemo(
-    () => [
+  // Recipe'yi parse et ve cookingSteps'e çevir
+  const cookingSteps = useMemo(() => {
+    if (recipeText) {
+      // Recipe metnini satırlara böl ve her satırı bir adım olarak kabul et
+      const lines = recipeText.split('\n').filter((line: string) => line.trim());
+      return lines.map((line: string, index: number) => {
+        // Her adım için varsayılan süre (5 dakika)
+        // Eğer satırda dakika bilgisi varsa onu kullan
+        const minuteMatch = line.match(/(\d+)\s*(?:dakika|dk|minute|min)/i);
+        const seconds = minuteMatch ? parseInt(minuteMatch[1]) * 60 : 300;
+        return {
+          title: line.trim(),
+          seconds: seconds,
+        };
+      });
+    }
+    // Fallback: Eğer recipe yoksa varsayılan adımları kullan
+    return [
       { title: "Tavukları yüksek ateşte sotele", seconds: 300 },
       { title: "Soğan ve biberi ekle", seconds: 300 },
       { title: "Baharatla ve 2-3 dk pişir", seconds: 180 },
       { title: "Ocaktan al ve servis et", seconds: 0 },
-    ],
-    []
-  );
+    ];
+  }, [recipeText]);
 
   const getCookingTotalSeconds = () =>
-    cookingSteps.reduce((acc, step) => acc + step.seconds, 0);
+    cookingSteps.reduce((acc: number, step: any) => acc + step.seconds, 0);
 
   const getStepIndexByElapsed = (elapsed: number) => {
     let acc = 0;
@@ -122,13 +139,23 @@ export default function TestRecipeScreen({ navigation, route }: any) {
 
     let accSeconds = 0;
     const notifIds: string[] = [];
+    
+    // Her adımın sonunda bildirim gönder
     for (let i = 0; i < cookingSteps.length; i += 1) {
       const step = cookingSteps[i];
+      accSeconds += step.seconds;
+      
+      // Adımın sonunda bildirim gönder
       const triggerSeconds = Math.max(1, accSeconds);
+      const nextStep = cookingSteps[i + 1];
+      const bodyText = nextStep
+        ? `Adım ${i + 1} tamamlandı. Şimdi: ${nextStep.title}`
+        : "Tüm adımlar tamamlandı!";
+      
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: "Mutfak asistanı",
-          body: `Şimdi: ${step.title}`,
+          body: bodyText,
           sound: "default",
         },
         trigger: {
@@ -138,8 +165,9 @@ export default function TestRecipeScreen({ navigation, route }: any) {
         } as Notifications.TimeIntervalTriggerInput,
       });
       notifIds.push(id);
-      accSeconds += step.seconds;
     }
+    
+    // Yemek hazır bildirimi
     const finishId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Mutfak asistanı",
@@ -310,20 +338,31 @@ export default function TestRecipeScreen({ navigation, route }: any) {
                 Malzemeler
               </Text>
               <View style={styles.recipeList}>
-                {[
-                  "300g tavuk göğsü",
-                  "1 adet soğan",
-                  "1 adet yeşil biber",
-                  "1 yemek kaşığı yağ",
-                  "Tuz, karabiber",
-                ].map(item => (
-                  <Text
-                    key={item}
-                    style={[styles.recipeListItem, { color: colors.textMuted }]}
-                  >
-                    • {item}
-                  </Text>
-                ))}
+                {missingItems.length > 0 ? (
+                  missingItems.map((item: string, index: number) => (
+                    <Text
+                      key={index}
+                      style={[styles.recipeListItem, { color: colors.textMuted }]}
+                    >
+                      • {item}
+                    </Text>
+                  ))
+                ) : (
+                  [
+                    "300g tavuk göğsü",
+                    "1 adet soğan",
+                    "1 adet yeşil biber",
+                    "1 yemek kaşığı yağ",
+                    "Tuz, karabiber",
+                  ].map(item => (
+                    <Text
+                      key={item}
+                      style={[styles.recipeListItem, { color: colors.textMuted }]}
+                    >
+                      • {item}
+                    </Text>
+                  ))
+                )}
               </View>
             </View>
             <View
@@ -336,31 +375,53 @@ export default function TestRecipeScreen({ navigation, route }: any) {
                 Yapılışı
               </Text>
               <View style={styles.recipeSteps}>
-                {[
-                  "Tavukları kuşbaşı doğrayıp sotele.",
-                  "Soğan ve biberi ekleyip yumuşayana kadar pişir.",
-                  "Baharatları ekleyip 2-3 dk daha karıştır.",
-                ].map((step, idx) => (
-                  <View key={step} style={styles.recipeStepRow}>
-                    <View
-                      style={[
-                        styles.recipeStepIndex,
-                        { borderColor: colors.border },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.recipeStepIndexText, { color: colors.text }]}
+                {recipeText ? (
+                  recipeText.split('\n').filter((line: string) => line.trim()).map((step: string, idx: number) => (
+                    <View key={idx} style={styles.recipeStepRow}>
+                      <View
+                        style={[
+                          styles.recipeStepIndex,
+                          { borderColor: colors.border },
+                        ]}
                       >
-                        {idx + 1}
+                        <Text
+                          style={[styles.recipeStepIndexText, { color: colors.text }]}
+                        >
+                          {idx + 1}
+                        </Text>
+                      </View>
+                      <Text style={[styles.recipeStepText, { color: colors.text }]}>
+                        {step.trim()}
                       </Text>
                     </View>
-                    <Text
-                      style={[styles.recipeStepText, { color: colors.textMuted }]}
-                    >
-                      {step}
-                    </Text>
-                  </View>
-                ))}
+                  ))
+                ) : (
+                  [
+                    "Tavukları kuşbaşı doğrayıp sotele.",
+                    "Soğan ve biberi ekleyip yumuşayana kadar pişir.",
+                    "Baharatları ekleyip 2-3 dk daha karıştır.",
+                  ].map((step: string, idx: number) => (
+                    <View key={step} style={styles.recipeStepRow}>
+                      <View
+                        style={[
+                          styles.recipeStepIndex,
+                          { borderColor: colors.border },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.recipeStepIndexText, { color: colors.text }]}
+                        >
+                          {idx + 1}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[styles.recipeStepText, { color: colors.textMuted }]}
+                      >
+                        {step}
+                      </Text>
+                    </View>
+                  ))
+                )}
               </View>
             </View>
             <View
@@ -373,11 +434,13 @@ export default function TestRecipeScreen({ navigation, route }: any) {
                 Pişirme asistanı
               </Text>
               <Text
-                style={[styles.recipeAssistantText, { color: colors.textMuted }]}
+                style={[styles.recipeAssistantText, { color: colors.textMuted, marginBottom: 16 }]}
               >
                 Ekran kapalıyken hatırlatma için bildirimle uyarır.
               </Text>
-              <View style={styles.recipeAssistantRow}>
+              
+              {/* Toplam süre bilgisi */}
+              <View style={[styles.recipeAssistantRow, { marginBottom: 16 }]}>
                 <View style={styles.recipeAssistantInfo}>
                   <Text
                     style={[
@@ -385,10 +448,10 @@ export default function TestRecipeScreen({ navigation, route }: any) {
                       { color: colors.textMuted },
                     ]}
                   >
-                    Şu an
+                    Toplam süre
                   </Text>
                   <Text style={[styles.recipeAssistantValue, { color: colors.text }]}>
-                    {cookingActive ? currentCookingStep.title : "Hazır"}
+                    {formatTimer(cookingTotalSeconds)}
                   </Text>
                 </View>
                 <View style={styles.recipeAssistantInfo}>
@@ -398,22 +461,7 @@ export default function TestRecipeScreen({ navigation, route }: any) {
                       { color: colors.textMuted },
                     ]}
                   >
-                    Adım kalan
-                  </Text>
-                  <Text style={[styles.recipeAssistantValue, { color: colors.text }]}>
-                    {cookingActive
-                      ? formatTimer(currentStepRemainingSeconds)
-                      : formatTimer(cookingSteps[0].seconds)}
-                  </Text>
-                </View>
-                <View style={styles.recipeAssistantInfo}>
-                  <Text
-                    style={[
-                      styles.recipeAssistantLabel,
-                      { color: colors.textMuted },
-                    ]}
-                  >
-                    Toplam kalan
+                    {cookingActive ? "Kalan süre" : "Başlamak için"}
                   </Text>
                   <Text style={[styles.recipeAssistantValue, { color: colors.text }]}>
                     {cookingActive
@@ -421,6 +469,114 @@ export default function TestRecipeScreen({ navigation, route }: any) {
                       : formatTimer(cookingTotalSeconds)}
                   </Text>
                 </View>
+              </View>
+
+              {/* Adımlar listesi */}
+              <View style={{ marginBottom: 16 }}>
+                <Text style={[styles.recipeAssistantLabel, { color: colors.textMuted, marginBottom: 12 }]}>
+                  Adımlar
+                </Text>
+                {cookingSteps.map((step: any, index: number) => {
+                  const stepStartTime = cookingSteps.slice(0, index).reduce((acc: number, s: any) => acc + s.seconds, 0);
+                  const stepEndTime = stepStartTime + step.seconds;
+                  const isActive = cookingActive && cookingStepIndex === index;
+                  const isCompleted = cookingActive && cookingStepIndex > index;
+                  const isCurrentStep = cookingActive && cookingElapsed >= stepStartTime && cookingElapsed < stepEndTime;
+                  
+                  return (
+                    <View
+                      key={index}
+                      style={[
+                        {
+                          flexDirection: "row",
+                          alignItems: "center",
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          marginBottom: 8,
+                          borderRadius: 8,
+                          backgroundColor: isActive || isCurrentStep
+                            ? colors.primary + "15"
+                            : isCompleted
+                            ? colors.surface
+                            : "transparent",
+                          borderWidth: 1,
+                          borderColor: isActive || isCurrentStep
+                            ? colors.primary
+                            : colors.border,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          backgroundColor: isCompleted
+                            ? colors.primary
+                            : isActive || isCurrentStep
+                            ? colors.primary
+                            : colors.surface,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 12,
+                        }}
+                      >
+                        {isCompleted ? (
+                          <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 14 }}>
+                            ✓
+                          </Text>
+                        ) : (
+                          <Text
+                            style={{
+                              color: isActive || isCurrentStep ? "#fff" : colors.textMuted,
+                              fontWeight: "bold",
+                              fontSize: 14,
+                            }}
+                          >
+                            {index + 1}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            color: isActive || isCurrentStep ? colors.primary : colors.text,
+                            fontWeight: isActive || isCurrentStep ? "600" : "400",
+                            fontSize: 14,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {step.title}
+                        </Text>
+                        <Text
+                          style={{
+                            color: colors.textMuted,
+                            fontSize: 12,
+                          }}
+                        >
+                          {formatTimer(step.seconds)}
+                        </Text>
+                      </View>
+                      {(isActive || isCurrentStep) && (
+                        <View style={{ marginLeft: 8 }}>
+                          <Text
+                            style={{
+                              color: colors.primary,
+                              fontWeight: "600",
+                              fontSize: 12,
+                            }}
+                          >
+                            {formatTimer(
+                              cookingActive
+                                ? Math.max(0, stepEndTime - cookingElapsed)
+                                : step.seconds
+                            )}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
               {showCookingButton && (
                 <View style={styles.recipeAssistantActions}>
