@@ -119,35 +119,6 @@ export default function SettingsScreen() {
           onSelect={(val: any) => setThemeMode(val)}
         />
 
-        {/* Su İçme Hatırlatıcısı */}
-        <View style={{
-          padding: 16,
-          borderRadius: 16,
-          backgroundColor: colors.card,
-          marginTop: 10,
-          borderWidth: 1,
-          borderColor: colors.border,
-        }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
-              <Droplet size={24} color={colors.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 4 }}>
-                  Su İçme Hatırlatıcısı
-                </Text>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>
-                  Herkes için yaşına göre günlük su içme hatırlatıcıları
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={waterReminderEnabled}
-              onValueChange={setWaterReminderEnabled}
-              trackColor={{ false: colors.border, true: colors.primary + "80" }}
-              thumbColor={waterReminderEnabled ? colors.primary : "#f4f3f4"}
-            />
-          </View>
-        </View>
 
         <TouchableOpacity
           style={[styles.saveBtn, { backgroundColor: colors.primary }]}
