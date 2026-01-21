@@ -12,6 +12,7 @@ import {
   TextInput,
   Switch,
   Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -45,12 +46,35 @@ import {
   UtensilsCrossed,
   Dumbbell,
   Settings,
+  Camera,
+  Image as ImageIcon,
 } from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
+import { Image } from "react-native";
 import { getMemberById, FamilyMember, updateMemberDetails } from "../../services/family";
 import { getPreferences, updatePreferences } from "../../services/settings";
-import { setupWaterRemindersForFamily } from "../../services/waterReminder";
+import {
+  setupWaterRemindersForFamily,
+  calculateDailyWaterNeed,
+  calculateAge,
+} from "../../services/waterReminder";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ModernInput from "../../components/ui/ModernInput";
+import Svg, { Circle as SvgCircle } from "react-native-svg";
+import {
+  getOrCreateDailyTracking,
+  setDailyTracking,
+  getDailyTrackingRange,
+  DailyTrackingData,
+  logWaterIntake,
+  logCalories,
+  logExercise,
+  getDailyTrackingLogs,
+  DailyTrackingLog,
+  calculateCaloriesFromFoodName,
+  getFoodDetailsWithCalories,
+  analyzeFoodFromImage,
+} from "../../services/dailyTracking";
 
 export default function ActiveDietScreen({ navigation }: any) {
   const { colors, themeMode } = useTheme();
@@ -68,17 +92,63 @@ export default function ActiveDietScreen({ navigation }: any) {
   const [waterReminderEnabled, setWaterReminderEnabled] = useState(false);
   const [savingWaterReminder, setSavingWaterReminder] = useState(false);
   const [viewMode, setViewMode] = useState<"daily" | "monthly">("monthly");
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [dailyData, setDailyData] = useState<{
+    water: number;
+    calories: number;
+    exercise: { duration: number; calories: number };
+  } | null>(null);
+  const [caloriesModalVisible, setCaloriesModalVisible] = useState(false);
+  const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
+  const [foodNameInput, setFoodNameInput] = useState("");
+  const [drinkNameInput, setDrinkNameInput] = useState("");
+  const [foodCaloriesInput, setFoodCaloriesInput] = useState("");
+  const [drinkCaloriesInput, setDrinkCaloriesInput] = useState("");
+  const [calculatingCalories, setCalculatingCalories] = useState(false);
+  const [exerciseDurationInput, setExerciseDurationInput] = useState("");
+  const [exerciseCaloriesInput, setExerciseCaloriesInput] = useState("");
+  const [savingActivity, setSavingActivity] = useState(false);
+  const [dailyLogs, setDailyLogs] = useState<DailyTrackingLog[]>([]);
+  // Kalori onay ekranı için state'ler
+  const [caloriesConfirmationModalVisible, setCaloriesConfirmationModalVisible] = useState(false);
+  const [confirmedCalories, setConfirmedCalories] = useState<number | null>(null);
+  const [confirmedDetails, setConfirmedDetails] = useState<string | null>(null);
+  const [confirmedFoodName, setConfirmedFoodName] = useState("");
+  const [confirmedIsDrink, setConfirmedIsDrink] = useState(false);
+  const [pendingItems, setPendingItems] = useState<Array<{
+    name: string;
+    calories: number;
+    details: string | null;
+    isDrink: boolean;
+    manualCalories?: number;
+  }>>([]);
+  const [currentPendingIndex, setCurrentPendingIndex] = useState(0);
+  // Modal modları: 'input' | 'details' | 'camera' | 'imagePreview'
+  const [modalMode, setModalMode] = useState<"input" | "details" | "camera" | "imagePreview">("input");
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [foodDetailsInput, setFoodDetailsInput] = useState("");
+  const [drinkDetailsInput, setDrinkDetailsInput] = useState("");
+  const [aiAnalyzedData, setAiAnalyzedData] = useState<{
+    name: string;
+    isDrink: boolean;
+    details: string | null;
+    calories: number;
+  } | null>(null);
 
   // Diyet ilerlemesini yükle
   const loadDietProgress = useCallback(async () => {
     if (!profile?.id) return;
     try {
-      const stored = await AsyncStorage.getItem(`diet_progress_${profile.id}`);
-      if (stored) {
-        setDietProgress(JSON.parse(stored));
-      }
+      // Tüm tamamlanmış günleri temizle (eski verileri sıfırla)
+      await AsyncStorage.removeItem(`diet_progress_${profile.id}`);
+      setDietProgress({});
+      
       // Kilo geçmişini yükle
       const weightStored = await AsyncStorage.getItem(
         `diet_weight_history_${profile.id}`
@@ -91,6 +161,142 @@ export default function ActiveDietScreen({ navigation }: any) {
     }
   }, [profile?.id]);
 
+  // Tarihi yerel saat dilimine göre YYYY-MM-DD formatına çevir
+  const formatDateToLocalString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // Circular Progress Component
+  const CircularProgress = ({
+    percentage,
+    size = 80,
+    strokeWidth = 8,
+    color,
+    backgroundColor,
+  }: {
+    percentage: number;
+    size?: number;
+    strokeWidth?: number;
+    color: string;
+    backgroundColor?: string;
+  }) => {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const progress = Math.min(100, Math.max(0, percentage));
+    const offset = circumference - (progress / 100) * circumference;
+
+    return (
+      <View style={{ width: size, height: size }}>
+        <Svg width={size} height={size}>
+          {/* Background circle */}
+          <SvgCircle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={backgroundColor || "#E5E7EB"}
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+          {/* Progress circle */}
+          <SvgCircle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        </Svg>
+        <View
+          style={{
+            position: "absolute",
+            width: size,
+            height: size,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: size * 0.2,
+              fontWeight: "800",
+              color: color,
+            }}
+          >
+            {Math.round(progress)}%
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Günlük verileri yükle (su, kalori, egzersiz)
+  const loadDailyData = useCallback(async (date: Date) => {
+    if (!profile?.id) return;
+    try {
+      const dateStr = formatDateToLocalString(date);
+      
+      // Önce veritabanından yükle
+      const { data: tracking, error } = await getOrCreateDailyTracking(dateStr);
+      
+      if (error) {
+        console.error("Günlük veriler yüklenemedi:", error);
+        // Hata durumunda AsyncStorage'dan yükle (fallback)
+        const stored = await AsyncStorage.getItem(`daily_data_${profile.id}_${dateStr}`);
+        if (stored) {
+          setDailyData(JSON.parse(stored));
+        } else {
+          setDailyData({
+            water: 0,
+            calories: 0,
+            exercise: { duration: 0, calories: 0 },
+          });
+        }
+        return;
+      }
+
+      if (tracking) {
+        setDailyData({
+          water: tracking.water || 0,
+          calories: tracking.calories || 0,
+          exercise: {
+            duration: tracking.exercise_duration || 0,
+            calories: tracking.exercise_calories || 0,
+          },
+        });
+      } else {
+        setDailyData({
+          water: 0,
+          calories: 0,
+          exercise: { duration: 0, calories: 0 },
+        });
+      }
+
+      // Günlük logları yükle
+      const { data: logs, error: logsError } = await getDailyTrackingLogs(dateStr, dateStr);
+      if (!logsError && logs) {
+        setDailyLogs(logs);
+      } else {
+        setDailyLogs([]);
+      }
+    } catch (error) {
+      console.error("Günlük veriler yüklenemedi:", error);
+      setDailyData({
+        water: 0,
+        calories: 0,
+        exercise: { duration: 0, calories: 0 },
+      });
+      setDailyLogs([]);
+    }
+  }, [profile?.id]);
+
   // Üye bilgilerini yükle
   const loadMember = useCallback(async () => {
     if (!profile?.id) return;
@@ -100,13 +306,16 @@ export default function ActiveDietScreen({ navigation }: any) {
       if (res.member) {
         setMember(res.member as FamilyMember);
         await loadDietProgress();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        await loadDailyData(today);
       }
     } catch (error) {
       Alert.alert("Hata", "Bilgiler yüklenemedi.");
     } finally {
       setLoading(false);
     }
-  }, [profile?.id, loadDietProgress]);
+  }, [profile?.id, loadDietProgress, loadDailyData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -296,11 +505,11 @@ export default function ActiveDietScreen({ navigation }: any) {
     for (let i = 29; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
-      last30DaysSet.add(date.toISOString().split("T")[0]);
+      last30DaysSet.add(formatDateToLocalString(date));
     }
 
     return allDays.map(day => {
-      const dateStr = day.toISOString().split("T")[0];
+      const dateStr = formatDateToLocalString(day);
       const isInLast30Days = last30DaysSet.has(dateStr);
       return {
         date: dateStr,
@@ -436,7 +645,11 @@ export default function ActiveDietScreen({ navigation }: any) {
             <View style={styles.dailyView}>
               <View style={styles.dailyHeader}>
                 <TouchableOpacity
-                  onPress={() => setSelectedDate(subDays(selectedDate, 1))}
+                  onPress={() => {
+                    const newDate = subDays(selectedDate, 1);
+                    setSelectedDate(newDate);
+                    loadDailyData(newDate);
+                  }}
                   style={styles.navButton}
                 >
                   <ChevronLeft size={20} color={colors.text} />
@@ -447,17 +660,21 @@ export default function ActiveDietScreen({ navigation }: any) {
                   </Text>
                 </View>
                 <TouchableOpacity
-                  onPress={() => setSelectedDate(addDays(selectedDate, 1))}
+                  onPress={() => {
+                    const newDate = addDays(selectedDate, 1);
+                    setSelectedDate(newDate);
+                    loadDailyData(newDate);
+                  }}
                   style={styles.navButton}
                   disabled={
-                    isSameDay(selectedDate, new Date()) ||
+                    formatDateToLocalString(selectedDate) === formatDateToLocalString(new Date()) ||
                     selectedDate > new Date()
                   }
                 >
                   <ChevronLeft
                     size={20}
                     color={
-                      isSameDay(selectedDate, new Date()) ||
+                      formatDateToLocalString(selectedDate) === formatDateToLocalString(new Date()) ||
                       selectedDate > new Date()
                         ? colors.border
                         : colors.text
@@ -474,11 +691,16 @@ export default function ActiveDietScreen({ navigation }: any) {
                 })
                   .filter((h) => h.getHours() >= 7 && h.getHours() <= 23)
                   .map((hour, i) => {
-                    const dateStr = selectedDate.toISOString().split("T")[0];
-                    const isCompleted = dietProgress[dateStr] === true;
+                    const dateStr = formatDateToLocalString(selectedDate);
                     const isCurrentHour =
-                      isSameDay(selectedDate, new Date()) &&
+                      formatDateToLocalString(selectedDate) === formatDateToLocalString(new Date()) &&
                       hour.getHours() === new Date().getHours();
+
+                    // Bu saatteki logları filtrele
+                    const hourLogs = dailyLogs.filter((log) => {
+                      const logDate = new Date(log.created_at);
+                      return logDate.getHours() === hour.getHours();
+                    });
 
                     return (
                       <View
@@ -511,23 +733,82 @@ export default function ActiveDietScreen({ navigation }: any) {
                               </Text>
                             </View>
                           )}
-                          {isCompleted && (
-                            <View
+                          {hourLogs.length > 0 ? (
+                            <View style={styles.logsContainer}>
+                              {hourLogs.map((log) => {
+                                if (log.type === "water") {
+                                  return (
+                                    <View
+                                      key={log.id}
+                                      style={[
+                                        styles.logItem,
+                                        { backgroundColor: "#3b82f620" },
+                                      ]}
+                                    >
+                                      <Droplet size={14} color="#3b82f6" />
+                                      <Text
+                                        style={[
+                                          styles.logText,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        {log.amount}ml su
+                                      </Text>
+                                    </View>
+                                  );
+                                } else if (log.type === "calories") {
+                                  return (
+                                    <View
+                                      key={log.id}
+                                      style={[
+                                        styles.logItem,
+                                        { backgroundColor: "#f59e0b20" },
+                                      ]}
+                                    >
+                                      <Flame size={14} color="#f59e0b" />
+                                      <Text
+                                        style={[
+                                          styles.logText,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        {log.amount}kcal
+                                      </Text>
+                                    </View>
+                                  );
+                                } else if (log.type === "exercise") {
+                                  return (
+                                    <View
+                                      key={log.id}
+                                      style={[
+                                        styles.logItem,
+                                        { backgroundColor: "#10b98120" },
+                                      ]}
+                                    >
+                                      <Dumbbell size={14} color="#10b981" />
+                                      <Text
+                                        style={[
+                                          styles.logText,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        {log.amount}dk • {log.calories_burned || 0}kcal
+                                      </Text>
+                                    </View>
+                                  );
+                                }
+                                return null;
+                              })}
+                            </View>
+                          ) : (
+                            <Text
                               style={[
-                                styles.dietStatusPill,
-                                { backgroundColor: "#10b98115" },
+                                styles.noLogsText,
+                                { color: colors.textMuted },
                               ]}
                             >
-                              <CheckCircle2 size={14} color="#10b981" />
-                              <Text
-                                style={[
-                                  styles.dietStatusText,
-                                  { color: "#10b981" },
-                                ]}
-                              >
-                                Diyet programına uyuldu
-                              </Text>
-                            </View>
+                              Kayıt yok
+                            </Text>
                           )}
                         </View>
                       </View>
@@ -560,24 +841,36 @@ export default function ActiveDietScreen({ navigation }: any) {
               <View style={styles.monthGrid}>
                 {days.map((day, index) => {
                   const isCompleted = dietProgress[day.date] === true;
-                  const isToday = day.date === new Date().toISOString().split("T")[0];
+                  const isToday = day.date === formatDateToLocalString(new Date());
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
-                  const isPast = new Date(day.date) < today;
+                  // Tarih string'ini yerel saat dilimine göre parse et
+                  const [year, month, dayNum] = day.date.split("-").map(Number);
+                  const dayDate = new Date(year, month - 1, dayNum);
+                  dayDate.setHours(0, 0, 0, 0);
+                  const isPast = dayDate < today;
                   const canInteract = day.isInLast30Days && (isPast || isToday);
-                  const isSelected = isSameDay(
-                    new Date(day.date),
-                    selectedDate
-                  );
+                  // Seçili tarihi yerel saat dilimine göre karşılaştır
+                  const selectedDateStr = formatDateToLocalString(selectedDate);
+                  const isSelected = day.date === selectedDateStr;
 
                   return (
                     <TouchableOpacity
                       key={`${day.date}-${index}`}
                       onPress={() => {
+                        // Sadece tarih seçimi yap, tamamlama durumunu değiştirme
+                        // Tarih string'ini yerel saat dilimine göre parse et
+                        const [year, month, dayNum] = day.date.split("-").map(Number);
+                        const newSelectedDate = new Date(year, month - 1, dayNum);
+                        newSelectedDate.setHours(0, 0, 0, 0);
+                        setSelectedDate(newSelectedDate);
+                        loadDailyData(newSelectedDate);
+                      }}
+                      onLongPress={() => {
+                        // Uzun basışta tamamlama durumunu değiştir
                         if (canInteract) {
                           toggleDay(day.date);
                         }
-                        setSelectedDate(new Date(day.date));
                       }}
                       disabled={saving || !canInteract}
                       style={[
@@ -587,14 +880,14 @@ export default function ActiveDietScreen({ navigation }: any) {
                             ? colors.primary + "25"
                             : isToday
                             ? colors.primary + "15"
-                            : isCompleted && day.isInLast30Days
+                            : isCompleted && day.isInLast30Days && !isSelected
                             ? "#10b98115"
                             : colors.background,
                           borderColor: isSelected
                             ? colors.primary
                             : isToday
                             ? colors.primary + "40"
-                            : isCompleted && day.isInLast30Days
+                            : isCompleted && day.isInLast30Days && !isSelected
                             ? "#10b98140"
                             : colors.border,
                           borderWidth: isSelected ? 2 : 1,
@@ -610,7 +903,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                               ? colors.primary
                               : isToday
                               ? colors.primary
-                              : isCompleted && day.isInLast30Days
+                              : isCompleted && day.isInLast30Days && !isSelected
                               ? "#10b981"
                               : colors.text,
                           },
@@ -624,6 +917,123 @@ export default function ActiveDietScreen({ navigation }: any) {
               </View>
             </>
           )}
+        </View>
+
+        {/* GÜNLÜK SU, KALORİ VE EGZERSİZ TAKİBİ */}
+        <View
+          style={[
+            styles.dailyTrackingCard,
+            isLight && styles.surfaceLift,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 16 }]}>
+            Günlük Takip - {format(selectedDate, "d MMMM yyyy", { locale: tr })}
+          </Text>
+
+          {/* SU İÇME TAKİBİ */}
+          {member && (() => {
+            const age = calculateAge(member.birth_date);
+            const dailyWaterNeed = age && member.weight
+              ? calculateDailyWaterNeed(age, member.weight)
+              : 2500;
+            const waterProgress = dailyData?.water || 0;
+            const waterPercentage = Math.min(100, Math.round((waterProgress / dailyWaterNeed) * 100));
+
+            return (
+              <View style={styles.dailyTrackingItem}>
+                <View style={styles.dailyTrackingHeader}>
+                  <View style={styles.dailyTrackingIconContainer}>
+                    <View style={[styles.dailyTrackingIcon, { backgroundColor: "#3b82f620" }]}>
+                      <Droplet size={20} color="#3b82f6" />
+                    </View>
+                    <View style={styles.dailyTrackingTextContainer}>
+                      <Text style={[styles.dailyTrackingTitle, { color: colors.text }]}>
+                        Su İçme
+                      </Text>
+                      <Text style={[styles.dailyTrackingSubtitle, { color: colors.textMuted }]}>
+                        {waterProgress}ml / {dailyWaterNeed}ml
+                      </Text>
+                    </View>
+                  </View>
+                  <CircularProgress
+                    percentage={waterPercentage}
+                    size={80}
+                    strokeWidth={8}
+                    color="#3b82f6"
+                    backgroundColor={colors.background}
+                  />
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* KALORİ TAKİBİ */}
+          {mealPrefs.calories && (() => {
+            const caloriesProgress = dailyData?.calories || 0;
+            const caloriesTarget = parseInt(mealPrefs.calories);
+            const caloriesPercentage = Math.min(100, Math.round((caloriesProgress / caloriesTarget) * 100));
+            const isOverTarget = caloriesProgress > caloriesTarget;
+            const caloriesColor = isOverTarget ? "#ef4444" : "#f59e0b";
+
+            return (
+              <View style={styles.dailyTrackingItem}>
+                <View style={styles.dailyTrackingHeader}>
+                  <View style={styles.dailyTrackingIconContainer}>
+                    <View style={[styles.dailyTrackingIcon, { backgroundColor: "#f59e0b20" }]}>
+                      <Flame size={20} color="#f59e0b" />
+                    </View>
+                    <View style={styles.dailyTrackingTextContainer}>
+                      <Text style={[styles.dailyTrackingTitle, { color: colors.text }]}>
+                        Kalori
+                      </Text>
+                      <Text style={[styles.dailyTrackingSubtitle, { color: colors.textMuted }]}>
+                        {caloriesProgress}kcal / {caloriesTarget}kcal
+                      </Text>
+                    </View>
+                  </View>
+                  <CircularProgress
+                    percentage={caloriesPercentage}
+                    size={80}
+                    strokeWidth={8}
+                    color={caloriesColor}
+                    backgroundColor={colors.background}
+                  />
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* EGZERSİZ TAKİBİ */}
+          <View style={styles.dailyTrackingItem}>
+            <View style={styles.dailyTrackingHeader}>
+              <View style={styles.dailyTrackingIconContainer}>
+                <View style={[styles.dailyTrackingIcon, { backgroundColor: "#10b98120" }]}>
+                  <Dumbbell size={20} color="#10b981" />
+                </View>
+                <View style={styles.dailyTrackingTextContainer}>
+                  <Text style={[styles.dailyTrackingTitle, { color: colors.text }]}>
+                    Egzersiz
+                  </Text>
+                  <Text style={[styles.dailyTrackingSubtitle, { color: colors.textMuted }]}>
+                    {dailyData?.exercise.duration || 0} dk • {dailyData?.exercise.calories || 0} kcal yakıldı
+                  </Text>
+                </View>
+              </View>
+            </View>
+            {mealPrefs.calories && (() => {
+              const exerciseCalories = dailyData?.exercise.calories || 0;
+              const totalCalories = (dailyData?.calories || 0) - exerciseCalories;
+              const netCalories = totalCalories;
+              return (
+                <View style={[styles.exerciseInfo, { borderTopColor: colors.border }]}>
+                  <Text style={[styles.exerciseInfoText, { color: colors.textMuted }]}>
+                    Net Kalori: {netCalories}kcal (Tüketilen: {(dailyData?.calories || 0)}kcal - Yakılan: {exerciseCalories}kcal)
+                  </Text>
+                </View>
+              );
+            })()}
+          </View>
         </View>
 
         {/* BİRLEŞTİRİLMİŞ DİYET DASHBOARD */}
@@ -984,13 +1394,29 @@ export default function ActiveDietScreen({ navigation }: any) {
             styles.fabBase,
             { backgroundColor: "#3b82f6" },
           ]}
-          onPress={() => {
+          onPress={async () => {
             // Su içildi - 200 ml
-            Alert.alert("Su İçildi", "200 ml su kaydı eklendi.");
+            setSavingActivity(true);
+            const dateStr = formatDateToLocalString(selectedDate);
+            const result = await logWaterIntake(200, dateStr, "200ml su içildi");
+            setSavingActivity(false);
+            
+            if (result.success) {
+              Alert.alert("Başarılı", "200 ml su kaydı eklendi.");
+              // Verileri yeniden yükle
+              await loadDailyData(selectedDate);
+            } else {
+              Alert.alert("Hata", result.error || "Su kaydı eklenemedi.");
+            }
           }}
+          disabled={savingActivity}
           activeOpacity={0.8}
         >
-          <Droplet size={22} color="#fff" />
+          {savingActivity ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Droplet size={22} color="#fff" />
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -999,8 +1425,16 @@ export default function ActiveDietScreen({ navigation }: any) {
             { backgroundColor: "#f59e0b" },
           ]}
           onPress={() => {
-            // Yemek ve içecek ekle
-            Alert.alert("Yemek ve İçecek", "Yemek ve içecek ekleme ekranı açılacak.");
+            setModalMode("input");
+            setFoodNameInput("");
+            setDrinkNameInput("");
+            setFoodCaloriesInput("");
+            setDrinkCaloriesInput("");
+            setFoodDetailsInput("");
+            setDrinkDetailsInput("");
+            setCapturedImage(null);
+            setAiAnalyzedData(null);
+            setCaloriesModalVisible(true);
           }}
           activeOpacity={0.8}
         >
@@ -1013,14 +1447,1182 @@ export default function ActiveDietScreen({ navigation }: any) {
             { backgroundColor: "#10b981" },
           ]}
           onPress={() => {
-            // Egzersiz ekle
-            Alert.alert("Egzersiz", "Egzersiz ekleme ekranı açılacak.");
+            setExerciseDurationInput("");
+            setExerciseCaloriesInput("");
+            setExerciseModalVisible(true);
           }}
           activeOpacity={0.8}
         >
           <Dumbbell size={22} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {/* YEMEK/İÇECEK EKLEME MODAL */}
+      <Modal visible={caloriesModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {modalMode === "camera"
+                  ? "Resim Çek"
+                  : modalMode === "imagePreview"
+                  ? "Resim Önizleme"
+                  : modalMode === "details"
+                  ? "Detay Bilgileri"
+                  : "Yemek veya İçecek Ekle"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setCaloriesModalVisible(false);
+                  setModalMode("input");
+                  setFoodNameInput("");
+                  setDrinkNameInput("");
+                  setFoodCaloriesInput("");
+                  setDrinkCaloriesInput("");
+                  setFoodDetailsInput("");
+                  setDrinkDetailsInput("");
+                  setCapturedImage(null);
+                  setAiAnalyzedData(null);
+                }}
+              >
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={{ paddingBottom: 16 }}
+              nestedScrollEnabled={true}
+            >
+                {/* INPUT MODE */}
+                {modalMode === "input" && (
+                <>
+                  <Text
+                    style={[
+                      styles.modalDesc,
+                      { color: colors.textMuted, marginBottom: 20, lineHeight: 20 },
+                    ]}
+                  >
+                    Yemek ve/veya içecek adını girin, kalori girebilir veya AI ile devam edebilirsiniz.
+                  </Text>
+
+                  {/* Yemek Bölümü */}
+                  <View
+                    style={{
+                      backgroundColor: colors.background,
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 16,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <UtensilsCrossed size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "700",
+                          color: colors.text,
+                        }}
+                      >
+                        Yemek
+                      </Text>
+                    </View>
+                    <ModernInput
+                      label="Yemek Adı (Opsiyonel)"
+                      value={foodNameInput}
+                      onChangeText={setFoodNameInput}
+                      placeholder="Örn: Tavuk Döner"
+                      placeholderTextColor={colors.textMuted}
+                      style={{ marginTop: 0 }}
+                    />
+                    {foodNameInput.trim() && (
+                      <ModernInput
+                        label="Yemek Kalori (kcal) - Opsiyonel"
+                        value={foodCaloriesInput}
+                        onChangeText={setFoodCaloriesInput}
+                        keyboardType="numeric"
+                        placeholder="Manuel giriş yapabilirsiniz"
+                        placeholderTextColor={colors.textMuted}
+                        style={{ marginTop: 12 }}
+                      />
+                    )}
+                  </View>
+
+                  {/* İçecek Bölümü */}
+                  <View
+                    style={{
+                      backgroundColor: colors.background,
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 16,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <Droplet size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "700",
+                          color: colors.text,
+                        }}
+                      >
+                        İçecek
+                      </Text>
+                    </View>
+                    <ModernInput
+                      label="İçecek Adı (Opsiyonel)"
+                      value={drinkNameInput}
+                      onChangeText={setDrinkNameInput}
+                      placeholder="Örn: Portakal Suyu"
+                      placeholderTextColor={colors.textMuted}
+                      style={{ marginTop: 0 }}
+                    />
+                    {drinkNameInput.trim() && (
+                      <ModernInput
+                        label="İçecek Kalori (kcal) - Opsiyonel"
+                        value={drinkCaloriesInput}
+                        onChangeText={setDrinkCaloriesInput}
+                        keyboardType="numeric"
+                        placeholder="Manuel giriş yapabilirsiniz"
+                        placeholderTextColor={colors.textMuted}
+                        style={{ marginTop: 12 }}
+                      />
+                    )}
+                  </View>
+              </>
+            )}
+
+            {/* DETAILS MODE */}
+            {modalMode === "details" && (
+              <>
+                <Text
+                  style={[
+                    styles.modalDesc,
+                    { color: colors.textMuted, marginBottom: 20, lineHeight: 20 },
+                  ]}
+                >
+                  Lütfen detay bilgilerini girin (örneğin: yarım/tam, lavash/ekmek, kutu/şişe/bardak).
+                </Text>
+
+                {foodNameInput.trim() && (
+                  <View
+                    style={{
+                      backgroundColor: colors.background,
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 16,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <UtensilsCrossed size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "700",
+                          color: colors.text,
+                        }}
+                      >
+                        Yemek Detayı
+                      </Text>
+                    </View>
+                    <ModernInput
+                      label="Detay Bilgisi"
+                      value={foodDetailsInput}
+                      onChangeText={setFoodDetailsInput}
+                      placeholder="Örn: Yarım porsiyon, lavash ile"
+                      placeholderTextColor={colors.textMuted}
+                      style={{ marginTop: 0 }}
+                    />
+                  </View>
+                )}
+
+                {drinkNameInput.trim() && (
+                  <View
+                    style={{
+                      backgroundColor: colors.background,
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 16,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <Droplet size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "700",
+                          color: colors.text,
+                        }}
+                      >
+                        İçecek Detayı
+                      </Text>
+                    </View>
+                    <ModernInput
+                      label="Detay Bilgisi"
+                      value={drinkDetailsInput}
+                      onChangeText={setDrinkDetailsInput}
+                      placeholder="Örn: Kutu kola (330ml)"
+                      placeholderTextColor={colors.textMuted}
+                      style={{ marginTop: 0 }}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+
+            {/* CAMERA MODE */}
+            {modalMode === "camera" && (
+              <>
+                <Text
+                  style={[
+                    styles.modalDesc,
+                    { color: colors.textMuted, marginBottom: 20, lineHeight: 20 },
+                  ]}
+                >
+                  Yemek veya içeceğin fotoğrafını çekin.
+                </Text>
+              </>
+            )}
+
+            {/* IMAGE PREVIEW MODE */}
+            {modalMode === "imagePreview" && capturedImage && (
+              <>
+                <Text
+                  style={[
+                    styles.modalDesc,
+                    { color: colors.textMuted, marginBottom: 16, lineHeight: 20 },
+                  ]}
+                >
+                  Çekilen fotoğrafı kontrol edin.
+                </Text>
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${capturedImage}` }}
+                  style={{
+                    width: "100%",
+                    height: 300,
+                    borderRadius: 16,
+                    backgroundColor: colors.background,
+                    marginBottom: 16,
+                  }}
+                  resizeMode="contain"
+                />
+              </>
+            )}
+            </ScrollView>
+
+            {/* Butonlar - ScrollView dışında */}
+            {modalMode === "input" && (
+              <View style={styles.modalButtons}>
+                <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setCaloriesModalVisible(false);
+                      setModalMode("input");
+                      setFoodNameInput("");
+                      setDrinkNameInput("");
+                      setFoodCaloriesInput("");
+                      setDrinkCaloriesInput("");
+                    }}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonCancel,
+                      { borderColor: colors.border, flex: 1 },
+                    ]}
+                  >
+                    <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                      İptal
+                    </Text>
+                  </TouchableOpacity>
+
+                  {(parseFloat(foodCaloriesInput) > 0 || parseFloat(drinkCaloriesInput) > 0) && (
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const items: Array<{
+                          name: string;
+                          calories: number;
+                          details: string | null;
+                          isDrink: boolean;
+                          manualCalories?: number;
+                        }> = [];
+
+                        if (foodNameInput.trim() && parseFloat(foodCaloriesInput) > 0) {
+                          items.push({
+                            name: foodNameInput.trim(),
+                            calories: parseFloat(foodCaloriesInput),
+                            details: null,
+                            isDrink: false,
+                            manualCalories: parseFloat(foodCaloriesInput),
+                          });
+                        }
+
+                        if (drinkNameInput.trim() && parseFloat(drinkCaloriesInput) > 0) {
+                          items.push({
+                            name: drinkNameInput.trim(),
+                            calories: parseFloat(drinkCaloriesInput),
+                            details: null,
+                            isDrink: true,
+                            manualCalories: parseFloat(drinkCaloriesInput),
+                          });
+                        }
+
+                        if (items.length > 0) {
+                          setPendingItems(items);
+                          setCurrentPendingIndex(0);
+                          const firstItem = items[0];
+                          setConfirmedCalories(firstItem.calories);
+                          setConfirmedDetails(firstItem.details);
+                          setConfirmedFoodName(firstItem.name);
+                          setConfirmedIsDrink(firstItem.isDrink);
+                          setCaloriesModalVisible(false);
+                          setCaloriesConfirmationModalVisible(true);
+                        }
+                      }}
+                      disabled={savingActivity}
+                      style={[
+                        styles.modalButton,
+                        styles.modalButtonConfirm,
+                        {
+                          backgroundColor: savingActivity ? colors.textMuted : colors.primary,
+                          flex: 1,
+                        },
+                      ]}
+                    >
+                      {savingActivity ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                          Kaydet
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  {!parseFloat(foodCaloriesInput) && !parseFloat(drinkCaloriesInput) && 
+                   (foodNameInput.trim() || drinkNameInput.trim()) && (
+                    <TouchableOpacity
+                      onPress={() => setModalMode("details")}
+                      style={[
+                        styles.modalButton,
+                        styles.modalButtonConfirm,
+                        { backgroundColor: colors.primary, flex: 1 },
+                      ]}
+                    >
+                      <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                        Devam Et
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  onPress={async () => {
+                    const permission = await ImagePicker.requestCameraPermissionsAsync();
+                    if (!permission.granted) {
+                      Alert.alert("Hata", "Kamera izni gerekli.");
+                      return;
+                    }
+                    setModalMode("camera");
+                  }}
+                  style={[
+                    styles.modalButton,
+                    {
+                      backgroundColor: colors.background,
+                      borderWidth: 2,
+                      borderColor: colors.primary,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    },
+                  ]}
+                >
+                  <Camera size={20} color={colors.primary} style={{ marginRight: 10 }} />
+                  <Text style={[styles.modalButtonText, { color: colors.primary }]}>
+                    AI ile Resim Çek
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {modalMode === "details" && (
+              <View style={styles.modalButtons}>
+                <View style={{ flexDirection: "row", gap: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => setModalMode("input")}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonCancel,
+                      { borderColor: colors.border, flex: 1 },
+                    ]}
+                  >
+                    <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                      Geri
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                  onPress={async () => {
+                    const items: Array<{
+                      name: string;
+                      calories: number;
+                      details: string | null;
+                      isDrink: boolean;
+                    }> = [];
+
+                    if (foodNameInput.trim()) {
+                      setCalculatingCalories(true);
+                      const { details, calories, error: calcError } =
+                        await getFoodDetailsWithCalories(
+                          foodNameInput.trim(),
+                          false,
+                          foodDetailsInput.trim() || undefined
+                        );
+                      setCalculatingCalories(false);
+
+                      if (calcError || !calories) {
+                        Alert.alert("Hata", `Yemek için: ${calcError || "Kalori hesaplanamadı."}`);
+                        return;
+                      }
+
+                      items.push({
+                        name: foodNameInput.trim(),
+                        calories: calories!,
+                        details: details || foodDetailsInput.trim() || null,
+                        isDrink: false,
+                      });
+                    }
+
+                    if (drinkNameInput.trim()) {
+                      setCalculatingCalories(true);
+                      const { details, calories, error: calcError } =
+                        await getFoodDetailsWithCalories(
+                          drinkNameInput.trim(),
+                          true,
+                          drinkDetailsInput.trim() || undefined
+                        );
+                      setCalculatingCalories(false);
+
+                      if (calcError || !calories) {
+                        Alert.alert("Hata", `İçecek için: ${calcError || "Kalori hesaplanamadı."}`);
+                        return;
+                      }
+
+                      items.push({
+                        name: drinkNameInput.trim(),
+                        calories: calories!,
+                        details: details || drinkDetailsInput.trim() || null,
+                        isDrink: true,
+                      });
+                    }
+
+                    if (items.length > 0) {
+                      setPendingItems(items);
+                      setCurrentPendingIndex(0);
+                      const firstItem = items[0];
+                      setConfirmedCalories(firstItem.calories);
+                      setConfirmedDetails(firstItem.details);
+                      setConfirmedFoodName(firstItem.name);
+                      setConfirmedIsDrink(firstItem.isDrink);
+                      setCaloriesModalVisible(false);
+                      setCaloriesConfirmationModalVisible(true);
+                    }
+                  }}
+                  disabled={calculatingCalories}
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonConfirm,
+                    {
+                      backgroundColor: calculatingCalories ? colors.textMuted : colors.primary,
+                    },
+                  ]}
+                >
+                  {calculatingCalories ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                      Hesapla
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {modalMode === "camera" && (
+              <View style={styles.modalButtons}>
+                <View style={{ flexDirection: "row", gap: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => setModalMode("input")}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonCancel,
+                      { borderColor: colors.border, flex: 1 },
+                    ]}
+                  >
+                    <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                      Geri
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      const permission = await ImagePicker.requestCameraPermissionsAsync();
+                      if (!permission.granted) {
+                        Alert.alert("Hata", "Kamera izni gerekli.");
+                        return;
+                      }
+
+                      const result = await ImagePicker.launchCameraAsync({
+                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                        allowsEditing: true,
+                        quality: 0.8,
+                        base64: true,
+                      });
+
+                      if (!result.canceled && result.assets[0].base64) {
+                        setCapturedImage(result.assets[0].base64);
+                        setModalMode("imagePreview");
+                      }
+                    }}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonConfirm,
+                      {
+                        backgroundColor: colors.primary,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flex: 1,
+                      },
+                    ]}
+                  >
+                    <Camera size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                      Fotoğraf Çek
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {modalMode === "imagePreview" && capturedImage && (
+              <View style={styles.modalButtons}>
+                <View style={{ flexDirection: "row", gap: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setModalMode("camera");
+                      setCapturedImage(null);
+                    }}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonCancel,
+                      { borderColor: colors.border, flex: 1 },
+                    ]}
+                  >
+                    <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                      Yeniden Çek
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      setAiAnalyzing(true);
+                      const result = await analyzeFoodFromImage(capturedImage);
+                      setAiAnalyzing(false);
+
+                      if (result.error || !result.calories) {
+                        Alert.alert("Hata", result.error || "Resim analiz edilemedi.");
+                        return;
+                      }
+
+                      setConfirmedCalories(result.calories);
+                      setConfirmedDetails(result.details);
+                      setConfirmedFoodName(result.name || "Bilinmeyen");
+                      setConfirmedIsDrink(result.isDrink);
+                      setCaloriesModalVisible(false);
+                      setCaloriesConfirmationModalVisible(true);
+                    }}
+                    disabled={aiAnalyzing}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonConfirm,
+                      {
+                        backgroundColor: aiAnalyzing ? colors.textMuted : colors.primary,
+                        flex: 1,
+                      },
+                    ]}
+                  >
+                    {aiAnalyzing ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                        AI'ye Gönder
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* EGZERSİZ EKLEME MODAL */}
+      <Modal visible={exerciseModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Egzersiz Ekle
+              </Text>
+              <TouchableOpacity onPress={() => setExerciseModalVisible(false)}>
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalDesc, { color: colors.textMuted }]}>
+              Yaptığınız egzersizin süresini ve yakılan kaloriyi girin.
+            </Text>
+
+            <ModernInput
+              label="Süre (dakika)"
+              value={exerciseDurationInput}
+              onChangeText={setExerciseDurationInput}
+              keyboardType="numeric"
+              placeholder="Örn: 30"
+              placeholderTextColor={colors.textMuted}
+              style={{ marginTop: 16 }}
+            />
+
+            <ModernInput
+              label="Yakılan Kalori (kcal)"
+              value={exerciseCaloriesInput}
+              onChangeText={setExerciseCaloriesInput}
+              keyboardType="numeric"
+              placeholder="Örn: 200"
+              placeholderTextColor={colors.textMuted}
+              style={{ marginTop: 16 }}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                onPress={() => {
+                  setExerciseModalVisible(false);
+                  setExerciseDurationInput("");
+                  setExerciseCaloriesInput("");
+                }}
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonCancel,
+                  { borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                  İptal
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  const duration = parseFloat(exerciseDurationInput);
+                  const caloriesBurned = parseFloat(exerciseCaloriesInput) || 0;
+
+                  if (!duration || duration <= 0) {
+                    Alert.alert("Hata", "Lütfen geçerli bir süre girin.");
+                    return;
+                  }
+
+                  setSavingActivity(true);
+                  const dateStr = formatDateToLocalString(selectedDate);
+                  const result = await logExercise(
+                    duration,
+                    caloriesBurned,
+                    dateStr,
+                    "Manuel egzersiz girişi"
+                  );
+                  setSavingActivity(false);
+
+                  if (result.success) {
+                    Alert.alert(
+                      "Başarılı",
+                      `${duration} dakika egzersiz kaydı eklendi.`
+                    );
+                    setExerciseModalVisible(false);
+                    setExerciseDurationInput("");
+                    setExerciseCaloriesInput("");
+                    // Verileri yeniden yükle
+                    await loadDailyData(selectedDate);
+                  } else {
+                    Alert.alert("Hata", result.error || "Egzersiz kaydı eklenemedi.");
+                  }
+                }}
+                disabled={savingActivity}
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonConfirm,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
+                {savingActivity ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                    Kaydet
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* KALORİ ONAY EKRANI MODAL */}
+      <Modal
+        visible={caloriesConfirmationModalVisible}
+        transparent
+        animationType="slide"
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, { backgroundColor: colors.card, maxHeight: "85%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Kalori Onayı
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setCaloriesConfirmationModalVisible(false);
+                  setModalMode("input");
+                  setCaloriesModalVisible(true);
+                }}
+              >
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={true}
+              style={{ maxHeight: 500 }}
+              contentContainerStyle={{ paddingBottom: 16 }}
+              nestedScrollEnabled={true}
+            >
+              {pendingItems.length > 1 && (
+                <View
+                  style={{
+                    backgroundColor: colors.primary + "15",
+                    padding: 12,
+                    borderRadius: 12,
+                    marginBottom: 16,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.modalDesc,
+                      {
+                        color: colors.primary,
+                        fontSize: 13,
+                        fontWeight: "700",
+                      },
+                    ]}
+                  >
+                    {currentPendingIndex + 1} / {pendingItems.length}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.modalDesc,
+                      {
+                        color: colors.textMuted,
+                        fontSize: 11,
+                        marginTop: 4,
+                      },
+                    ]}
+                  >
+                    {pendingItems.length - currentPendingIndex - 1 > 0
+                      ? `${pendingItems.length - currentPendingIndex - 1} öğe daha var`
+                      : "Son öğe"}
+                  </Text>
+                </View>
+              )}
+
+              {/* Tüm Öğeleri Göster */}
+              {pendingItems.map((item, index) => (
+                <View key={index} style={{ marginBottom: 24 }}>
+                  {/* İkon ve Başlık */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      marginBottom: 16,
+                      paddingBottom: 16,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border,
+                    }}
+                  >
+                    {item.isDrink ? (
+                      <View
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 28,
+                          backgroundColor: colors.primary + "20",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          marginRight: 16,
+                        }}
+                      >
+                        <Droplet size={28} color={colors.primary} />
+                      </View>
+                    ) : (
+                      <View
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 28,
+                          backgroundColor: colors.primary + "20",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          marginRight: 16,
+                        }}
+                      >
+                        <UtensilsCrossed size={28} color={colors.primary} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.textMuted,
+                            fontSize: 12,
+                            fontWeight: "600",
+                            textTransform: "uppercase",
+                            marginBottom: 6,
+                            letterSpacing: 0.5,
+                          },
+                        ]}
+                      >
+                        {item.isDrink ? "İçecek" : "Yemek"}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.text,
+                            fontSize: 20,
+                            fontWeight: "700",
+                            lineHeight: 26,
+                          },
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Detay Bilgisi */}
+                  {item.details && (
+                    <View
+                      style={{
+                        backgroundColor: colors.background,
+                        padding: 16,
+                        borderRadius: 16,
+                        marginBottom: 16,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.textMuted,
+                            fontSize: 12,
+                            fontWeight: "600",
+                            marginBottom: 8,
+                            textTransform: "uppercase",
+                            letterSpacing: 0.5,
+                          },
+                        ]}
+                      >
+                        Detay Bilgisi
+                      </Text>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.text,
+                            fontSize: 15,
+                            fontWeight: "500",
+                            lineHeight: 22,
+                          },
+                        ]}
+                      >
+                        {item.details}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Kalori Kartı */}
+                  <View
+                    style={{
+                      backgroundColor: colors.primary + "15",
+                      padding: 20,
+                      borderRadius: 16,
+                      alignItems: "center",
+                      borderWidth: 2,
+                      borderColor: colors.primary + "30",
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.modalDesc,
+                        {
+                          color: colors.textMuted,
+                          fontSize: 12,
+                          fontWeight: "600",
+                          marginBottom: 8,
+                          textTransform: "uppercase",
+                          letterSpacing: 1,
+                        },
+                      ]}
+                    >
+                      Kalori
+                    </Text>
+                    <Text
+                      style={[
+                        styles.calculatedCaloriesValue,
+                        {
+                          color: colors.primary,
+                          fontSize: 36,
+                          fontWeight: "800",
+                          lineHeight: 42,
+                        },
+                      ]}
+                    >
+                      {item.calories}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.modalDesc,
+                        {
+                          color: colors.textMuted,
+                          fontSize: 14,
+                          fontWeight: "600",
+                          marginTop: 4,
+                        },
+                      ]}
+                    >
+                      kcal
+                    </Text>
+                  </View>
+                </View>
+              ))}
+
+              {/* Toplam Kalori (Eğer birden fazla öğe varsa) */}
+              {pendingItems.length > 1 && (
+                <View
+                  style={{
+                    backgroundColor: colors.primary + "25",
+                    padding: 24,
+                    borderRadius: 20,
+                    alignItems: "center",
+                    borderWidth: 2,
+                    borderColor: colors.primary,
+                    marginTop: 8,
+                    marginBottom: 20,
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.modalDesc,
+                      {
+                        color: colors.primary,
+                        fontSize: 14,
+                        fontWeight: "700",
+                        marginBottom: 12,
+                        textTransform: "uppercase",
+                        letterSpacing: 1,
+                      },
+                    ]}
+                  >
+                    Toplam Kalori
+                  </Text>
+                  <Text
+                    style={[
+                      styles.calculatedCaloriesValue,
+                      {
+                        color: colors.primary,
+                        fontSize: 48,
+                        fontWeight: "800",
+                        lineHeight: 56,
+                      },
+                    ]}
+                  >
+                    {pendingItems.reduce((sum, item) => sum + item.calories, 0)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.modalDesc,
+                      {
+                        color: colors.textMuted,
+                        fontSize: 16,
+                        fontWeight: "600",
+                        marginTop: 4,
+                      },
+                    ]}
+                  >
+                    kcal
+                  </Text>
+                </View>
+              )}
+
+              <Text
+                style={[
+                  styles.modalDesc,
+                  {
+                    color: colors.textMuted,
+                    fontSize: 14,
+                    lineHeight: 20,
+                    textAlign: "center",
+                    marginBottom: 8,
+                  },
+                ]}
+              >
+                Bu bilgileri kaydetmek istediğinize emin misiniz?
+              </Text>
+            </ScrollView>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                onPress={() => {
+                  setCaloriesConfirmationModalVisible(false);
+                  setModalMode("input");
+                  setCaloriesModalVisible(true);
+                  setPendingItems([]);
+                  setCurrentPendingIndex(0);
+                }}
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonCancel,
+                  { borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                  Bir Önceki Ekrana Dön
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!confirmedCalories) {
+                    Alert.alert("Hata", "Kalori bilgisi bulunamadı.");
+                    return;
+                  }
+
+                  setSavingActivity(true);
+                  const dateStr = formatDateToLocalString(selectedDate);
+                  const notes = confirmedDetails
+                    ? `${confirmedIsDrink ? "İçecek" : "Yemek"}: ${confirmedFoodName} (${confirmedDetails})`
+                    : `${confirmedIsDrink ? "İçecek" : "Yemek"}: ${confirmedFoodName}`;
+                  const result = await logCalories(
+                    confirmedCalories,
+                    dateStr,
+                    notes
+                  );
+                  setSavingActivity(false);
+
+                  if (result.success) {
+                    // Eğer daha fazla item varsa, bir sonrakine geç
+                    if (currentPendingIndex < pendingItems.length - 1) {
+                      const nextIndex = currentPendingIndex + 1;
+                      const nextItem = pendingItems[nextIndex];
+                      setCurrentPendingIndex(nextIndex);
+                      setConfirmedCalories(nextItem.calories);
+                      setConfirmedDetails(nextItem.details);
+                      setConfirmedFoodName(nextItem.name);
+                      setConfirmedIsDrink(nextItem.isDrink);
+                    } else {
+                      // Tüm item'lar kaydedildi
+                      Alert.alert(
+                        "Başarılı",
+                        `Tüm öğeler kaydedildi.`
+                      );
+                      setCaloriesConfirmationModalVisible(false);
+                      setCaloriesModalVisible(false);
+                      setFoodNameInput("");
+                      setDrinkNameInput("");
+                      setFoodCaloriesInput("");
+                      setDrinkCaloriesInput("");
+                      setPendingItems([]);
+                      setCurrentPendingIndex(0);
+                      setConfirmedCalories(null);
+                      setConfirmedDetails(null);
+                      setConfirmedFoodName("");
+                      // Verileri yeniden yükle
+                      await loadDailyData(selectedDate);
+                    }
+                  } else {
+                    Alert.alert("Hata", result.error || "Kalori kaydı eklenemedi.");
+                  }
+                }}
+                disabled={savingActivity || !confirmedCalories}
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonConfirm,
+                  {
+                    backgroundColor:
+                      savingActivity || !confirmedCalories
+                        ? colors.textMuted
+                        : colors.primary,
+                  },
+                ]}
+              >
+                {savingActivity ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                    {currentPendingIndex < pendingItems.length - 1
+                      ? "Evet, Kaydet ve Devam Et"
+                      : "Evet, Kaydet"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* KİLO GİRİŞ MODAL */}
       <Modal visible={weightModalVisible} transparent animationType="fade">
@@ -1284,6 +2886,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexWrap: "wrap",
+  },
+  logsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    flex: 1,
+  },
+  logItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  logText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  noLogsText: {
+    fontSize: 12,
+    fontStyle: "italic",
   },
   currentHourIndicator: {
     paddingHorizontal: 12,
@@ -1520,6 +3145,68 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     textAlign: "center",
   },
+  dailyTrackingCard: {
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 0,
+  },
+  dailyTrackingItem: {
+    marginBottom: 20,
+  },
+  dailyTrackingHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  dailyTrackingIconContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  dailyTrackingIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  dailyTrackingTextContainer: {
+    flex: 1,
+  },
+  dailyTrackingTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  dailyTrackingSubtitle: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  dailyTrackingPercentage: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  progressBarContainer: {
+    height: 8,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  exerciseInfo: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+  },
+  exerciseInfoText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
   surfaceLift: {
     borderWidth: 1,
     shadowColor: "#000",
@@ -1601,15 +3288,24 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
+    ...Platform.select({
+      ios: {
+        paddingTop: 40,
+        paddingBottom: 40,
+      },
+    }),
   },
   modalCard: {
     width: "100%",
+    maxWidth: 500,
     borderRadius: 24,
     padding: 24,
+    maxHeight: "90%",
+    alignSelf: "center",
   },
   modalHeader: {
     flexDirection: "row",
@@ -1626,25 +3322,71 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   modalButtons: {
-    flexDirection: "row",
+    marginTop: 20,
+    flexShrink: 0,
     gap: 12,
-    marginTop: 24,
   },
   modalButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
+    minHeight: 52,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   modalButtonCancel: {
-    borderWidth: 1,
+    borderWidth: 1.5,
+    backgroundColor: "transparent",
   },
   modalButtonSave: {
     // backgroundColor handled by inline style
   },
+  modalButtonConfirm: {
+    // backgroundColor handled by inline style
+  },
   modalButtonText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  },
+  foodTypeSelector: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+  },
+  foodTypeButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  foodTypeButtonText: {
+    fontSize: 14,
     fontWeight: "700",
+  },
+  calculatedCaloriesContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  calculatedCaloriesLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  calculatedCaloriesValue: {
+    fontSize: 18,
+    fontWeight: "800",
   },
 });

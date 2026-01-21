@@ -1245,9 +1245,9 @@ export default function KitchenScreen({ navigation, route }: any) {
                   </Text>
                 </View>
                 <ChevronDown size={16} color={(shoppingStatus !== "all" || shoppingUrgentOnly) ? colors.primary : colors.text} />
-              </TouchableOpacity>
-            </View>
-            
+          </TouchableOpacity>
+        </View>
+
             {/* Toplu işlem butonları */}
             {shoppingSelectionMode && selectedShoppingItems.size > 0 && (
               <View style={{

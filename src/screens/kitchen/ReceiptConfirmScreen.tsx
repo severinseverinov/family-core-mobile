@@ -85,9 +85,9 @@ export default function ReceiptConfirmScreen({ route, navigation }: any) {
         </View>
 
         <View style={styles.listHeader}>
-          <Text style={[styles.listTitle, { color: colors.text }]}>
-            Okunan Ürünler
-          </Text>
+        <Text style={[styles.listTitle, { color: colors.text }]}>
+          Okunan Ürünler
+        </Text>
           <Text style={[styles.listMeta, { color: colors.textMuted }]}>
             {receipt.items?.length || 0} ürün
           </Text>
@@ -95,46 +95,46 @@ export default function ReceiptConfirmScreen({ route, navigation }: any) {
 
         {receipt.items && receipt.items.length > 0 ? (
           receipt.items.map((item: any, index: number) => (
-            <View
-              key={index}
-              style={[styles.itemCard, { backgroundColor: colors.card }]}
-            >
-              <ModernInput
-                label="Ürün Adı"
-                value={item.name}
-                onChangeText={t => {
-                  let newItems = [...receipt.items];
-                  newItems[index].name = t;
-                  setReceipt({ ...receipt, items: newItems });
-                }}
-              />
-              <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 10 }}>
-                  <ModernInput
-                    label="Adet"
-                    value={String(item.quantity)}
-                    keyboardType="numeric"
-                    onChangeText={t => {
-                      let newItems = [...receipt.items];
-                      newItems[index].quantity = parseFloat(t) || 0;
-                      setReceipt({ ...receipt, items: newItems });
-                    }}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ModernInput
-                    label="Birim Fiyat"
-                    value={String(item.unit_price)}
-                    keyboardType="numeric"
-                    onChangeText={t => {
-                      let newItems = [...receipt.items];
-                      newItems[index].unit_price = parseFloat(t) || 0;
-                      setReceipt({ ...receipt, items: newItems });
-                    }}
-                  />
-                </View>
+          <View
+            key={index}
+            style={[styles.itemCard, { backgroundColor: colors.card }]}
+          >
+            <ModernInput
+              label="Ürün Adı"
+              value={item.name}
+              onChangeText={t => {
+                let newItems = [...receipt.items];
+                newItems[index].name = t;
+                setReceipt({ ...receipt, items: newItems });
+              }}
+            />
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <ModernInput
+                  label="Adet"
+                  value={String(item.quantity)}
+                  keyboardType="numeric"
+                  onChangeText={t => {
+                    let newItems = [...receipt.items];
+                    newItems[index].quantity = parseFloat(t) || 0;
+                    setReceipt({ ...receipt, items: newItems });
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ModernInput
+                  label="Birim Fiyat"
+                  value={String(item.unit_price)}
+                  keyboardType="numeric"
+                  onChangeText={t => {
+                    let newItems = [...receipt.items];
+                    newItems[index].unit_price = parseFloat(t) || 0;
+                    setReceipt({ ...receipt, items: newItems });
+                  }}
+                />
               </View>
             </View>
+          </View>
           ))
         ) : (
           <Text style={[styles.emptyText, { color: colors.textMuted }]}>
