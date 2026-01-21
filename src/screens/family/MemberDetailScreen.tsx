@@ -33,7 +33,7 @@ import SelectionGroup from "../../components/ui/SelectionGroup";
 import { useFocusEffect } from "@react-navigation/native";
 
 export default function MemberDetailScreen({ route, navigation }: any) {
-  const { member }: { member: FamilyMember } = route.params;
+  const { member, showDietModal }: { member: FamilyMember; showDietModal?: boolean } = route.params || {};
   const { colors } = useTheme();
   const [editMember, setEditMember] = useState<FamilyMember>(member);
   const [qrVisible, setQrVisible] = useState(false);
@@ -107,13 +107,22 @@ export default function MemberDetailScreen({ route, navigation }: any) {
       let active = true;
       const load = async () => {
         const res = await getMemberById(member.id);
-        if (active && res.member) hydrateFromMember(res.member as FamilyMember);
+        if (active && res.member) {
+          hydrateFromMember(res.member as FamilyMember);
+          // Eğer showDietModal parametresi varsa ve diyet aktifse modal'ı aç
+          const params = route.params || {};
+          if (params.showDietModal && res.member.meal_preferences?.diet_active) {
+            setTimeout(() => {
+              setDietModalVisible(true);
+            }, 300);
+          }
+        }
       };
       load();
       return () => {
         active = false;
       };
-    }, [member.id, hydrateFromMember])
+    }, [member.id, hydrateFromMember, route.params])
   );
 
   const handleSave = async () => {

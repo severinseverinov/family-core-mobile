@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,18 +17,39 @@ import {
   Landmark, // Finans ikonu
   ChevronRight,
   Users,
+  Apple,
 } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
-import { getMemberById } from "../../services/family";
+import { getMemberById, FamilyMember } from "../../services/family";
 
 export default function ProfileHubScreen({ navigation }: any) {
   const { colors, themeMode } = useTheme();
   const isLight = themeMode === "light";
   const { profile } = useAuth();
   const [qrVisible, setQrVisible] = useState(false);
+  const [memberData, setMemberData] = useState<FamilyMember | null>(null);
+  const [loadingMember, setLoadingMember] = useState(false);
   const isParent = ["owner", "admin"].includes(profile?.role || "");
+
+  // Kullanıcının tam profil bilgilerini çek
+  useEffect(() => {
+    if (profile?.id) {
+      setLoadingMember(true);
+      getMemberById(profile.id).then((res) => {
+        if (res.member) {
+          setMemberData(res.member as FamilyMember);
+        }
+        setLoadingMember(false);
+      });
+    }
+  }, [profile?.id]);
+
+  // Diyet programı aktif mi kontrol et
+  const hasActiveDiet =
+    memberData?.meal_preferences?.diet_active === true &&
+    memberData?.meal_preferences?.diet_start_date;
 
   const vCardData = `BEGIN:VCARD
 VERSION:3.0
@@ -185,6 +206,39 @@ END:VCARD`;
             <ChevronRight size={18} color={colors.border} />
           </TouchableOpacity>
         </View>
+
+        {/* DİYET PROGRAMI KISAYOLU (Sadece aktif diyet varsa) */}
+        {hasActiveDiet && (
+          <View
+            style={[
+              styles.listCard,
+              isLight && styles.surfaceLift,
+              { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.listItem}
+              onPress={() => {
+                navigation.navigate("ActiveDiet");
+              }}
+            >
+              <View
+                style={[styles.iconCircleSmall, { backgroundColor: "#10b98120" }]}
+              >
+                <Apple size={24} color="#10b981" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.listText, { color: colors.text }]}>
+                  Aktif Diyet Programı
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                  Diyet detaylarını görüntüle ve yönet
+                </Text>
+              </View>
+              <ChevronRight size={18} color={colors.border} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ACİL DURUM QR MODAL */}
         <Modal visible={qrVisible} transparent animationType="fade">

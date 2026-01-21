@@ -83,8 +83,8 @@ export async function getInventoryAndBudget() {
 
   const [inv, shop, bud] = await Promise.all([
     supabase
-      .from("inventory")
-      .select("*")
+    .from("inventory")
+    .select("*")
       .eq("family_id", profile.family_id)
       .order("created_at", { ascending: false }),
     supabase
@@ -205,7 +205,7 @@ export async function approveInventoryItem(itemId: string) {
       .from("inventory")
       .update({ is_approved: true })
       .eq("id", itemId)
-      .eq("family_id", profile.family_id);
+    .eq("family_id", profile.family_id);
 
     return { success: !error, error: error?.message };
   } catch (error: any) {
@@ -372,7 +372,7 @@ export async function getActiveMealPoll() {
     // Önce aktif anketleri getir (onaylanmış veya onaylanmamış)
     const { data, error: queryError } = await supabase
       .from("meal_polls")
-      .select("*")
+    .select("*")
       .eq("family_id", profile.family_id)
       .eq("is_active", true)
       .or(`end_at.is.null,end_at.gte.${nowIso}`)
@@ -514,7 +514,7 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
       .from("meal_polls")
       .update({ votes })
       .eq("id", pollId)
-      .eq("family_id", profile.family_id);
+    .eq("family_id", profile.family_id);
 
     if (error) {
       return { success: false, error: error.message };
@@ -589,9 +589,9 @@ export async function approveMealPoll(pollId: string) {
 
     const { data: poll } = await supabase
       .from("meal_polls")
-      .select("*")
+    .select("*")
       .eq("id", pollId)
-      .eq("family_id", profile.family_id)
+    .eq("family_id", profile.family_id)
       .single();
 
     if (!poll) return { error: "Anket bulunamadı." };
@@ -1074,7 +1074,7 @@ export async function deleteInventoryItem(
       .select("quantity, last_price")
       .eq("id", itemId)
       .eq("family_id", profile.family_id)
-      .maybeSingle();
+    .maybeSingle();
 
     if (reason === "mistake" && item) {
       const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
@@ -1214,7 +1214,7 @@ export async function generateMealSuggestionsAI(input: {
           : language === "Deutsch"
           ? "Der Bestand ist leer. Bitte fügen Sie Produkte hinzu."
           : "Stok boş. Öneri için önce ürün ekleyin.";
-      return {
+  return {
         groups: input.groups.map(group => ({
           label: group.label,
           suggestions: [emptyMessage],

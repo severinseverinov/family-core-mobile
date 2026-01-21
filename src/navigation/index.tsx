@@ -33,6 +33,7 @@ import ReceiptConfirmScreen from "../screens/kitchen/ReceiptConfirmScreen";
 import TestRecipeScreen from "../screens/kitchen/TestRecipeScreen";
 import FinanceSettingsScreen from "../screens/finance/FinanceSettingsScreen";
 import FamilyFinanceScreen from "../screens/family/FamilyFinanceScreen";
+import ActiveDietScreen from "../screens/profile/ActiveDietScreen";
 import { fetchWeather } from "../services/weather";
 
 const Stack = createStackNavigator();
@@ -202,11 +203,16 @@ export default function AppNavigator() {
                   component={TestRecipeScreen}
                   options={{ headerShown: false, title: "Tarif" }}
                 />
+                <Stack.Screen
+                  name="ActiveDiet"
+                  component={ActiveDietScreen}
+                  options={{ headerShown: false, title: "Aktif Diyet Programı" }}
+                />
             <Stack.Screen
                   name="FinanceSettings"
                   component={FinanceSettingsScreen}
                   options={{ headerShown: false }}
-            />
+                />
             <Stack.Screen
                   name="FamilyFinance"
                   component={FamilyFinanceScreen}
