@@ -48,6 +48,8 @@ import {
   Settings,
   Camera,
   Image as ImageIcon,
+  ArrowLeft,
+  Check,
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "react-native";
@@ -2351,14 +2353,14 @@ export default function ActiveDietScreen({ navigation }: any) {
 
               {/* Tüm Öğeleri Göster */}
               {pendingItems.map((item, index) => (
-                <View key={index} style={{ marginBottom: 24 }}>
+                <View key={index} style={{ marginBottom: 16 }}>
                   {/* İkon ve Başlık */}
                   <View
                     style={{
                       flexDirection: "row",
                       alignItems: "center",
-                      marginBottom: 16,
-                      paddingBottom: 16,
+                      marginBottom: 12,
+                      paddingBottom: 12,
                       borderBottomWidth: 1,
                       borderBottomColor: colors.border,
                     }}
@@ -2366,30 +2368,30 @@ export default function ActiveDietScreen({ navigation }: any) {
                     {item.isDrink ? (
                       <View
                         style={{
-                          width: 56,
-                          height: 56,
-                          borderRadius: 28,
+                          width: 48,
+                          height: 48,
+                          borderRadius: 24,
                           backgroundColor: colors.primary + "20",
                           justifyContent: "center",
                           alignItems: "center",
-                          marginRight: 16,
+                          marginRight: 12,
                         }}
                       >
-                        <Droplet size={28} color={colors.primary} />
+                        <Droplet size={24} color={colors.primary} />
                       </View>
                     ) : (
                       <View
                         style={{
-                          width: 56,
-                          height: 56,
-                          borderRadius: 28,
+                          width: 48,
+                          height: 48,
+                          borderRadius: 24,
                           backgroundColor: colors.primary + "20",
                           justifyContent: "center",
                           alignItems: "center",
-                          marginRight: 16,
+                          marginRight: 12,
                         }}
                       >
-                        <UtensilsCrossed size={28} color={colors.primary} />
+                        <UtensilsCrossed size={24} color={colors.primary} />
                       </View>
                     )}
                     <View style={{ flex: 1 }}>
@@ -2398,10 +2400,10 @@ export default function ActiveDietScreen({ navigation }: any) {
                           styles.modalDesc,
                           {
                             color: colors.textMuted,
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: "600",
                             textTransform: "uppercase",
-                            marginBottom: 6,
+                            marginBottom: 4,
                             letterSpacing: 0.5,
                           },
                         ]}
@@ -2413,9 +2415,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                           styles.modalDesc,
                           {
                             color: colors.text,
-                            fontSize: 20,
+                            fontSize: 16,
                             fontWeight: "700",
-                            lineHeight: 26,
+                            lineHeight: 22,
                           },
                         ]}
                       >
@@ -2429,9 +2431,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                     <View
                       style={{
                         backgroundColor: colors.background,
-                        padding: 16,
-                        borderRadius: 16,
-                        marginBottom: 16,
+                        padding: 12,
+                        borderRadius: 12,
+                        marginBottom: 12,
                         borderWidth: 1,
                         borderColor: colors.border,
                       }}
@@ -2441,9 +2443,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                           styles.modalDesc,
                           {
                             color: colors.textMuted,
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: "600",
-                            marginBottom: 8,
+                            marginBottom: 6,
                             textTransform: "uppercase",
                             letterSpacing: 0.5,
                           },
@@ -2456,9 +2458,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                           styles.modalDesc,
                           {
                             color: colors.text,
-                            fontSize: 15,
+                            fontSize: 14,
                             fontWeight: "500",
-                            lineHeight: 22,
+                            lineHeight: 20,
                           },
                         ]}
                       >
@@ -2470,55 +2472,73 @@ export default function ActiveDietScreen({ navigation }: any) {
                   {/* Kalori Kartı */}
                   <View
                     style={{
-                      backgroundColor: colors.primary + "15",
-                      padding: 20,
-                      borderRadius: 16,
+                      backgroundColor: colors.primary + "10",
+                      padding: 12,
+                      borderRadius: 12,
+                      flexDirection: "row",
+                      justifyContent: "space-between",
                       alignItems: "center",
-                      borderWidth: 2,
-                      borderColor: colors.primary + "30",
+                      borderWidth: 1,
+                      borderColor: colors.primary + "20",
                     }}
                   >
-                    <Text
-                      style={[
-                        styles.modalDesc,
-                        {
-                          color: colors.textMuted,
-                          fontSize: 12,
-                          fontWeight: "600",
-                          marginBottom: 8,
-                          textTransform: "uppercase",
-                          letterSpacing: 1,
-                        },
-                      ]}
-                    >
-                      Kalori
-                    </Text>
-                    <Text
-                      style={[
-                        styles.calculatedCaloriesValue,
-                        {
-                          color: colors.primary,
-                          fontSize: 36,
-                          fontWeight: "800",
-                          lineHeight: 42,
-                        },
-                      ]}
-                    >
-                      {item.calories}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.modalDesc,
-                        {
-                          color: colors.textMuted,
-                          fontSize: 14,
-                          fontWeight: "600",
-                          marginTop: 4,
-                        },
-                      ]}
-                    >
-                      kcal
-                    </Text>
+                    <View>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontWeight: "600",
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                            letterSpacing: 0.5,
+                          },
+                        ]}
+                      >
+                        Kalori
+                      </Text>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.text,
+                            fontSize: 12,
+                            fontWeight: "500",
+                          },
+                        ]}
+                      >
+                        AI ile hesaplandı
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text
+                        style={[
+                          styles.modalTitle,
+                          {
+                            color: colors.primary,
+                            fontSize: 20,
+                            fontWeight: "700",
+                            lineHeight: 24,
+                          },
+                        ]}
+                      >
+                        {item.calories}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontWeight: "600",
+                            marginTop: 2,
+                          },
+                        ]}
+                      >
+                        kcal
+                      </Text>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -2527,57 +2547,75 @@ export default function ActiveDietScreen({ navigation }: any) {
               {pendingItems.length > 1 && (
                 <View
                   style={{
-                    backgroundColor: colors.primary + "25",
-                    padding: 24,
-                    borderRadius: 20,
+                    backgroundColor: colors.primary + "15",
+                    padding: 12,
+                    borderRadius: 12,
+                    flexDirection: "row",
+                    justifyContent: "space-between",
                     alignItems: "center",
-                    borderWidth: 2,
-                    borderColor: colors.primary,
-                    marginTop: 8,
-                    marginBottom: 20,
+                    borderWidth: 1.5,
+                    borderColor: colors.primary + "40",
+                    marginTop: 4,
+                    marginBottom: 12,
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.modalDesc,
-                      {
-                        color: colors.primary,
-                        fontSize: 14,
-                        fontWeight: "700",
-                        marginBottom: 12,
-                        textTransform: "uppercase",
-                        letterSpacing: 1,
-                      },
-                    ]}
-                  >
-                    Toplam Kalori
-                  </Text>
-                  <Text
-                    style={[
-                      styles.calculatedCaloriesValue,
-                      {
-                        color: colors.primary,
-                        fontSize: 48,
-                        fontWeight: "800",
-                        lineHeight: 56,
-                      },
-                    ]}
-                  >
-                    {pendingItems.reduce((sum, item) => sum + item.calories, 0)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.modalDesc,
-                      {
-                        color: colors.textMuted,
-                        fontSize: 16,
-                        fontWeight: "600",
-                        marginTop: 4,
-                      },
-                    ]}
-                  >
-                    kcal
-                  </Text>
+                  <View>
+                    <Text
+                      style={[
+                        styles.modalDesc,
+                        {
+                          color: colors.primary,
+                          fontSize: 11,
+                          fontWeight: "700",
+                          marginBottom: 4,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.5,
+                        },
+                      ]}
+                    >
+                      Toplam Kalori
+                    </Text>
+                    <Text
+                      style={[
+                        styles.modalDesc,
+                        {
+                          color: colors.textMuted,
+                          fontSize: 12,
+                          fontWeight: "500",
+                        },
+                      ]}
+                    >
+                      {pendingItems.length} öğe
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text
+                      style={[
+                        styles.modalTitle,
+                        {
+                          color: colors.primary,
+                          fontSize: 22,
+                          fontWeight: "700",
+                          lineHeight: 26,
+                        },
+                      ]}
+                    >
+                      {pendingItems.reduce((sum, item) => sum + item.calories, 0)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.modalDesc,
+                        {
+                          color: colors.textMuted,
+                          fontSize: 11,
+                          fontWeight: "600",
+                          marginTop: 2,
+                        },
+                      ]}
+                    >
+                      kcal
+                    </Text>
+                  </View>
                 </View>
               )}
 
@@ -2598,99 +2636,96 @@ export default function ActiveDietScreen({ navigation }: any) {
             </ScrollView>
 
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                onPress={() => {
-                  setCaloriesConfirmationModalVisible(false);
-                  setModalMode("input");
-                  setCaloriesModalVisible(true);
-                  setPendingItems([]);
-                  setCurrentPendingIndex(0);
-                }}
-                style={[
-                  styles.modalButton,
-                  styles.modalButtonCancel,
-                  { borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.text }]}>
-                  Bir Önceki Ekrana Dön
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={async () => {
-                  if (!confirmedCalories) {
-                    Alert.alert("Hata", "Kalori bilgisi bulunamadı.");
-                    return;
-                  }
-
-                  setSavingActivity(true);
-                  const dateStr = formatDateToLocalString(selectedDate);
-                  const notes = confirmedDetails
-                    ? `${confirmedIsDrink ? "İçecek" : "Yemek"}: ${confirmedFoodName} (${confirmedDetails})`
-                    : `${confirmedIsDrink ? "İçecek" : "Yemek"}: ${confirmedFoodName}`;
-                  const result = await logCalories(
-                    confirmedCalories,
-                    dateStr,
-                    notes
-                  );
-                  setSavingActivity(false);
-
-                  if (result.success) {
-                    // Eğer daha fazla item varsa, bir sonrakine geç
-                    if (currentPendingIndex < pendingItems.length - 1) {
-                      const nextIndex = currentPendingIndex + 1;
-                      const nextItem = pendingItems[nextIndex];
-                      setCurrentPendingIndex(nextIndex);
-                      setConfirmedCalories(nextItem.calories);
-                      setConfirmedDetails(nextItem.details);
-                      setConfirmedFoodName(nextItem.name);
-                      setConfirmedIsDrink(nextItem.isDrink);
-                    } else {
-                      // Tüm item'lar kaydedildi
-                      Alert.alert(
-                        "Başarılı",
-                        `Tüm öğeler kaydedildi.`
-                      );
-                      setCaloriesConfirmationModalVisible(false);
-                      setCaloriesModalVisible(false);
-                      setFoodNameInput("");
-                      setDrinkNameInput("");
-                      setFoodCaloriesInput("");
-                      setDrinkCaloriesInput("");
-                      setPendingItems([]);
-                      setCurrentPendingIndex(0);
-                      setConfirmedCalories(null);
-                      setConfirmedDetails(null);
-                      setConfirmedFoodName("");
-                      // Verileri yeniden yükle
-                      await loadDailyData(selectedDate);
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setCaloriesConfirmationModalVisible(false);
+                    setModalMode("input");
+                    setCaloriesModalVisible(true);
+                    setPendingItems([]);
+                    setCurrentPendingIndex(0);
+                  }}
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonCancel,
+                    { borderColor: colors.border, flex: 1 },
+                  ]}
+                >
+                  <ArrowLeft size={24} color={colors.text} strokeWidth={2.5} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (!confirmedCalories) {
+                      Alert.alert("Hata", "Kalori bilgisi bulunamadı.");
+                      return;
                     }
-                  } else {
-                    Alert.alert("Hata", result.error || "Kalori kaydı eklenemedi.");
-                  }
-                }}
-                disabled={savingActivity || !confirmedCalories}
-                style={[
-                  styles.modalButton,
-                  styles.modalButtonConfirm,
-                  {
-                    backgroundColor:
-                      savingActivity || !confirmedCalories
-                        ? colors.textMuted
-                        : colors.primary,
-                  },
-                ]}
-              >
-                {savingActivity ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={[styles.modalButtonText, { color: "#fff" }]}>
-                    {currentPendingIndex < pendingItems.length - 1
-                      ? "Evet, Kaydet ve Devam Et"
-                      : "Evet, Kaydet"}
-                  </Text>
-                )}
-              </TouchableOpacity>
+
+                    setSavingActivity(true);
+                    const dateStr = formatDateToLocalString(selectedDate);
+                    const notes = confirmedDetails
+                      ? `${confirmedIsDrink ? "İçecek" : "Yemek"}: ${confirmedFoodName} (${confirmedDetails})`
+                      : `${confirmedIsDrink ? "İçecek" : "Yemek"}: ${confirmedFoodName}`;
+                    const result = await logCalories(
+                      confirmedCalories,
+                      dateStr,
+                      notes
+                    );
+                    setSavingActivity(false);
+
+                    if (result.success) {
+                      // Eğer daha fazla item varsa, bir sonrakine geç
+                      if (currentPendingIndex < pendingItems.length - 1) {
+                        const nextIndex = currentPendingIndex + 1;
+                        const nextItem = pendingItems[nextIndex];
+                        setCurrentPendingIndex(nextIndex);
+                        setConfirmedCalories(nextItem.calories);
+                        setConfirmedDetails(nextItem.details);
+                        setConfirmedFoodName(nextItem.name);
+                        setConfirmedIsDrink(nextItem.isDrink);
+                      } else {
+                        // Tüm item'lar kaydedildi
+                        Alert.alert(
+                          "Başarılı",
+                          `Tüm öğeler kaydedildi.`
+                        );
+                        setCaloriesConfirmationModalVisible(false);
+                        setCaloriesModalVisible(false);
+                        setFoodNameInput("");
+                        setDrinkNameInput("");
+                        setFoodCaloriesInput("");
+                        setDrinkCaloriesInput("");
+                        setPendingItems([]);
+                        setCurrentPendingIndex(0);
+                        setConfirmedCalories(null);
+                        setConfirmedDetails(null);
+                        setConfirmedFoodName("");
+                        // Verileri yeniden yükle
+                        await loadDailyData(selectedDate);
+                      }
+                    } else {
+                      Alert.alert("Hata", result.error || "Kalori kaydı eklenemedi.");
+                    }
+                  }}
+                  disabled={savingActivity || !confirmedCalories}
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonConfirm,
+                    {
+                      backgroundColor:
+                        savingActivity || !confirmedCalories
+                          ? colors.textMuted
+                          : colors.primary,
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  {savingActivity ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Check size={24} color="#fff" strokeWidth={2.5} />
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -2724,81 +2759,86 @@ export default function ActiveDietScreen({ navigation }: any) {
             <ScrollView
               showsVerticalScrollIndicator={true}
               
-              contentContainerStyle={{ paddingBottom: 16, flexGrow: 1 }}
+              contentContainerStyle={{ paddingBottom: 4, flexGrow: 1 }}
               nestedScrollEnabled={true}
             >
-              <View style={{ marginBottom: 24 }}>
+              <View style={{ marginBottom: 4 }}>
                 {/* İkon ve Başlık */}
                 <View
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    marginBottom: 16,
-                    paddingBottom: 16,
+                    marginBottom: 4,
+                    paddingBottom: 4,
                     borderBottomWidth: 1,
                     borderBottomColor: colors.border,
                   }}
                 >
                   <View
                     style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: 28,
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
                       backgroundColor: "#10b98120",
                       justifyContent: "center",
                       alignItems: "center",
-                      marginRight: 16,
+                      marginRight: 12,
                     }}
                   >
-                    <Dumbbell size={28} color="#10b981" />
+                    <Dumbbell size={24} color="#10b981" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text
                       style={[
-                        styles.modalTitle,
+                        styles.modalDesc,
+                        {
+                          color: colors.textMuted,
+                          fontSize: 11,
+                          fontWeight: "600",
+                          textTransform: "uppercase",
+                          marginBottom: 4,
+                          letterSpacing: 0.5,
+                        },
+                      ]}
+                    >
+                      Egzersiz
+                    </Text>
+                    <Text
+                      style={[
+                        styles.modalDesc,
                         {
                           color: colors.text,
-                          fontSize: 18,
-                          marginBottom: 4,
+                          fontSize: 16,
+                          fontWeight: "700",
+                          lineHeight: 22,
                         },
                       ]}
                     >
                       {confirmedExerciseName}
                     </Text>
+                  </View>
+                </View>
+
+                {/* Detaylar */}
+                <View style={{ marginBottom: 12 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      backgroundColor: colors.background,
+                      borderRadius: 12,
+                      marginBottom: 4,
+                    }}
+                  >
                     <Text
                       style={[
                         styles.modalDesc,
                         {
                           color: colors.textMuted,
                           fontSize: 13,
-                        },
-                      ]}
-                    >
-                      Egzersiz
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Detaylar */}
-                <View style={{ marginBottom: 16 }}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      paddingVertical: 12,
-                      paddingHorizontal: 16,
-                      backgroundColor: colors.background,
-                      borderRadius: 12,
-                      marginBottom: 16,
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.modalDesc,
-                        {
-                          color: colors.textMuted,
-                          fontSize: 14,
                         },
                       ]}
                     >
@@ -2809,7 +2849,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                         styles.modalTitle,
                         {
                           color: colors.text,
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: "600",
                         },
                       ]}
@@ -2821,131 +2861,148 @@ export default function ActiveDietScreen({ navigation }: any) {
                   {/* Kalori Kartı */}
                   <View
                     style={{
-                      backgroundColor: "#10b98115",
-                      padding: 20,
-                      borderRadius: 16,
+                      backgroundColor: "#10b98110",
+                      padding: 12,
+                      borderRadius: 12,
+                      flexDirection: "row",
+                      justifyContent: "space-between",
                       alignItems: "center",
-                      borderWidth: 2,
-                      borderColor: "#10b98130",
+                      borderWidth: 1,
+                      borderColor: "#10b98120",
                     }}
                   >
-                    <Text
-                      style={[
-                        styles.modalDesc,
-                        {
-                          color: colors.textMuted,
-                          fontSize: 12,
-                          fontWeight: "600",
-                          marginBottom: 8,
-                          textTransform: "uppercase",
-                          letterSpacing: 1,
-                        },
-                      ]}
-                    >
-                      AI ile Hesaplanan Kalori
-                    </Text>
-                    <Text
-                      style={[
-                        styles.calculatedCaloriesValue,
-                        {
-                          color: "#10b981",
-                          fontSize: 36,
-                          fontWeight: "800",
-                          lineHeight: 42,
-                        },
-                      ]}
-                    >
-                      {confirmedExerciseCalories || 0}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.modalDesc,
-                        {
-                          color: colors.textMuted,
-                          fontSize: 14,
-                          fontWeight: "600",
-                          marginTop: 4,
-                        },
-                      ]}
-                    >
-                      kcal
-                    </Text>
+                    <View>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontWeight: "600",
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                            letterSpacing: 0.5,
+                          },
+                        ]}
+                      >
+                        AI ile Hesaplanan Kalori
+                      </Text>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.text,
+                            fontSize: 12,
+                            fontWeight: "500",
+                          },
+                        ]}
+                      >
+                        Yakılan kalori
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text
+                        style={[
+                          styles.modalTitle,
+                          {
+                            color: "#10b981",
+                            fontSize: 20,
+                            fontWeight: "700",
+                            lineHeight: 24,
+                          },
+                        ]}
+                      >
+                        {confirmedExerciseCalories || 0}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.modalDesc,
+                          {
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            fontWeight: "600",
+                            marginTop: 2,
+                          },
+                        ]}
+                      >
+                        kcal
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
             </ScrollView>
 
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                onPress={() => {
-                  setExerciseConfirmationModalVisible(false);
-                  setExerciseModalVisible(true);
-                }}
-                style={[
-                  styles.modalButton,
-                  styles.modalButtonCancel,
-                  { borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.text }]}>
-                  Bir Önceki Ekrana Dön
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={async () => {
-                  if (!confirmedExerciseCalories) {
-                    Alert.alert("Hata", "Kalori bilgisi bulunamadı.");
-                    return;
-                  }
-
-                  setSavingActivity(true);
-                  const dateStr = formatDateToLocalString(selectedDate);
-                  const result = await logExercise(
-                    confirmedExerciseDuration,
-                    confirmedExerciseCalories,
-                    dateStr,
-                    confirmedExerciseName
-                  );
-                  setSavingActivity(false);
-
-                  if (result.success) {
-                    Alert.alert(
-                      "Başarılı",
-                      `${confirmedExerciseName} egzersizi kaydedildi.`
-                    );
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <TouchableOpacity
+                  onPress={() => {
                     setExerciseConfirmationModalVisible(false);
-                    setExerciseModalVisible(false);
-                    setExerciseNameInput("");
-                    setExerciseDurationInput("");
-                    setConfirmedExerciseName("");
-                    setConfirmedExerciseDuration(0);
-                    setConfirmedExerciseCalories(null);
-                    // Verileri yeniden yükle
-                    await loadDailyData(selectedDate);
-                  } else {
-                    Alert.alert("Hata", result.error || "Egzersiz kaydı eklenemedi.");
-                  }
-                }}
-                disabled={savingActivity || !confirmedExerciseCalories}
-                style={[
-                  styles.modalButton,
-                  styles.modalButtonConfirm,
-                  {
-                    backgroundColor:
-                      savingActivity || !confirmedExerciseCalories
-                        ? colors.textMuted
-                        : colors.primary,
-                  },
-                ]}
-              >
-                {savingActivity ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={[styles.modalButtonText, { color: "#fff" }]}>
-                    Evet, Kaydet
-                  </Text>
-                )}
-              </TouchableOpacity>
+                    setExerciseModalVisible(true);
+                  }}
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonCancel,
+                    { borderColor: colors.border, flex: 1 },
+                  ]}
+                >
+                  <ArrowLeft size={24} color={colors.text} strokeWidth={2.5} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (!confirmedExerciseCalories) {
+                      Alert.alert("Hata", "Kalori bilgisi bulunamadı.");
+                      return;
+                    }
+
+                    setSavingActivity(true);
+                    const dateStr = formatDateToLocalString(selectedDate);
+                    const result = await logExercise(
+                      confirmedExerciseDuration,
+                      confirmedExerciseCalories,
+                      dateStr,
+                      confirmedExerciseName
+                    );
+                    setSavingActivity(false);
+
+                    if (result.success) {
+                      Alert.alert(
+                        "Başarılı",
+                        `${confirmedExerciseName} egzersizi kaydedildi.`
+                      );
+                      setExerciseConfirmationModalVisible(false);
+                      setExerciseModalVisible(false);
+                      setExerciseNameInput("");
+                      setExerciseDurationInput("");
+                      setConfirmedExerciseName("");
+                      setConfirmedExerciseDuration(0);
+                      setConfirmedExerciseCalories(null);
+                      // Verileri yeniden yükle
+                      await loadDailyData(selectedDate);
+                    } else {
+                      Alert.alert("Hata", result.error || "Egzersiz kaydı eklenemedi.");
+                    }
+                  }}
+                  disabled={savingActivity || !confirmedExerciseCalories}
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonConfirm,
+                    {
+                      backgroundColor:
+                        savingActivity || !confirmedExerciseCalories
+                          ? colors.textMuted
+                          : colors.primary,
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  {savingActivity ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Check size={24} color="#fff" strokeWidth={2.5} />
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
