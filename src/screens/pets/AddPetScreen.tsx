@@ -151,9 +151,9 @@ export default function AddPetScreen({ navigation }: any) {
             <ModernInput
               label="İsim"
               placeholder="Örn: Pamuk"
-              value={name}
-              onChangeText={setName}
-            />
+        value={name}
+        onChangeText={setName}
+      />
 
             <SelectionGroup
               label="TÜRÜ"
@@ -213,7 +213,7 @@ export default function AddPetScreen({ navigation }: any) {
             },
           ]}
         >
-          <TouchableOpacity
+      <TouchableOpacity
             style={[
               styles.saveBtn,
               { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 },
@@ -229,8 +229,8 @@ export default function AddPetScreen({ navigation }: any) {
                 <Text style={styles.saveBtnText}>Kaydet</Text>
               </>
             )}
-          </TouchableOpacity>
-        </View>
+      </TouchableOpacity>
+    </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

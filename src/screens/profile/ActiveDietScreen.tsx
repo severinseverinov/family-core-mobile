@@ -53,6 +53,7 @@ import {
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "react-native";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import { getMemberById, FamilyMember, updateMemberDetails } from "../../services/family";
 import { getPreferences, updatePreferences } from "../../services/settings";
 import {
@@ -92,6 +93,11 @@ export default function ActiveDietScreen({ navigation }: any) {
   >([]);
   const [weightModalVisible, setWeightModalVisible] = useState(false);
   const [newWeight, setNewWeight] = useState("");
+  const [continueDietModalVisible, setContinueDietModalVisible] = useState(false);
+  const [dietStreakDays, setDietStreakDays] = useState(0); // Diyete devam etme günü skoru
+  const [targetWeight, setTargetWeight] = useState<number | null>(null); // Hedef kilo
+  const [targetWeightModalVisible, setTargetWeightModalVisible] = useState(false);
+  const [targetWeightInput, setTargetWeightInput] = useState("");
   const [waterReminderEnabled, setWaterReminderEnabled] = useState(false);
   const [savingWaterReminder, setSavingWaterReminder] = useState(false);
   const [viewMode, setViewMode] = useState<"daily" | "monthly">("monthly");
@@ -123,6 +129,12 @@ export default function ActiveDietScreen({ navigation }: any) {
   const [confirmedExerciseCalories, setConfirmedExerciseCalories] = useState<number | null>(null);
   const [savingActivity, setSavingActivity] = useState(false);
   const [dailyLogs, setDailyLogs] = useState<DailyTrackingLog[]>([]);
+  const [monthlyTrackingData, setMonthlyTrackingData] = useState<Record<string, {
+    waterPercentage: number;
+    caloriesPercentage: number;
+    exercisePercentage: number;
+    averagePercentage: number;
+  }>>({});
   // Kalori onay ekranı için state'ler
   const [caloriesConfirmationModalVisible, setCaloriesConfirmationModalVisible] = useState(false);
   const [confirmedCalories, setConfirmedCalories] = useState<number | null>(null);
@@ -164,6 +176,16 @@ export default function ActiveDietScreen({ navigation }: any) {
       );
       if (weightStored) {
         setWeightHistory(JSON.parse(weightStored));
+      }
+
+      // Diyete devam etme günü skorunu yükle
+      const streakStored = await AsyncStorage.getItem(
+        `diet_streak_days_${profile.id}`
+      );
+      if (streakStored) {
+        setDietStreakDays(parseInt(streakStored, 10) || 0);
+      } else {
+        setDietStreakDays(0);
       }
     } catch (error) {
       console.error("Diyet ilerlemesi yüklenemedi:", error);
@@ -295,6 +317,9 @@ export default function ActiveDietScreen({ navigation }: any) {
       } else {
         setDailyLogs([]);
       }
+
+      // Günlük aktivite takibi: Bugün için aktivite var mı kontrol et
+      await checkAndUpdateDietStreak(dateStr, tracking, logs || []);
     } catch (error) {
       console.error("Günlük veriler yüklenemedi:", error);
       setDailyData({
@@ -305,6 +330,75 @@ export default function ActiveDietScreen({ navigation }: any) {
       setDailyLogs([]);
     }
   }, [profile?.id]);
+
+  // Diyete devam etme günü skorunu kontrol et ve güncelle
+  const checkAndUpdateDietStreak = async (
+    dateStr: string,
+    tracking: any,
+    logs: DailyTrackingLog[]
+  ) => {
+    if (!profile?.id) return;
+
+    try {
+      // Bugün için aktivite var mı kontrol et
+      const hasActivity = 
+        (tracking?.water && tracking.water > 0) ||
+        (tracking?.calories && tracking.calories > 0) ||
+        (tracking?.exercise_calories && tracking.exercise_calories > 0) ||
+        logs.length > 0;
+
+      if (!hasActivity) {
+        // Aktivite yoksa streak'i sıfırlama, sadece güncelleme yapma
+        return;
+      }
+
+      // Son streak gününü kontrol et
+      const lastStreakDate = await AsyncStorage.getItem(
+        `diet_last_streak_date_${profile.id}`
+      );
+      const today = formatDateToLocalString(new Date());
+      const yesterday = formatDateToLocalString(
+        new Date(new Date().setDate(new Date().getDate() - 1))
+      );
+
+      let newStreak = dietStreakDays;
+
+      if (!lastStreakDate) {
+        // İlk aktivite
+        newStreak = 1;
+      } else if (lastStreakDate === yesterday) {
+        // Dün aktivite vardı, streak devam ediyor
+        newStreak = dietStreakDays + 1;
+      } else if (lastStreakDate === today) {
+        // Bugün zaten sayılmış
+        return;
+      } else {
+        // Streak kırıldı, yeniden başla
+        newStreak = 1;
+      }
+
+      setDietStreakDays(newStreak);
+      await AsyncStorage.setItem(
+        `diet_streak_days_${profile.id}`,
+        newStreak.toString()
+      );
+      await AsyncStorage.setItem(
+        `diet_last_streak_date_${profile.id}`,
+        today
+      );
+    } catch (error) {
+      console.error("Streak güncellenemedi:", error);
+    }
+  };
+
+  // Aktivite kaydedildiğinde streak'i güncelle
+  const updateStreakOnActivity = async () => {
+    if (!profile?.id) return;
+    const today = formatDateToLocalString(new Date());
+    const { data: tracking } = await getOrCreateDailyTracking(today);
+    const { data: logs } = await getDailyTrackingLogs(today, today);
+    await checkAndUpdateDietStreak(today, tracking, logs || []);
+  };
 
   // Üye bilgilerini yükle
   const loadMember = useCallback(async () => {
@@ -326,11 +420,78 @@ export default function ActiveDietScreen({ navigation }: any) {
     }
   }, [profile?.id, loadDietProgress, loadDailyData]);
 
+  // Aylık takip verilerini yükle
+  const loadMonthlyTrackingData = useCallback(async () => {
+    if (!profile?.id || !member) return;
+    
+    try {
+      const today = new Date();
+      const startDate = subDays(today, 29);
+      const startDateStr = formatDateToLocalString(startDate);
+      const endDateStr = formatDateToLocalString(today);
+      
+      const { data: trackingData, error } = await getDailyTrackingRange(startDateStr, endDateStr);
+      
+      if (error || !trackingData) {
+        setMonthlyTrackingData({});
+        return;
+      }
+
+      // Yaş, kilo, boy ve cinsiyet bilgileri
+      const age = calculateAge(member.birth_date);
+      const dailyWaterNeed = age && member.weight
+        ? calculateDailyWaterNeed(age, member.weight)
+        : 2500;
+      const mealPrefs = member?.meal_preferences || {};
+      const caloriesTarget = mealPrefs.calories ? parseInt(mealPrefs.calories) : 2000;
+      const exerciseCalorieTarget = calculateExerciseCalorieTarget(
+        age || undefined,
+        member.weight,
+        member.height,
+        member.gender
+      );
+
+      // Her gün için yüzdeleri hesapla
+      const monthlyData: Record<string, {
+        waterPercentage: number;
+        caloriesPercentage: number;
+        exercisePercentage: number;
+        averagePercentage: number;
+      }> = {};
+
+      trackingData.forEach((tracking) => {
+        const waterPercentage = Math.min(100, Math.round((tracking.water / dailyWaterNeed) * 100));
+        const caloriesPercentage = Math.min(100, Math.round((tracking.calories / caloriesTarget) * 100));
+        const exercisePercentage = Math.min(100, Math.round((tracking.exercise_calories / exerciseCalorieTarget) * 100));
+        const averagePercentage = Math.round((waterPercentage + caloriesPercentage + exercisePercentage) / 3);
+
+        monthlyData[tracking.date] = {
+          waterPercentage,
+          caloriesPercentage,
+          exercisePercentage,
+          averagePercentage,
+        };
+      });
+
+      setMonthlyTrackingData(monthlyData);
+    } catch (error) {
+      console.error("Aylık takip verileri yüklenemedi:", error);
+      setMonthlyTrackingData({});
+    }
+  }, [profile?.id, member]);
+
   useFocusEffect(
     useCallback(() => {
       loadMember();
     }, [loadMember])
   );
+
+  // Member yüklendiğinde aylık verileri yükle
+  useEffect(() => {
+    if (member) {
+      loadMonthlyTrackingData();
+    }
+  }, [member, loadMonthlyTrackingData]);
 
   // Su hatırlatıcısı tercihlerini yükle
   useEffect(() => {
@@ -346,6 +507,37 @@ export default function ActiveDietScreen({ navigation }: any) {
     };
     loadWaterPref();
   }, []);
+
+  // Hedef kiloyu yükle (member değiştiğinde)
+  useEffect(() => {
+    if (!profile?.id || !member) return;
+    
+    const loadTargetWeight = async () => {
+      try {
+        const mealPrefs = member?.meal_preferences || {} as any;
+        if (mealPrefs.target_weight) {
+          setTargetWeight(parseFloat(mealPrefs.target_weight));
+          await AsyncStorage.setItem(
+            `diet_target_weight_${profile.id}`,
+            mealPrefs.target_weight.toString()
+          );
+        } else {
+          const targetWeightStored = await AsyncStorage.getItem(
+            `diet_target_weight_${profile.id}`
+          );
+          if (targetWeightStored) {
+            setTargetWeight(parseFloat(targetWeightStored));
+          } else {
+            setTargetWeight(null);
+          }
+        }
+      } catch (error) {
+        console.error("Hedef kilo yüklenemedi:", error);
+      }
+    };
+    
+    loadTargetWeight();
+  }, [profile?.id, (member?.meal_preferences as any)?.target_weight]);
 
   // Gün işaretleme (yapıldı/yapılmadı)
   const toggleDay = async (date: string) => {
@@ -455,7 +647,38 @@ export default function ActiveDietScreen({ navigation }: any) {
       );
       setWeightModalVisible(false);
       setNewWeight("");
-      Alert.alert("Başarılı", "Kilo kaydedildi.");
+      
+      // Diyete devam etme sorusu
+      Alert.alert(
+        "Kilo Kaydedildi",
+        "Bu hafta için kilonuz kaydedildi. Diyete devam etmek istiyor musunuz?",
+        [
+          {
+            text: "Hayır",
+            style: "cancel",
+            onPress: async () => {
+              // Diyeti sonlandır
+              if (member) {
+                const updatedPrefs = {
+                  ...member.meal_preferences,
+                  diet_active: false,
+                };
+                await updateMemberDetails(profile.id, {
+                  meal_preferences: updatedPrefs,
+                });
+                Alert.alert("Bilgi", "Diyet programı sonlandırıldı.");
+                await loadMember();
+              }
+            },
+          },
+          {
+            text: "Evet, Devam Et",
+            onPress: () => {
+              Alert.alert("Harika!", "Diyete devam ediyorsunuz. Başarılar!");
+            },
+          },
+        ]
+      );
     } catch (error) {
       Alert.alert("Hata", "Kilo kaydedilemedi.");
     } finally {
@@ -463,11 +686,19 @@ export default function ActiveDietScreen({ navigation }: any) {
     }
   };
 
-  // Diyet bilgileri
+  // Diyet bilgileri (Haftalık sistem)
   const mealPrefs = member?.meal_preferences || {};
   const dietStartDate = mealPrefs.diet_start_date
     ? new Date(mealPrefs.diet_start_date)
     : null;
+  
+  // Haftalık hesaplamalar
+  const dietWeeks = dietStartDate
+    ? Math.floor(
+        (new Date().getTime() - dietStartDate.getTime()) /
+          (1000 * 60 * 60 * 24 * 7)
+      ) + 1
+    : 0;
   const dietDays = dietStartDate
     ? Math.floor(
         (new Date().getTime() - dietStartDate.getTime()) /
@@ -484,6 +715,41 @@ export default function ActiveDietScreen({ navigation }: any) {
     return Math.round(bmi * 10) / 10;
   };
 
+  // Egzersiz için günlük kalori hedefi hesaplama (yaş, kilo, boy ve cinsiyete göre)
+  const calculateExerciseCalorieTarget = (
+    age?: number,
+    weight?: number,
+    height?: number,
+    gender?: string
+  ): number => {
+    if (!age || !weight || !height || age <= 0 || weight <= 0 || height <= 0) {
+      // Varsayılan değer: orta seviye aktivite için 400 kcal
+      return 400;
+    }
+
+    // BMR (Bazal Metabolizma Hızı) hesaplama - Mifflin-St Jeor Denklemi
+    let bmr: number;
+    const heightInCm = height;
+    const weightInKg = weight;
+
+    if (gender === "male" || gender === "erkek") {
+      // Erkekler için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş + 5
+      bmr = 10 * weightInKg + 6.25 * heightInCm - 5 * age + 5;
+    } else {
+      // Kadınlar için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş - 161
+      bmr = 10 * weightInKg + 6.25 * heightInCm - 5 * age - 161;
+    }
+
+    // Orta seviye aktivite için TDEE (Toplam Günlük Enerji Harcaması) = BMR × 1.55
+    const tdee = bmr * 1.55;
+
+    // Egzersiz kalori hedefi: TDEE'nin %20-25'i (sağlıklı bir egzersiz hedefi)
+    // Minimum 300, maksimum 600 kcal
+    const exerciseTarget = Math.max(300, Math.min(600, Math.round(tdee * 0.22)));
+
+    return exerciseTarget;
+  };
+
   const bmi = calculateBMI(member?.weight, member?.height);
   const bmiCategory = bmi
     ? bmi < 18.5
@@ -498,13 +764,17 @@ export default function ActiveDietScreen({ navigation }: any) {
   // Son 30 günü CalendarWidget gibi grid yapısında oluştur
   const generateDays = () => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const startDate = subDays(today, 29); // Son 30 günün başlangıcı
+    startDate.setHours(0, 0, 0, 0);
     const endDate = today; // Bugün
 
-    // Haftanın başlangıcına göre grid başlangıcı
+    // Haftanın başlangıcına göre grid başlangıcı (Pazartesi = 1)
     const gridStart = startOfWeek(startDate, { weekStartsOn: 1 });
-    // Haftanın sonuna göre grid bitişi
+    gridStart.setHours(0, 0, 0, 0);
+    // Haftanın sonuna göre grid bitişi (Pazar = 0)
     const gridEnd = endOfWeek(endDate, { weekStartsOn: 1 });
+    gridEnd.setHours(0, 0, 0, 0);
 
     // Grid için tüm günleri oluştur
     const allDays = eachDayOfInterval({ start: gridStart, end: gridEnd });
@@ -514,29 +784,47 @@ export default function ActiveDietScreen({ navigation }: any) {
     for (let i = 29; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
       last30DaysSet.add(formatDateToLocalString(date));
     }
 
     return allDays.map(day => {
-      const dateStr = formatDateToLocalString(day);
+      // Tarihi normalize et
+      const normalizedDay = new Date(day);
+      normalizedDay.setHours(0, 0, 0, 0);
+      
+      const dateStr = formatDateToLocalString(normalizedDay);
       const isInLast30Days = last30DaysSet.has(dateStr);
+      
+      // Haftanın gününü hesapla (Pazartesi = 0, Pazar = 6)
+      const dayOfWeek = normalizedDay.getDay() === 0 ? 6 : normalizedDay.getDay() - 1;
+      
       return {
         date: dateStr,
-        dayNumber: day.getDate(),
-        dayOfWeek: day.getDay() === 0 ? 6 : day.getDay() - 1, // Pazartesi = 0
+        dayNumber: normalizedDay.getDate(),
+        dayOfWeek, // Pazartesi = 0
         isInLast30Days,
       };
     });
   };
 
   const days = generateDays();
-  const completedDays = Object.values(dietProgress).filter(Boolean).length;
-  const completionRate = Math.round((completedDays / 30) * 100);
-
+  // Mükemmel gün sayısı (hepsi %100 olan günler)
+  const perfectDays = Object.values(monthlyTrackingData).filter(
+    (data) => data.averagePercentage >= 100
+  ).length;
+  
   const startWeight = member?.weight || 0;
   const lastWeightEntry =
     weightHistory.length > 0 ? weightHistory[weightHistory.length - 1] : null;
   const currentWeight = lastWeightEntry?.weight || startWeight;
+  
+  // İlerleme durumu (hedef kiloya göre)
+  const weightProgress = targetWeight && startWeight > 0 && currentWeight > 0
+    ? Math.round(
+        Math.abs((currentWeight - startWeight) / (targetWeight - startWeight)) * 100
+      )
+    : 0;
   const weightChange = currentWeight - startWeight;
   const weightChangePercent =
     startWeight > 0
@@ -549,7 +837,7 @@ export default function ActiveDietScreen({ navigation }: any) {
         <View
           style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
         >
-          <ActivityIndicator size="large" color={colors.primary} />
+          <HeartbeatLoader size={60} />
         </View>
       </SafeAreaView>
     );
@@ -614,12 +902,12 @@ export default function ActiveDietScreen({ navigation }: any) {
           <View style={styles.trackingHeader}>
             <View>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Günlük Takip
+                {viewMode === "daily" ? "Günlük Takip" : "Aylık Takip"}
               </Text>
               <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
                 {viewMode === "daily"
                   ? format(selectedDate, "d MMMM yyyy", { locale: tr })
-                  : "Son 30 Gün"}
+                  : format(new Date(), "MMMM yyyy", { locale: tr })}
               </Text>
             </View>
 
@@ -870,7 +1158,9 @@ export default function ActiveDietScreen({ navigation }: any) {
               {/* GÜN NUMARALARI GRID - CalendarWidget gibi */}
               <View style={styles.monthGrid}>
                 {days.map((day, index) => {
-                  const isCompleted = dietProgress[day.date] === true;
+                  const dayData = monthlyTrackingData[day.date];
+                  const averagePercentage = dayData?.averagePercentage || 0;
+                  const isCompleted = averagePercentage >= 100;
                   const isToday = day.date === formatDateToLocalString(new Date());
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
@@ -906,36 +1196,37 @@ export default function ActiveDietScreen({ navigation }: any) {
                       style={[
                         styles.dayCell,
                         {
-                          backgroundColor: isSelected
-                            ? colors.primary + "25"
-                            : isToday
-                            ? colors.primary + "15"
-                            : isCompleted && day.isInLast30Days && !isSelected
-                            ? "#10b98115"
-                            : colors.background,
-                          borderColor: isSelected
-                            ? colors.primary
-                            : isToday
-                            ? colors.primary + "40"
-                            : isCompleted && day.isInLast30Days && !isSelected
-                            ? "#10b98140"
-                            : colors.border,
-                          borderWidth: isSelected ? 2 : 1,
                           opacity: !day.isInLast30Days ? 0.3 : canInteract ? 1 : 0.5,
+                          overflow: "hidden",
+                          backgroundColor: isSelected ? colors.primary + "15" : "transparent",
                         },
                       ]}
                     >
+                      {/* Alttan yukarı doğru tamamlanma efekti */}
+                      {day.isInLast30Days && averagePercentage > 0 && (
+                        <View
+                          style={{
+                            position: "absolute",
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            height: `${averagePercentage}%`,
+                            backgroundColor: isCompleted
+                              ? "#10b981"
+                              : averagePercentage >= 50
+                              ? "#10b98180"
+                              : "#10b98140",
+                            zIndex: 0,
+                          }}
+                        />
+                      )}
                       <Text
                         style={[
                           styles.dayText,
                           {
-                            color: isSelected
-                              ? colors.primary
-                              : isToday
-                              ? colors.primary
-                              : isCompleted && day.isInLast30Days && !isSelected
-                              ? "#10b981"
-                              : colors.text,
+                            color: colors.text,
+                            zIndex: 1,
+                            position: "relative",
                           },
                         ]}
                       >
@@ -957,7 +1248,7 @@ export default function ActiveDietScreen({ navigation }: any) {
             { backgroundColor: colors.card, borderColor: colors.border },
           ]}
         >
-          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 16 }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>
             Günlük Takip - {format(selectedDate, "d MMMM yyyy", { locale: tr })}
           </Text>
 
@@ -1035,35 +1326,55 @@ export default function ActiveDietScreen({ navigation }: any) {
           })()}
 
           {/* EGZERSİZ TAKİBİ */}
-          <View style={styles.dailyTrackingItem}>
-            <View style={styles.dailyTrackingHeader}>
-              <View style={styles.dailyTrackingIconContainer}>
-                <View style={[styles.dailyTrackingIcon, { backgroundColor: "#10b98120" }]}>
-                  <Dumbbell size={20} color="#10b981" />
+          {member && (() => {
+            const age = calculateAge(member.birth_date);
+            const exerciseCalorieTarget = calculateExerciseCalorieTarget(
+              age || undefined,
+              member.weight,
+              member.height,
+              member.gender
+            );
+            const exerciseCalories = dailyData?.exercise.calories || 0;
+            const exercisePercentage = Math.min(100, Math.round((exerciseCalories / exerciseCalorieTarget) * 100));
+
+            return (
+              <View style={styles.dailyTrackingItem}>
+                <View style={styles.dailyTrackingHeader}>
+                  <View style={styles.dailyTrackingIconContainer}>
+                    <View style={[styles.dailyTrackingIcon, { backgroundColor: "#10b98120" }]}>
+                      <Dumbbell size={20} color="#10b981" />
+                    </View>
+                    <View style={styles.dailyTrackingTextContainer}>
+                      <Text style={[styles.dailyTrackingTitle, { color: colors.text }]}>
+                        Egzersiz
+                      </Text>
+                      <Text style={[styles.dailyTrackingSubtitle, { color: colors.textMuted }]}>
+                        {exerciseCalories}kcal / {exerciseCalorieTarget}kcal
+                      </Text>
+                    </View>
+                  </View>
+                  <CircularProgress
+                    percentage={exercisePercentage}
+                    size={80}
+                    strokeWidth={8}
+                    color="#10b981"
+                    backgroundColor={colors.background}
+                  />
                 </View>
-                <View style={styles.dailyTrackingTextContainer}>
-                  <Text style={[styles.dailyTrackingTitle, { color: colors.text }]}>
-                    Egzersiz
-                  </Text>
-                  <Text style={[styles.dailyTrackingSubtitle, { color: colors.textMuted }]}>
-                    {dailyData?.exercise.duration || 0} dk • {dailyData?.exercise.calories || 0} kcal yakıldı
-                  </Text>
-                </View>
+                {mealPrefs.calories && (() => {
+                  const totalCalories = (dailyData?.calories || 0) - exerciseCalories;
+                  const netCalories = totalCalories;
+                  return (
+                    <View style={[styles.exerciseInfo, { borderTopColor: colors.border }]}>
+                      <Text style={[styles.exerciseInfoText, { color: colors.textMuted }]}>
+                        Net Kalori: {netCalories}kcal (Tüketilen: {(dailyData?.calories || 0)}kcal - Yakılan: {exerciseCalories}kcal)
+                      </Text>
+                    </View>
+                  );
+                })()}
               </View>
-            </View>
-            {mealPrefs.calories && (() => {
-              const exerciseCalories = dailyData?.exercise.calories || 0;
-              const totalCalories = (dailyData?.calories || 0) - exerciseCalories;
-              const netCalories = totalCalories;
-              return (
-                <View style={[styles.exerciseInfo, { borderTopColor: colors.border }]}>
-                  <Text style={[styles.exerciseInfoText, { color: colors.textMuted }]}>
-                    Net Kalori: {netCalories}kcal (Tüketilen: {(dailyData?.calories || 0)}kcal - Yakılan: {exerciseCalories}kcal)
-                  </Text>
-                </View>
-              );
-            })()}
-          </View>
+            );
+          })()}
         </View>
 
         {/* BİRLEŞTİRİLMİŞ DİYET DASHBOARD */}
@@ -1108,39 +1419,48 @@ export default function ActiveDietScreen({ navigation }: any) {
           <View style={styles.dashboardStats}>
             <View style={styles.dashboardStatCard}>
               <View style={[styles.statIconCircle, { backgroundColor: "#10b98120" }]}>
-                <CheckCircle2 size={20} color="#10b981" />
+                <Flame size={20} color="#10b981" />
               </View>
               <Text style={[styles.dashboardStatValue, { color: colors.text }]}>
-                {completedDays}
+                {dietStreakDays}
               </Text>
               <Text style={[styles.dashboardStatLabel, { color: colors.textMuted }]}>
-                Tamamlanan
+                Diyete Devam Etme Günü
               </Text>
             </View>
 
             <View style={styles.dashboardStatCard}>
               <View style={[styles.statIconCircle, { backgroundColor: "#3b82f620" }]}>
-                <Calendar size={20} color="#3b82f6" />
+                <CheckCircle2 size={20} color="#3b82f6" />
               </View>
               <Text style={[styles.dashboardStatValue, { color: colors.text }]}>
-                {30 - completedDays}
+                {perfectDays}
               </Text>
               <Text style={[styles.dashboardStatLabel, { color: colors.textMuted }]}>
-                Kalan Gün
+                Mükemmel Gün
               </Text>
             </View>
 
-            <View style={styles.dashboardStatCard}>
+            <TouchableOpacity
+              style={styles.dashboardStatCard}
+              onPress={() => {
+                if (!targetWeight) {
+                  setTargetWeightModalVisible(true);
+                }
+              }}
+              disabled={!!targetWeight}
+              activeOpacity={targetWeight ? 1 : 0.7}
+            >
               <View style={[styles.statIconCircle, { backgroundColor: "#f59e0b20" }]}>
                 <Target size={20} color="#f59e0b" />
               </View>
               <Text style={[styles.dashboardStatValue, { color: colors.text }]}>
-                %{completionRate}
+                {targetWeight ? `%${Math.min(100, weightProgress)}` : "-"}
               </Text>
               <Text style={[styles.dashboardStatLabel, { color: colors.textMuted }]}>
-                İlerleme
+                {targetWeight ? "Hedef İlerleme" : "Hedef belirlenmedi, eklemek için tıkla"}
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* KİLO BİLGİLERİ */}
@@ -1214,19 +1534,7 @@ export default function ActiveDietScreen({ navigation }: any) {
             </View>
           </View>
 
-          {/* TARİH BİLGİSİ */}
-          {dietStartDate && (
-            <View style={styles.dateInfoRow}>
-              <Calendar size={16} color={colors.textMuted} />
-              <Text style={[styles.dateInfoText, { color: colors.textMuted }]}>
-                {dietStartDate.toLocaleDateString("tr-TR", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })} • {dietDays} gün geçti • {remainingDays} gün kaldı
-              </Text>
-            </View>
-          )}
+
         </View>
 
 
@@ -1435,6 +1743,8 @@ export default function ActiveDietScreen({ navigation }: any) {
               Alert.alert("Başarılı", "200 ml su kaydı eklendi.");
               // Verileri yeniden yükle
               await loadDailyData(selectedDate);
+              // Streak'i güncelle
+              await updateStreakOnActivity();
             } else {
               Alert.alert("Hata", result.error || "Su kaydı eklenemedi.");
             }
@@ -2701,6 +3011,8 @@ export default function ActiveDietScreen({ navigation }: any) {
                         setConfirmedFoodName("");
                         // Verileri yeniden yükle
                         await loadDailyData(selectedDate);
+                        // Streak'i güncelle
+                        await updateStreakOnActivity();
                       }
                     } else {
                       Alert.alert("Hata", result.error || "Kalori kaydı eklenemedi.");
@@ -2979,6 +3291,8 @@ export default function ActiveDietScreen({ navigation }: any) {
                       setConfirmedExerciseCalories(null);
                       // Verileri yeniden yükle
                       await loadDailyData(selectedDate);
+                      // Streak'i güncelle
+                      await updateStreakOnActivity();
                     } else {
                       Alert.alert("Hata", result.error || "Egzersiz kaydı eklenemedi.");
                     }
@@ -3000,6 +3314,123 @@ export default function ActiveDietScreen({ navigation }: any) {
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <Check size={24} color="#fff" strokeWidth={2.5} />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* HEDEF KİLO MODAL */}
+      <Modal visible={targetWeightModalVisible} transparent animationType="fade">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalCard, { backgroundColor: colors.card, maxHeight: "90%" }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  Hedef Kilo Belirle
+                </Text>
+                <TouchableOpacity onPress={() => setTargetWeightModalVisible(false)}>
+                  <X size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                contentContainerStyle={{ paddingBottom: 16 }}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                bounces={false}
+              >
+                <Text style={[styles.modalDesc, { color: colors.textMuted }]}>
+                  Diyet programınız için hedef kilonuzu belirleyin. Bu bilgi ilerleme durumunuzu hesaplamak için kullanılacaktır.
+                </Text>
+
+                <ModernInput
+                  label="Hedef Kilo (kg)"
+                  value={targetWeightInput}
+                  onChangeText={setTargetWeightInput}
+                  keyboardType="decimal-pad"
+                  placeholder="Örn: 70"
+                  placeholderTextColor={colors.textMuted}
+                  style={{ marginTop: 16 }}
+                />
+
+                {startWeight > 0 && (
+                  <Text style={[styles.modalDesc, { color: colors.textMuted, marginTop: 8, fontSize: 12 }]}>
+                    Mevcut kilo: {startWeight} kg
+                  </Text>
+                )}
+              </ScrollView>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setTargetWeightModalVisible(false);
+                    setTargetWeightInput("");
+                  }}
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonCancel,
+                    { borderColor: colors.border },
+                  ]}
+                  disabled={saving}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                    İptal
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (!targetWeightInput || !profile?.id) return;
+
+                    const weightValue = parseFloat(targetWeightInput.replace(",", "."));
+                    if (isNaN(weightValue) || weightValue <= 0 || weightValue > 300) {
+                      Alert.alert("Hata", "Geçerli bir kilo girin (0-300 kg arası).");
+                      return;
+                    }
+
+                    setSaving(true);
+                    try {
+                      setTargetWeight(weightValue);
+                      await AsyncStorage.setItem(
+                        `diet_target_weight_${profile.id}`,
+                        weightValue.toString()
+                      );
+
+                      // meal_preferences'a da kaydet
+                      if (member) {
+                        const updatedPrefs = {
+                          ...member.meal_preferences,
+                          target_weight: weightValue.toString(),
+                        };
+                        await updateMemberDetails(profile.id, {
+                          meal_preferences: updatedPrefs,
+                        });
+                      }
+
+                      setTargetWeightModalVisible(false);
+                      setTargetWeightInput("");
+                      Alert.alert("Başarılı", "Hedef kilo kaydedildi.");
+                    } catch (error) {
+                      Alert.alert("Hata", "Hedef kilo kaydedilemedi.");
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  style={[styles.modalButton, styles.modalButtonSave, { backgroundColor: colors.primary }]}
+                  disabled={saving || !targetWeightInput}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                      Kaydet
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -3161,14 +3592,16 @@ const styles = StyleSheet.create({
   },
   trackingCard: {
     borderRadius: 24,
-    padding: 20,
+    padding: 16,
+    paddingHorizontal: 20,
     marginBottom: 16,
     borderWidth: 0,
   },
   weekdayRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
+    marginBottom: 8,
+    paddingHorizontal: 0,
   },
   weekdayCell: {
     width: "14.2%",
@@ -3181,16 +3614,20 @@ const styles = StyleSheet.create({
   monthGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
+    width: "100%",
+    gap: 6,
+    paddingHorizontal: 0,
   },
   dayCell: {
-    width: "14.2%",
-    height: 58,
+    width: "12.5%",
+    height: 64,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 8,
+    borderWidth: 0,
     borderColor: "transparent",
-    gap: 4,
+    backgroundColor: "transparent",
+    marginBottom: 12,
   },
   dayText: {
     fontSize: 15,
@@ -3468,6 +3905,89 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
+  streakCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  streakContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  streakIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  streakTextContainer: {
+    flex: 1,
+  },
+  streakTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  streakValue: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  targetWeightCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  targetWeightContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  targetWeightIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  targetWeightTextContainer: {
+    flex: 1,
+  },
+  targetWeightTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  targetWeightInfo: {
+    flexDirection: "column",
+  },
+  targetWeightValue: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  targetWeightProgress: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  setTargetButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  setTargetButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
   settingsItem: {
     paddingVertical: 16,
     borderBottomWidth: 1,
@@ -3531,7 +4051,8 @@ const styles = StyleSheet.create({
   },
   dailyTrackingCard: {
     borderRadius: 24,
-    padding: 20,
+    padding: 16,
+    paddingHorizontal: 20,
     marginBottom: 16,
     borderWidth: 0,
   },
