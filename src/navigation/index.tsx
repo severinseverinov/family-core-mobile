@@ -212,7 +212,7 @@ export default function AppNavigator() {
                   name="FinanceSettings"
                   component={FinanceSettingsScreen}
                   options={{ headerShown: false }}
-                />
+            />
             <Stack.Screen
                   name="FamilyFinance"
                   component={FamilyFinanceScreen}

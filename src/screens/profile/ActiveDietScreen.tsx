@@ -1490,6 +1490,8 @@ export default function ActiveDietScreen({ navigation }: any) {
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+          enabled={true}
         >
           <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
             <View style={styles.modalHeader}>
@@ -1522,8 +1524,13 @@ export default function ActiveDietScreen({ navigation }: any) {
 
             <ScrollView
               showsVerticalScrollIndicator={true}
-              contentContainerStyle={{ paddingBottom: 16 }}
+              contentContainerStyle={{ paddingBottom: 8 }}
               nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentInsetAdjustmentBehavior="automatic"
+              automaticallyAdjustKeyboardInsets={false}
+              bounces={false}
             >
                 {/* INPUT MODE */}
                 {modalMode === "input" && (
@@ -1775,7 +1782,7 @@ export default function ActiveDietScreen({ navigation }: any) {
 
             {/* Butonlar - ScrollView dışında */}
             {modalMode === "input" && (
-              <View style={styles.modalButtons}>
+              <View style={[styles.modalButtons, { marginTop: 12 }]}>
                 <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
                   <TouchableOpacity
                     onPress={() => {
@@ -1836,8 +1843,11 @@ export default function ActiveDietScreen({ navigation }: any) {
                           setConfirmedDetails(firstItem.details);
                           setConfirmedFoodName(firstItem.name);
                           setConfirmedIsDrink(firstItem.isDrink);
+                          // Modal geçişini pürüzsüz yapmak için küçük bir gecikme
                           setCaloriesModalVisible(false);
-                          setCaloriesConfirmationModalVisible(true);
+                          setTimeout(() => {
+                            setCaloriesConfirmationModalVisible(true);
+                          }, 300);
                         }
                       }}
                       disabled={savingActivity}
@@ -1984,8 +1994,11 @@ export default function ActiveDietScreen({ navigation }: any) {
                       setConfirmedDetails(firstItem.details);
                       setConfirmedFoodName(firstItem.name);
                       setConfirmedIsDrink(firstItem.isDrink);
+                      // Modal geçişini pürüzsüz yapmak için küçük bir gecikme
                       setCaloriesModalVisible(false);
-                      setCaloriesConfirmationModalVisible(true);
+                      setTimeout(() => {
+                        setCaloriesConfirmationModalVisible(true);
+                      }, 300);
                     }
                   }}
                   disabled={calculatingCalories}
@@ -2098,8 +2111,11 @@ export default function ActiveDietScreen({ navigation }: any) {
                       setConfirmedDetails(result.details);
                       setConfirmedFoodName(result.name || "Bilinmeyen");
                       setConfirmedIsDrink(result.isDrink);
+                      // Modal geçişini pürüzsüz yapmak için küçük bir gecikme
                       setCaloriesModalVisible(false);
-                      setCaloriesConfirmationModalVisible(true);
+                      setTimeout(() => {
+                        setCaloriesConfirmationModalVisible(true);
+                      }, 300);
                     }}
                     disabled={aiAnalyzing}
                     style={[
@@ -2128,123 +2144,138 @@ export default function ActiveDietScreen({ navigation }: any) {
 
       {/* EGZERSİZ EKLEME MODAL */}
       <Modal visible={exerciseModalVisible} transparent animationType="slide">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
-        >
-          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                Egzersiz Ekle
-              </Text>
-              <TouchableOpacity onPress={() => setExerciseModalVisible(false)}>
-                <X size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.modalDesc, { color: colors.textMuted }]}>
-              Yaptığınız egzersizin adını ve süresini girin. AI ile yakılan kaloriyi hesaplayalım.
-            </Text>
-
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{ paddingBottom: 16, flexGrow: 1 }}
-              showsVerticalScrollIndicator={true}
-            >
-              <ModernInput
-                label="Egzersiz Adı"
-                value={exerciseNameInput}
-                onChangeText={setExerciseNameInput}
-                placeholder="Örn: Koşu, Yürüyüş, Fitness"
-                placeholderTextColor={colors.textMuted}
-                style={{ marginTop: 16 }}
-              />
-
-              <ModernInput
-                label="Süre (dakika)"
-                value={exerciseDurationInput}
-                onChangeText={setExerciseDurationInput}
-                keyboardType="numeric"
-                placeholder="Örn: 30"
-                placeholderTextColor={colors.textMuted}
-                style={{ marginTop: 16 }}
-              />
-            </ScrollView>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                onPress={() => {
-                  setExerciseModalVisible(false);
-                  setExerciseNameInput("");
-                  setExerciseDurationInput("");
-                }}
-                style={[
-                  styles.modalButton,
-                  styles.modalButtonCancel,
-                  { borderColor: colors.border, flex: 1 },
-                ]}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.text }]}>
-                  İptal
+        {/* 1. ADIM: Overlay (Arka Plan) KeyboardAvoidingView OLMAMALI. Sabit bir View olmalı. */}
+        <View style={styles.modalOverlay}>
+          {/* 2. ADIM: KeyboardAvoidingView SADECE içeriği sarmalı ve genişliği %100 olmalı. */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ width: "100%", alignItems: "center", justifyContent: "center" }}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
+            enabled={true}
+          >
+            <View style={[styles.modalCard, { backgroundColor: colors.card, minHeight: 350 }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  Egzersiz Ekle
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={async () => {
-                  const exerciseName = exerciseNameInput.trim();
-                  const duration = parseFloat(exerciseDurationInput);
+                <TouchableOpacity onPress={() => setExerciseModalVisible(false)}>
+                  <X size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
 
-                  if (!exerciseName) {
-                    Alert.alert("Hata", "Lütfen egzersiz adını girin.");
-                    return;
-                  }
-
-                  if (!duration || duration <= 0) {
-                    Alert.alert("Hata", "Lütfen geçerli bir süre girin.");
-                    return;
-                  }
-
-                  setCalculatingExerciseCalories(true);
-                  const result = await getExerciseCalories(exerciseName, duration);
-                  setCalculatingExerciseCalories(false);
-
-                  if (result.error || !result.caloriesBurned) {
-                    Alert.alert(
-                      "Hata",
-                      result.error || "Kalori hesaplanamadı. Lütfen tekrar deneyin."
-                    );
-                    return;
-                  }
-
-                  // Onay ekranına geç
-                  setConfirmedExerciseName(exerciseName);
-                  setConfirmedExerciseDuration(duration);
-                  setConfirmedExerciseCalories(result.caloriesBurned);
-                  setExerciseModalVisible(false);
-                  setExerciseConfirmationModalVisible(true);
-                }}
-                disabled={calculatingExerciseCalories}
-                style={[
-                  styles.modalButton,
-                  styles.modalButtonConfirm,
-                  {
-                    backgroundColor: calculatingExerciseCalories
-                      ? colors.textMuted
-                      : colors.primary,
-                    flex: 1,
-                  },
-                ]}
+              <ScrollView
+                showsVerticalScrollIndicator={true}
+                contentContainerStyle={{ paddingBottom: 6, paddingTop: 6 }}
+                nestedScrollEnabled={true}
+                keyboardShouldPersistTaps="handled"
+                // keyboardDismissMode="on-drag" // Egzersiz modalı kısa olduğu için bunu kapatmak daha stabil olabilir
+                contentInsetAdjustmentBehavior="automatic"
+                automaticallyAdjustKeyboardInsets={false}
+                bounces={false}
               >
-                {calculatingExerciseCalories ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={[styles.modalButtonText, { color: "#fff" }]}>
-                    AI ile Hesapla
-                  </Text>
-                )}
-              </TouchableOpacity>
+                <View>
+                  
+
+                  <View style={{ marginTop: 2 }}>
+                    <ModernInput
+                      label="Egzersiz Adı"
+                      value={exerciseNameInput}
+                      onChangeText={setExerciseNameInput}
+                      placeholder="Örn: Koşu, Yürüyüş, Fitness"
+                      placeholderTextColor={colors.textMuted}
+                    />
+
+                    <ModernInput
+                      label="Süre (dakika)"
+                      value={exerciseDurationInput}
+                      onChangeText={setExerciseDurationInput}
+                      keyboardType="numeric"
+                      placeholder="Örn: 30"
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+
+              <View style={[styles.modalButtons, { marginTop: 12 }]}>
+                <View style={{ flexDirection: "row", gap: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setExerciseModalVisible(false);
+                      setExerciseNameInput("");
+                      setExerciseDurationInput("");
+                    }}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonCancel,
+                      { borderColor: colors.border, flex: 1 },
+                    ]}
+                  >
+                    <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                      İptal
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      const exerciseName = exerciseNameInput.trim();
+                      const duration = parseFloat(exerciseDurationInput);
+
+                      if (!exerciseName) {
+                        Alert.alert("Hata", "Lütfen egzersiz adını girin.");
+                        return;
+                      }
+
+                      if (!duration || duration <= 0) {
+                        Alert.alert("Hata", "Lütfen geçerli bir süre girin.");
+                        return;
+                      }
+
+                      setCalculatingExerciseCalories(true);
+                      const result = await getExerciseCalories(exerciseName, duration);
+                      setCalculatingExerciseCalories(false);
+
+                      if (result.error || !result.caloriesBurned) {
+                        Alert.alert(
+                          "Hata",
+                          result.error || "Kalori hesaplanamadı. Lütfen tekrar deneyin."
+                        );
+                        return;
+                      }
+
+                      setConfirmedExerciseName(exerciseName);
+                      setConfirmedExerciseDuration(duration);
+                      setConfirmedExerciseCalories(result.caloriesBurned);
+                      
+                      setExerciseModalVisible(false);
+                      setTimeout(() => {
+                        setExerciseConfirmationModalVisible(true);
+                      }, 300);
+                    }}
+                    disabled={calculatingExerciseCalories}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonConfirm,
+                      {
+                        backgroundColor: calculatingExerciseCalories
+                          ? colors.textMuted
+                          : colors.primary,
+                        flex: 1,
+                      },
+                    ]}
+                  >
+                    {calculatingExerciseCalories ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                        AI ile Hesapla
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* KALORİ ONAY EKRANI MODAL */}
@@ -2692,7 +2723,7 @@ export default function ActiveDietScreen({ navigation }: any) {
 
             <ScrollView
               showsVerticalScrollIndicator={true}
-              style={{ flex: 1 }}
+              
               contentContainerStyle={{ paddingBottom: 16, flexGrow: 1 }}
               nestedScrollEnabled={true}
             >
@@ -2759,7 +2790,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                       paddingHorizontal: 16,
                       backgroundColor: colors.background,
                       borderRadius: 12,
-                      marginBottom: 12,
+                      marginBottom: 16,
                     }}
                   >
                     <Text
@@ -2787,40 +2818,57 @@ export default function ActiveDietScreen({ navigation }: any) {
                     </Text>
                   </View>
 
+                  {/* Kalori Kartı */}
                   <View
                     style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
+                      backgroundColor: "#10b98115",
+                      padding: 20,
+                      borderRadius: 16,
                       alignItems: "center",
-                      paddingVertical: 12,
-                      paddingHorizontal: 16,
-                      backgroundColor: "#10b98120",
-                      borderRadius: 12,
+                      borderWidth: 2,
+                      borderColor: "#10b98130",
                     }}
                   >
                     <Text
                       style={[
                         styles.modalDesc,
                         {
-                          color: "#10b981",
-                          fontSize: 14,
+                          color: colors.textMuted,
+                          fontSize: 12,
                           fontWeight: "600",
+                          marginBottom: 8,
+                          textTransform: "uppercase",
+                          letterSpacing: 1,
                         },
                       ]}
                     >
-                      Yakılan Kalori
+                      AI ile Hesaplanan Kalori
                     </Text>
                     <Text
                       style={[
-                        styles.modalTitle,
+                        styles.calculatedCaloriesValue,
                         {
                           color: "#10b981",
-                          fontSize: 18,
-                          fontWeight: "700",
+                          fontSize: 36,
+                          fontWeight: "800",
+                          lineHeight: 42,
                         },
                       ]}
                     >
-                      {confirmedExerciseCalories || 0} kcal
+                      {confirmedExerciseCalories || 0}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.modalDesc,
+                        {
+                          color: colors.textMuted,
+                          fontSize: 14,
+                          fontWeight: "600",
+                          marginTop: 4,
+                        },
+                      ]}
+                    >
+                      kcal
                     </Text>
                   </View>
                 </View>
