@@ -167,9 +167,7 @@ export async function signInWithApple() {
       ],
     });    if (!credential.identityToken) {
       return { error: "Apple Sign In failed - no identity token" };
-    }
-
-    // Sign in with Supabase using the identity token
+    }    // Sign in with Supabase using the identity token
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: "apple",
       token: credential.identityToken,

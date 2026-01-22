@@ -353,6 +353,86 @@ export async function logExercise(
   return { success: result.success, error: result.error };
 }
 
+// AI ile egzersiz kalori hesapla
+export async function getExerciseCalories(
+  exerciseName: string,
+  durationMinutes: number
+): Promise<{
+  caloriesBurned: number | null;
+  error: string | null;
+}> {
+  if (!exerciseName || !exerciseName.trim()) {
+    return { caloriesBurned: null, error: "Egzersiz adı gerekli" };
+  }
+
+  if (!durationMinutes || durationMinutes <= 0) {
+    return { caloriesBurned: null, error: "Geçerli bir süre gerekli" };
+  }
+
+  if (!geminiApiKey) {
+    return {
+      caloriesBurned: null,
+      error: "AI API anahtarı bulunamadı",
+    };
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `Bir egzersiz verildi: "${exerciseName.trim()}" - ${durationMinutes} dakika süreyle yapıldı.
+
+Bu egzersizin ${durationMinutes} dakika süreyle yapılması durumunda yakılan kalori miktarını hesapla. Ortalama bir yetişkin (70kg) için hesapla.
+
+Yanıtını şu formatta ver:
+KALORI: [sadece sayı]
+
+Örnek: KALORI: 250
+
+Sadece sayıyı ver, başka bir şey yazma.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text().trim();
+
+    // Parse response
+    const lines = text.split("\n");
+    let caloriesBurned = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith("KALORI:")) {
+        const calorieMatch = lines[i].match(/\d+/);
+        if (calorieMatch) {
+          caloriesBurned = parseInt(calorieMatch[0], 10);
+          break;
+        }
+      }
+    }
+
+    // Eğer direkt sayı bulamazsak, tüm metinde sayı ara
+    if (caloriesBurned === null) {
+      const numberMatch = text.match(/\d+/);
+      if (numberMatch) {
+        caloriesBurned = parseInt(numberMatch[0], 10);
+      }
+    }
+
+    if (caloriesBurned === null || caloriesBurned <= 0) {
+      return {
+        caloriesBurned: null,
+        error: "AI'dan geçerli bir kalori değeri alınamadı",
+      };
+    }
+
+    return { caloriesBurned, error: null };
+  } catch (error: any) {
+    console.error("AI egzersiz kalori hesaplama hatası:", error);
+    return {
+      caloriesBurned: null,
+      error: error.message || "AI hesaplama hatası",
+    };
+  }
+}
+
 // AI ile yemek/içecek detaylarını öğren ve kalori hesapla
 // userDetails: Kullanıcının girdiği detay bilgisi (opsiyonel)
 export async function getFoodDetailsWithCalories(
