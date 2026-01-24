@@ -13,6 +13,7 @@ import {
   Switch,
   Platform,
   KeyboardAvoidingView,
+  Animated,
 } from "react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -50,6 +51,11 @@ import {
   Image as ImageIcon,
   ArrowLeft,
   Check,
+  RotateCcw,
+  Play,
+  Pause,
+  Square,
+  Timer,
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "react-native";
@@ -136,6 +142,8 @@ export default function ActiveDietScreen({ navigation }: any) {
   } | null>(null);
   const [caloriesModalVisible, setCaloriesModalVisible] = useState(false);
   const [exerciseModalVisible, setExerciseModalVisible] = useState(false);
+  const [exerciseTimerModalVisible, setExerciseTimerModalVisible] =
+    useState(false);
   const [foodNameInput, setFoodNameInput] = useState("");
   const [drinkNameInput, setDrinkNameInput] = useState("");
   const [foodCaloriesInput, setFoodCaloriesInput] = useState("");
@@ -223,9 +231,24 @@ export default function ActiveDietScreen({ navigation }: any) {
     "beginner" | "intermediate" | "advanced"
   >("intermediate"); // Fitness seviyesi
   const [generatingExercisePlan, setGeneratingExercisePlan] = useState(false); // Egzersiz planı oluşturuluyor mu
+
+  // Egzersiz Timer State'leri
+  const [exerciseTimerActive, setExerciseTimerActive] = useState(false);
+  const [exerciseTimerPaused, setExerciseTimerPaused] = useState(false);
+  const [remainingTime, setRemainingTime] = useState(0); // seconds
+  const [currentExerciseStep, setCurrentExerciseStep] = useState(0);
+  const [burnedCaloriesInSession, setBurnedCaloriesInSession] = useState(0);
+  const [totalExerciseTime, setTotalExerciseTime] = useState(0); // seconds
+  const [hasUnfinishedExercise, setHasUnfinishedExercise] = useState(false);
+  const [isReadingTime, setIsReadingTime] = useState(false); // Egzersiz arası okuma süresi
+  const [readingTimeLeft, setReadingTimeLeft] = useState(10); // Kalan okuma süresi
+  const [borderOpacity] = useState(new Animated.Value(0)); // Kart kenarlığı animasyonu
   const [completedMeals, setCompletedMeals] = useState<Record<string, boolean>>(
     {},
   ); // Tamamlanan öğünler (key: date_time formatı)
+  const [completedExercises, setCompletedExercises] = useState<
+    Record<string, boolean>
+  >({}); // Tamamlanan egzersizler (key: date_exerciseIndex formatı)
 
   // Diyet ilerlemesini yükle
   const loadDietProgress = useCallback(async () => {
@@ -577,6 +600,77 @@ export default function ActiveDietScreen({ navigation }: any) {
     }
   }, [profile?.id, selectedDate]);
 
+  // Tamamlanan egzersizleri yükle
+  const loadCompletedExercises = useCallback(async () => {
+    if (!profile?.id) return;
+    try {
+      const dateStr = formatDateToLocalString(selectedDate);
+      const key = `completed_exercises_${profile.id}_${dateStr}`;
+
+      const stored = await AsyncStorage.getItem(key);
+
+      if (stored) {
+        const parsedData = JSON.parse(stored);
+        setCompletedExercises(parsedData);
+      } else {
+        setCompletedExercises({});
+      }
+    } catch (error) {
+      console.error("❌ Egzersiz yükleme hatası:", error);
+      setCompletedExercises({});
+    }
+  }, [profile?.id, selectedDate]);
+
+  // Egzersizi tamamlandı olarak işaretle
+  const markExerciseCompleted = useCallback(
+    async (exerciseIndex: number, dateStr: string) => {
+      if (!profile?.id) return;
+      try {
+        const key = `${dateStr}_${exerciseIndex}`;
+
+        // State'i direkt güncelle
+        const updatedCompleted = { ...completedExercises, [key]: true };
+        setCompletedExercises(updatedCompleted);
+
+        // AsyncStorage'a kaydet
+        const storageKey = `completed_exercises_${profile.id}_${dateStr}`;
+        await AsyncStorage.setItem(
+          storageKey,
+          JSON.stringify(updatedCompleted),
+        );
+      } catch (error) {
+        console.error("Egzersiz tamamlama durumu kaydedilemedi:", error);
+      }
+    },
+    [profile?.id, completedExercises],
+  );
+
+  // Tamamlanan egzersizlerin istatistiklerini hesapla
+  const calculateCompletedExerciseStats = useCallback(() => {
+    if (!currentExercisePlan?.exercises || !profile?.id)
+      return { count: 0, duration: 0, calories: 0 };
+
+    const dateStr = formatDateToLocalString(selectedDate);
+    let completedCount = 0;
+    let totalDuration = 0;
+    let totalCalories = 0;
+
+    currentExercisePlan.exercises.forEach((exercise: any, index: number) => {
+      const exerciseKey = `${dateStr}_${index}`;
+      if (completedExercises[exerciseKey]) {
+        completedCount++;
+        totalDuration += exercise.duration || 0;
+        totalCalories += exercise.calories || 0;
+      }
+    });
+
+    return {
+      count: completedCount,
+      duration: totalDuration,
+      calories: totalCalories,
+    };
+  }, [currentExercisePlan, completedExercises, selectedDate, profile?.id]);
+
   // Öğün bildirimlerini zamanla
   const scheduleMealNotifications = useCallback(
     async (meals: any[], date: Date) => {
@@ -709,6 +803,7 @@ export default function ActiveDietScreen({ navigation }: any) {
         today.setHours(0, 0, 0, 0);
         await loadDailyData(today);
         await loadCompletedMeals();
+        await loadCompletedExercises();
 
         // Bildirim izni kontrolü
         const { status } = await Notifications.getPermissionsAsync();
@@ -721,7 +816,13 @@ export default function ActiveDietScreen({ navigation }: any) {
     } finally {
       setLoading(false);
     }
-  }, [profile?.id, loadDietProgress, loadDailyData, loadCompletedMeals]);
+  }, [
+    profile?.id,
+    loadDietProgress,
+    loadDailyData,
+    loadCompletedMeals,
+    loadCompletedExercises,
+  ]);
 
   // Aylık takip verilerini yükle
   const loadMonthlyTrackingData = useCallback(async () => {
@@ -809,6 +910,14 @@ export default function ActiveDietScreen({ navigation }: any) {
       loadMember();
     }, [loadMember]),
   );
+
+  // Seçili tarih değiştiğinde tamamlanan egzersizleri yükle
+  useEffect(() => {
+    if (profile?.id && selectedDate) {
+      loadCompletedExercises();
+      loadCompletedMeals();
+    }
+  }, [selectedDate, profile?.id, loadCompletedExercises, loadCompletedMeals]);
 
   // Pazartesi kontrolü: Eğer bugün Pazartesi ise ve son diyet planı tarihi bugün değilse, yeni program oluştur
   useEffect(() => {
@@ -943,6 +1052,558 @@ export default function ActiveDietScreen({ navigation }: any) {
     };
     loadWaterPref();
   }, []);
+
+  // Kaydedilmiş egzersiz durumunu kontrol et
+  useEffect(() => {
+    const checkSavedState = async () => {
+      try {
+        const savedState = await AsyncStorage.getItem(
+          `exercise_session_${profile?.id}`,
+        );
+        if (savedState) {
+          const state = JSON.parse(savedState);
+          if (
+            state.dateStr === formatDateToLocalString(selectedDate) &&
+            state.exercisePlan &&
+            state.remainingTime > 0
+          ) {
+            setHasUnfinishedExercise(true);
+            return;
+          }
+        }
+        setHasUnfinishedExercise(false);
+      } catch (error) {
+        console.error("Egzersiz durumu kontrol edilemedi:", error);
+        setHasUnfinishedExercise(false);
+      }
+    };
+
+    checkSavedState();
+  }, [selectedDate, profile?.id]);
+
+  // Egzersiz Timer Logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    if (
+      exerciseTimerActive &&
+      !exerciseTimerPaused &&
+      !isReadingTime &&
+      remainingTime > 0
+    ) {
+      interval = setInterval(() => {
+        setRemainingTime(prev => {
+          const newRemainingTime = prev - 1;
+
+          if (newRemainingTime <= 0) {
+            // Timer bittiğinde - tüm egzersizleri tamamlandı olarak işaretle (toplu)
+            const dateStr = formatDateToLocalString(selectedDate);
+            const totalExercises = currentExercisePlan?.exercises?.length || 0;
+            const updatedCompleted = { ...completedExercises };
+            for (let i = 0; i < totalExercises; i++) {
+              const key = `${dateStr}_${i}`;
+              updatedCompleted[key] = true;
+            }
+
+            // Toplu state update
+            setCompletedExercises(updatedCompleted);
+
+            // AsyncStorage'a toplu kayıt
+            AsyncStorage.setItem(
+              `completed_exercises_${profile?.id}_${dateStr}`,
+              JSON.stringify(updatedCompleted),
+            ).catch(console.error);
+
+            // Tamamlanan egzersizleri yeniden yükle
+            loadCompletedExercises().catch(console.error);
+
+            // Timer durumunu temizle
+            setExerciseTimerActive(false);
+            setExerciseTimerPaused(false);
+            setExerciseTimerModalVisible(false);
+            setIsReadingTime(false);
+            setReadingTimeLeft(10);
+            // Kaydedilen durumu temizle (async ama beklemeden devam et)
+            AsyncStorage.removeItem(`exercise_session_${profile?.id}`)
+              .then(() => setHasUnfinishedExercise(false))
+              .catch(console.error);
+
+            Alert.alert(
+              "Süre Bitti! ⏰",
+              `Egzersiz süresi tamamlandı! Toplam ${burnedCaloriesInSession} kalori yaktınız. Kalorileri kaydetmek için lütfen "Duraklat ve Kaydet" butonunu kullanın.`,
+            );
+            return 0;
+          }
+
+          return newRemainingTime;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [
+    exerciseTimerActive,
+    exerciseTimerPaused,
+    isReadingTime,
+    remainingTime,
+    burnedCaloriesInSession,
+    profile?.id,
+  ]);
+
+  // Otomatik egzersiz geçişi için ayrı useEffect
+  useEffect(() => {
+    if (!exerciseTimerActive || !currentExercisePlan?.exercises) return;
+
+    const exercises = currentExercisePlan.exercises;
+    const totalElapsedSeconds = totalExerciseTime - remainingTime;
+
+    // Her egzersizin başlangıç ve bitiş sürelerini hesapla
+    let cumulativeSeconds = 0;
+    let shouldBeAtStep = 0;
+
+    for (let i = 0; i < exercises.length; i++) {
+      const exerciseDurationSeconds = (exercises[i].duration || 0) * 60;
+
+      if (totalElapsedSeconds >= cumulativeSeconds + exerciseDurationSeconds) {
+        shouldBeAtStep = i + 1; // Bu egzersiz tamamlandı
+        cumulativeSeconds += exerciseDurationSeconds;
+      } else {
+        break; // Henüz bu egzersizi yapmaya başlamadık
+      }
+    }
+
+    // Eğer yeni bir egzersize geçmemiz gerekiyorsa
+    if (
+      shouldBeAtStep > currentExerciseStep &&
+      shouldBeAtStep <= exercises.length &&
+      !isReadingTime
+    ) {
+      // Async işlemler için wrapper fonksiyon
+      const markCompletedExercises = async () => {
+        const dateStr = formatDateToLocalString(selectedDate);
+
+        // Okuma süresi başlat (son egzersiz değilse)
+        if (shouldBeAtStep < exercises.length) {
+          setIsReadingTime(true);
+          setReadingTimeLeft(10);
+
+          // Aradan geçen tüm egzersizlerin kalorilerini ekle ve tamamlandı olarak işaretle
+          let addedCalories = 0;
+          for (let i = currentExerciseStep; i < shouldBeAtStep; i++) {
+            addedCalories += exercises[i]?.calories || 0;
+            // Egzersizi tamamlandı olarak işaretle
+            await markExerciseCompleted(i, dateStr);
+          }
+          setBurnedCaloriesInSession(prev => prev + addedCalories);
+        } else {
+          // Son egzersizse direkt geçiş yap ve tamamlandı olarak işaretle
+          let addedCalories = 0;
+          for (let i = currentExerciseStep; i < shouldBeAtStep; i++) {
+            addedCalories += exercises[i]?.calories || 0;
+            // Egzersizi tamamlandı olarak işaretle
+            await markExerciseCompleted(i, dateStr);
+          }
+
+          setCurrentExerciseStep(shouldBeAtStep);
+          setBurnedCaloriesInSession(prev => prev + addedCalories);
+        }
+      };
+
+      // Async fonksiyonu çağır
+      markCompletedExercises().catch(console.error);
+    }
+  }, [
+    exerciseTimerActive,
+    currentExercisePlan,
+    totalExerciseTime,
+    remainingTime,
+    currentExerciseStep,
+    isReadingTime,
+  ]);
+
+  // Okuma süresi timer'ı
+  useEffect(() => {
+    let readingInterval: NodeJS.Timeout | null = null;
+
+    if (isReadingTime && readingTimeLeft > 0) {
+      readingInterval = setInterval(() => {
+        setReadingTimeLeft(prev => {
+          if (prev <= 1) {
+            // Okuma süresi bitti, bir sonraki egzersize geç
+            setIsReadingTime(false);
+
+            // Step'i ilerlet
+            const exercises = currentExercisePlan?.exercises || [];
+            const totalElapsedSeconds = totalExerciseTime - remainingTime;
+
+            let cumulativeSeconds = 0;
+            let shouldBeAtStep = 0;
+
+            for (let i = 0; i < exercises.length; i++) {
+              const exerciseDurationSeconds = (exercises[i].duration || 0) * 60;
+
+              if (
+                totalElapsedSeconds >=
+                cumulativeSeconds + exerciseDurationSeconds
+              ) {
+                shouldBeAtStep = i + 1;
+                cumulativeSeconds += exerciseDurationSeconds;
+              } else {
+                break;
+              }
+            }
+
+            setCurrentExerciseStep(shouldBeAtStep);
+            setReadingTimeLeft(10); // Sıfırla
+            return 10;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (readingInterval) clearInterval(readingInterval);
+    };
+  }, [
+    isReadingTime,
+    readingTimeLeft,
+    currentExercisePlan,
+    totalExerciseTime,
+    remainingTime,
+  ]);
+
+  // Okuma süresi animasyonu
+  useEffect(() => {
+    if (isReadingTime) {
+      // Pulse animasyonu - 1.5 saniyede fade in/out
+      const pulseAnimation = Animated.sequence([
+        Animated.timing(borderOpacity, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+        Animated.timing(borderOpacity, {
+          toValue: 0.3,
+          duration: 700,
+          useNativeDriver: false,
+        }),
+      ]);
+
+      // Loop animasyon - okuma süresi bitene kadar devam eder
+      const loopAnimation = Animated.loop(pulseAnimation);
+      loopAnimation.start();
+
+      return () => {
+        loopAnimation.stop();
+      };
+    } else {
+      // Okuma süresi bittiğinde animasyonu durdur
+      Animated.timing(borderOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [isReadingTime, borderOpacity]);
+
+  // Timer Fonksiyonları
+  const startExerciseTimer = useCallback(
+    (totalMinutes: number, exerciseSteps: any[]) => {
+      const totalSeconds = totalMinutes * 60;
+      setTotalExerciseTime(totalSeconds);
+      setRemainingTime(totalSeconds);
+      setCurrentExerciseStep(0);
+      setBurnedCaloriesInSession(0);
+      setExerciseTimerActive(true);
+      setExerciseTimerPaused(false);
+      setIsReadingTime(false);
+      setReadingTimeLeft(10);
+      setHasUnfinishedExercise(false); // Yeni başlarken unfinished flag'i temizle
+      setExerciseTimerModalVisible(true); // Timer Modal'ını aç
+    },
+    [],
+  );
+
+  const pauseExerciseTimer = useCallback(() => {
+    setExerciseTimerPaused(true);
+  }, []);
+
+  const resumeExerciseTimer = useCallback(() => {
+    setExerciseTimerPaused(false);
+  }, []);
+
+  const stopExerciseTimer = useCallback(async () => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    Alert.alert(
+      "Egzersiz Duraklat",
+      "Egzersizi durdurmak istediğinizden emin misiniz? İlerleyişiniz kaydedilecek ve daha sonra kaldığınız yerden devam edebilirsiniz.",
+      [
+        { text: "İptal", style: "cancel" },
+        {
+          text: "Duraklat ve Kaydet",
+          onPress: async () => {
+            // Mevcut durumu kaydet
+            try {
+              await AsyncStorage.setItem(
+                `exercise_session_${profile?.id}`,
+                JSON.stringify({
+                  currentStep: currentExerciseStep,
+                  burnedCalories: burnedCaloriesInSession,
+                  remainingTime: remainingTime,
+                  totalTime: totalExerciseTime,
+                  exercisePlan: currentExercisePlan,
+                  dateStr: formatDateToLocalString(selectedDate),
+                  isReadingTime: isReadingTime,
+                  readingTimeLeft: readingTimeLeft,
+                }),
+              );
+            } catch (error) {
+              console.error("Egzersiz durumu kaydedilemedi:", error);
+            }
+
+            // Şu ana kadar yapılan egzersizleri tamamlandı olarak işaretle (toplu)
+            const dateStr = formatDateToLocalString(selectedDate);
+            const updatedCompleted = { ...completedExercises };
+            for (let i = 0; i < currentExerciseStep; i++) {
+              const key = `${dateStr}_${i}`;
+              updatedCompleted[key] = true;
+            }
+
+            // Toplu state update
+            setCompletedExercises(updatedCompleted);
+
+            // AsyncStorage'a toplu kayıt
+            try {
+              const storageKey = `completed_exercises_${profile?.id}_${dateStr}`;
+              await AsyncStorage.setItem(
+                storageKey,
+                JSON.stringify(updatedCompleted),
+              );
+            } catch (error) {
+              console.error("❌ Toplu kayıt hatası:", error);
+            }
+
+            // Yakılan kalorileri veritabanına kaydet
+            if (burnedCaloriesInSession > 0) {
+              try {
+                await logExercise(
+                  Math.round((totalExerciseTime - remainingTime) / 60), // duration dakika
+                  burnedCaloriesInSession, // calories
+                  formatDateToLocalString(selectedDate), // dateStr
+                  "Egzersiz Seansı (Kaydedildi)", // exercise name
+                );
+                await loadDailyData(selectedDate);
+              } catch (error) {
+                console.error("Kalori kaydetme hatası:", error);
+              }
+            }
+
+            // Tamamlanan egzersizleri yeniden yükle
+            await loadCompletedExercises();
+
+            // Timer'ı durdur
+            setExerciseTimerActive(false);
+            setExerciseTimerPaused(false);
+            setExerciseTimerModalVisible(false);
+            setIsReadingTime(false);
+            setReadingTimeLeft(10);
+            setHasUnfinishedExercise(true);
+
+            Alert.alert(
+              "Kaydedildi! ✅",
+              `Egzersiz durumu kaydedildi. ${burnedCaloriesInSession} kalori kaydedildi. Daha sonra kaldığınız yerden devam edebilirsiniz.`,
+            );
+          },
+        },
+        {
+          text: "Tamamen Bitir",
+          style: "destructive",
+          onPress: async () => {
+            // Şu ana kadar yapılan egzersizleri tamamlandı olarak işaretle (toplu)
+            const dateStr = formatDateToLocalString(selectedDate);
+            const updatedCompleted = { ...completedExercises };
+            for (let i = 0; i < currentExerciseStep; i++) {
+              const key = `${dateStr}_${i}`;
+              updatedCompleted[key] = true;
+            }
+
+            // Toplu state update
+            setCompletedExercises(updatedCompleted);
+
+            // AsyncStorage'a toplu kayıt
+            try {
+              const storageKey = `completed_exercises_${profile?.id}_${dateStr}`;
+              await AsyncStorage.setItem(
+                storageKey,
+                JSON.stringify(updatedCompleted),
+              );
+            } catch (error) {
+              console.error("❌ Toplu kayıt hatası (Tamamen Bitir):", error);
+            }
+
+            // Kaloriler kaydedilsin ve durum temizlensin
+            if (burnedCaloriesInSession > 0) {
+              try {
+                await logExercise(
+                  Math.round((totalExerciseTime - remainingTime) / 60), // duration dakika
+                  burnedCaloriesInSession, // calories
+                  formatDateToLocalString(selectedDate), // dateStr
+                  "Egzersiz Seansı (Yarıda Bırakıldı)", // exercise name
+                );
+                await loadDailyData(selectedDate);
+              } catch (error) {
+                console.error("Kalori kaydetme hatası:", error);
+              }
+            }
+
+            // Durumu temizle
+            try {
+              await AsyncStorage.removeItem(`exercise_session_${profile?.id}`);
+              setHasUnfinishedExercise(false);
+            } catch (error) {
+              console.error("Egzersiz durumu temizlenemedi:", error);
+            }
+            setExerciseTimerActive(false);
+            setExerciseTimerPaused(false);
+            setExerciseTimerModalVisible(false);
+            setRemainingTime(0);
+            setIsReadingTime(false);
+            setReadingTimeLeft(10);
+
+            // Tamamlanan egzersizleri yeniden yükle
+            await loadCompletedExercises();
+
+            Alert.alert(
+              "Tamamlandı! 🎊",
+              `Egzersiz sonlandırıldı. ${burnedCaloriesInSession} kalori kaydedildi.`,
+            );
+          },
+        },
+      ],
+    );
+  }, [
+    burnedCaloriesInSession,
+    totalExerciseTime,
+    remainingTime,
+    selectedDate,
+    currentExerciseStep,
+    currentExercisePlan,
+    profile?.id,
+  ]);
+
+  // Kaydedilen egzersizden devam etme
+  const continueExercise = useCallback(async () => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      const savedState = await AsyncStorage.getItem(
+        `exercise_session_${profile?.id}`,
+      );
+      if (savedState) {
+        const state = JSON.parse(savedState);
+        // Aynı gün ve aynı plan mı kontrol et
+        if (
+          state.dateStr === formatDateToLocalString(selectedDate) &&
+          state.exercisePlan &&
+          state.remainingTime > 0
+        ) {
+          setCurrentExerciseStep(state.currentStep);
+          setBurnedCaloriesInSession(state.burnedCalories);
+          setRemainingTime(state.remainingTime);
+          setTotalExerciseTime(state.totalTime);
+          setIsReadingTime(state.isReadingTime || false);
+          setReadingTimeLeft(state.readingTimeLeft || 10);
+          setExerciseTimerActive(true);
+          setExerciseTimerPaused(false);
+          setExerciseTimerModalVisible(true); // Timer Modal'ını aç
+
+          // Tamamlanan egzersizleri yeniden yükle
+          await loadCompletedExercises();
+
+          const minutes = Math.floor(state.remainingTime / 60);
+          const seconds = state.remainingTime % 60;
+          const timeString = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+
+          Alert.alert(
+            "Devam Ediliyor! 🔥",
+            `${state.currentStep}. egzersizden devam ediyorsunuz. ${timeString} kaldı.`,
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Egzersiz durumu yüklenemedi:", error);
+    }
+  }, [profile?.id, selectedDate]);
+
+  // Time formatter
+  const formatTime = useCallback((seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
+  }, []);
+
+  // Egzersiz durumunu persist etme
+  const saveExerciseState = useCallback(
+    async (state: {
+      currentStep: number;
+      burnedCalories: number;
+      remainingTime: number;
+      totalTime: number;
+      exercisePlan: any;
+      dateStr: string;
+      isReadingTime?: boolean;
+      readingTimeLeft?: number;
+    }) => {
+      try {
+        await AsyncStorage.setItem(
+          `exercise_session_${profile?.id}`,
+          JSON.stringify(state),
+        );
+      } catch (error) {
+        console.error("Egzersiz durumu kaydedilemedi:", error);
+      }
+    },
+    [profile?.id],
+  );
+
+  // Kaydedilen egzersiz durumunu yükleme
+  const loadExerciseState = useCallback(async () => {
+    try {
+      const savedState = await AsyncStorage.getItem(
+        `exercise_session_${profile?.id}`,
+      );
+      if (savedState) {
+        const state = JSON.parse(savedState);
+        // Aynı gün ve aynı plan mı kontrol et
+        if (
+          state.dateStr === formatDateToLocalString(selectedDate) &&
+          state.exercisePlan &&
+          state.remainingTime > 0
+        ) {
+          setHasUnfinishedExercise(true);
+          return state;
+        }
+      }
+      setHasUnfinishedExercise(false);
+      return null;
+    } catch (error) {
+      console.error("Egzersiz durumu yüklenemedi:", error);
+      setHasUnfinishedExercise(false);
+      return null;
+    }
+  }, [profile?.id, selectedDate]);
+
+  // Kaydedilen durumu temizleme
+  const clearExerciseState = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem(`exercise_session_${profile?.id}`);
+      setHasUnfinishedExercise(false);
+    } catch (error) {
+      console.error("Egzersiz durumu temizlenemedi:", error);
+    }
+  }, [profile?.id]);
 
   // Hedef kiloyu yükle (member değiştiğinde)
   useEffect(() => {
@@ -1406,7 +2067,17 @@ export default function ActiveDietScreen({ navigation }: any) {
               style={[
                 styles.trackingCard,
                 isLight && styles.surfaceLift,
-                { backgroundColor: colors.card, borderColor: colors.border },
+                {
+                  backgroundColor: colors.card,
+                  borderWidth: 0,
+                  shadowColor: colors.primary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.04,
+                  shadowRadius: 16,
+                  elevation: 2,
+                  marginHorizontal: -8,
+                  borderRadius: 28,
+                },
               ]}
             >
               <View style={styles.trackingHeader}>
@@ -1565,7 +2236,16 @@ export default function ActiveDietScreen({ navigation }: any) {
                                           key={log.id}
                                           style={[
                                             styles.logItem,
-                                            { backgroundColor: "#3b82f620" },
+                                            {
+                                              backgroundColor: "#3b82f620",
+                                              borderRadius: 16,
+                                              borderWidth: 0,
+                                              shadowColor: colors.primary,
+                                              shadowOffset: { width: 0, height: 2 },
+                                              shadowOpacity: 0.03,
+                                              shadowRadius: 8,
+                                              elevation: 1,
+                                            },
                                           ]}
                                         >
                                           <Droplet size={14} color="#3b82f6" />
@@ -1603,7 +2283,16 @@ export default function ActiveDietScreen({ navigation }: any) {
                                           key={log.id}
                                           style={[
                                             styles.logItem,
-                                            { backgroundColor: "#f59e0b20" },
+                                            {
+                                              backgroundColor: "#f59e0b20",
+                                              borderRadius: 16,
+                                              borderWidth: 0,
+                                              shadowColor: colors.primary,
+                                              shadowOffset: { width: 0, height: 2 },
+                                              shadowOpacity: 0.03,
+                                              shadowRadius: 8,
+                                              elevation: 1,
+                                            },
                                           ]}
                                         >
                                           <Flame size={14} color="#f59e0b" />
@@ -1636,10 +2325,19 @@ export default function ActiveDietScreen({ navigation }: any) {
                                           key={log.id}
                                           style={[
                                             styles.logItem,
-                                            { backgroundColor: "#10b98120" },
+                                            {
+                                              backgroundColor: colors.primary + "20",
+                                              borderRadius: 16,
+                                              borderWidth: 0,
+                                              shadowColor: colors.primary,
+                                              shadowOffset: { width: 0, height: 2 },
+                                              shadowOpacity: 0.03,
+                                              shadowRadius: 8,
+                                              elevation: 1,
+                                            },
                                           ]}
                                         >
-                                          <Dumbbell size={14} color="#10b981" />
+                                          <Dumbbell size={14} color={colors.primary} />
                                           <Text
                                             style={[
                                               styles.logText,
@@ -1771,8 +2469,8 @@ export default function ActiveDietScreen({ navigation }: any) {
                                 backgroundColor: isCompleted
                                   ? "#10b981"
                                   : averagePercentage >= 50
-                                    ? "#10b98180"
-                                    : "#10b98140",
+                                    ? colors.primary + "80"
+                                    : colors.primary + "40",
                                 zIndex: 0,
                               }}
                             />
@@ -1802,13 +2500,23 @@ export default function ActiveDietScreen({ navigation }: any) {
               style={[
                 styles.dailyTrackingCard,
                 isLight && styles.surfaceLift,
-                { backgroundColor: colors.card, borderColor: colors.border },
+                {
+                  backgroundColor: colors.card,
+                  borderWidth: 0,
+                  shadowColor: colors.primary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.04,
+                  shadowRadius: 16,
+                  elevation: 2,
+                  marginHorizontal: -8,
+                  borderRadius: 28,
+                },
               ]}
             >
               <Text
                 style={[
                   styles.sectionTitle,
-                  { color: colors.text, marginBottom: 16 },
+                  { color: colors.text, marginBottom: 12 },
                 ]}
               >
                 Günlük Takip -{" "}
@@ -1831,7 +2539,22 @@ export default function ActiveDietScreen({ navigation }: any) {
                     );
 
                     return (
-                      <View style={styles.compactTrackingItem}>
+                      <View
+                        style={[
+                          styles.compactTrackingItem,
+                          {
+                            backgroundColor: colors.card,
+                            borderRadius: 20,
+                            borderWidth: 0,
+                            shadowColor: colors.primary,
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.03,
+                            shadowRadius: 10,
+                            elevation: 1,
+                            padding: 12,
+                          },
+                        ]}
+                      >
                         <View
                           style={[
                             styles.compactTrackingIcon,
@@ -1890,7 +2613,22 @@ export default function ActiveDietScreen({ navigation }: any) {
                     const caloriesColor = isOverTarget ? "#ef4444" : "#f59e0b";
 
                     return (
-                      <View style={styles.compactTrackingItem}>
+                      <View
+                        style={[
+                          styles.compactTrackingItem,
+                          {
+                            backgroundColor: colors.card,
+                            borderRadius: 20,
+                            borderWidth: 0,
+                            shadowColor: colors.primary,
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.03,
+                            shadowRadius: 10,
+                            elevation: 1,
+                            padding: 12,
+                          },
+                        ]}
+                      >
                         <View
                           style={[
                             styles.compactTrackingIcon,
@@ -1956,20 +2694,35 @@ export default function ActiveDietScreen({ navigation }: any) {
                     );
 
                     return (
-                      <View style={styles.compactTrackingItem}>
+                      <View
+                        style={[
+                          styles.compactTrackingItem,
+                          {
+                            backgroundColor: colors.card,
+                            borderRadius: 20,
+                            borderWidth: 0,
+                            shadowColor: colors.primary,
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.03,
+                            shadowRadius: 10,
+                            elevation: 1,
+                            padding: 12,
+                          },
+                        ]}
+                      >
                         <View
                           style={[
                             styles.compactTrackingIcon,
-                            { backgroundColor: "#10b98120" },
+                            { backgroundColor: "#8b5cf620" },
                           ]}
                         >
-                          <Dumbbell size={18} color="#10b981" />
+                          <Dumbbell size={18} color="#8b5cf6" />
                         </View>
                         <CircularProgress
                           percentage={exercisePercentage}
                           size={50}
                           strokeWidth={6}
-                          color="#10b981"
+                          color="#8b5cf6"
                           backgroundColor={colors.background}
                         />
                         <View style={styles.compactTrackingInfo}>
@@ -2016,8 +2769,14 @@ export default function ActiveDietScreen({ navigation }: any) {
                       style={[
                         styles.netCaloriesInfo,
                         {
-                          backgroundColor: colors.background,
-                          borderColor: colors.border,
+                          backgroundColor: colors.card,
+                          borderWidth: 0,
+                          shadowColor: colors.primary,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.03,
+                          shadowRadius: 12,
+                          elevation: 1,
+                          borderRadius: 20,
                         },
                       ]}
                     >
@@ -2095,14 +2854,21 @@ export default function ActiveDietScreen({ navigation }: any) {
                     isLight && styles.surfaceLift,
                     {
                       backgroundColor: colors.card,
-                      borderColor: colors.border,
+                      borderWidth: 0, // Kenarlık kaldır
+                      shadowColor: colors.primary,
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.04,
+                      shadowRadius: 16,
+                      elevation: 2,
+                      marginHorizontal: 0, // En geniş
+                      borderRadius: 28, // Daha da yuvarlatılmış köşeler
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.sectionTitle,
-                      { color: colors.text, marginBottom: 16 },
+                      { color: colors.text, marginBottom: 12 },
                     ]}
                   >
                     Günlük Diyet Programı
@@ -2110,7 +2876,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   <Text
                     style={[
                       styles.sectionSubtitle,
-                      { color: colors.textMuted, marginBottom: 16 },
+                      { color: colors.textMuted, marginBottom: 8 },
                     ]}
                   >
                     {format(selectedDate, "d MMMM yyyy", { locale: tr })}
@@ -2142,17 +2908,21 @@ export default function ActiveDietScreen({ navigation }: any) {
                         <View
                           key={index}
                           style={{
-                            marginBottom: 12,
-                            padding: 14,
+                            marginBottom: 10,
+                            marginHorizontal: -8, // Kartları bir tık daha geniş
+                            paddingHorizontal: 20,
+                            paddingVertical: 18,
                             backgroundColor: isCompleted
-                              ? colors.primary + "10"
-                              : colors.background,
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            borderColor: isCompleted
-                              ? colors.primary
-                              : colors.border,
-                            opacity: isCompleted ? 0.8 : 1,
+                              ? colors.primary + "08"
+                              : colors.card,
+                            borderRadius: 24,
+                            borderWidth: 0, // Kenarlık kaldırıldı
+                            shadowColor: isCompleted ? colors.primary : colors.primary,
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: isCompleted ? 0.08 : 0.03,
+                            shadowRadius: 12,
+                            elevation: isCompleted ? 3 : 1,
+                            opacity: isCompleted ? 0.95 : 1,
                           }}
                         >
                           <View
@@ -2162,7 +2932,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                               alignItems: "flex-start",
                             }}
                           >
-                            <View style={{ flex: 1, marginRight: 12 }}>
+                            <View style={{ flex: 1, marginRight: 10 }}>
                               <View
                                 style={{
                                   flexDirection: "row",
@@ -2242,7 +3012,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                               style={{
                                 flexDirection: "row",
                                 alignItems: "center",
-                                gap: 12,
+                                gap: 10,
                               }}
                             >
                               {meal.calories && (
@@ -2347,7 +3117,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                         flexDirection: "row",
                         justifyContent: "space-between",
                         alignItems: "center",
-                        marginBottom: 16,
+                        marginBottom: 12,
                       }}
                     >
                       <View>
@@ -2373,14 +3143,14 @@ export default function ActiveDietScreen({ navigation }: any) {
                     <Text
                       style={[
                         styles.modalDesc,
-                        { color: colors.textMuted, marginBottom: 16 },
+                        { color: colors.textMuted, marginBottom: 12 },
                       ]}
                     >
                       Bu gün için özel egzersiz planı oluşturmak ister misiniz?
                     </Text>
 
                     {/* Ekipman ve Fitness Seviyesi Seçimleri */}
-                    <View style={{ gap: 16, marginBottom: 16 }}>
+                    <View style={{ gap: 12, marginBottom: 12 }}>
                       <SelectionGroup
                         label="Ekipman Tercihi"
                         options={[
@@ -2422,49 +3192,78 @@ export default function ActiveDietScreen({ navigation }: any) {
 
                         setGeneratingExercisePlan(true);
                         try {
-                          const result = await generateExercisePlan({
-                            age: age || undefined,
-                            weight: member.weight,
-                            height: member.height,
-                            gender: member.gender,
-                            fitnessLevel: fitnessLevel,
-                            equipmentType: equipmentPreference,
-                            targetCalories: exerciseCalorieTarget,
-                            availableTime: 45, // Varsayılan 45 dakika
-                            language: "tr",
+                          // O günden itibaren ilk Pazartesi dahil egzersiz programı oluştur
+                          const startDate = new Date(selectedDateStr);
+                          startDate.setHours(0, 0, 0, 0);
+
+                          const todayDay = startDate.getDay(); // 0=Pazar, 1=Pazartesi, ..., 6=Cumartesi
+                          let endDate: Date;
+
+                          if (todayDay === 1) {
+                            // Pazartesi
+                            endDate = addDays(startDate, 7); // Bu Pazartesi'den sonraki Pazartesi
+                          } else {
+                            // Diğer günler
+                            const daysUntilNextMonday = (8 - todayDay) % 7 || 7;
+                            endDate = startOfWeek(
+                              addDays(startDate, daysUntilNextMonday),
+                              { weekStartsOn: 1 },
+                            );
+                          }
+
+                          // Tüm günler için plan oluştur
+                          const planDates = eachDayOfInterval({
+                            start: startDate,
+                            end: endDate,
                           });
+                          let successCount = 0;
 
-                          if (result.error || !result.data) {
-                            Alert.alert(
-                              "Hata",
-                              result.error || "Egzersiz planı oluşturulamadı.",
+                          for (const date of planDates) {
+                            const dateStr = format(date, "yyyy-MM-dd");
+
+                            const result = await generateExercisePlan({
+                              age: age || undefined,
+                              weight: member.weight,
+                              height: member.height,
+                              gender: member.gender,
+                              fitnessLevel: fitnessLevel,
+                              equipmentType: equipmentPreference,
+                              targetCalories: exerciseCalorieTarget,
+                              availableTime: 45, // Varsayılan 45 dakika
+                              language: "tr",
+                            });
+
+                            if (result.error || !result.data) {
+                              continue; // Bu gün başarısız, diğer günlere geç
+                            }
+
+                            // Planı veritabanına kaydet
+                            const saveResult = await saveExercisePlan(
+                              dateStr,
+                              result.data,
+                              equipmentPreference,
                             );
-                            setGeneratingExercisePlan(false);
-                            return;
+
+                            if (!saveResult.error) {
+                              successCount++;
+                              // Eğer seçili gün için plan oluşturduysa state'i güncelle
+                              if (dateStr === selectedDateStr) {
+                                setCurrentExercisePlan(result.data);
+                              }
+                            }
                           }
 
-                          // Planı veritabanına kaydet
-                          const saveResult = await saveExercisePlan(
-                            selectedDateStr,
-                            result.data,
-                            equipmentPreference,
-                          );
-
-                          if (saveResult.error) {
+                          if (successCount > 0) {
+                            Alert.alert(
+                              "Başarılı",
+                              `${successCount} günlük egzersiz planınız hazırlandı! ${format(startDate, "d MMMM", { locale: tr })} - ${format(endDate, "d MMMM yyyy", { locale: tr })}`,
+                            );
+                          } else {
                             Alert.alert(
                               "Hata",
-                              "Egzersiz planı kaydedilemedi: " +
-                                saveResult.error,
+                              "Hiçbir gün için egzersiz planı oluşturulamadı.",
                             );
-                            setGeneratingExercisePlan(false);
-                            return;
                           }
-
-                          setCurrentExercisePlan(result.data);
-                          Alert.alert(
-                            "Başarılı",
-                            "Günlük egzersiz planınız hazırlandı!",
-                          );
                         } catch (error: any) {
                           Alert.alert(
                             "Hata",
@@ -2481,7 +3280,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                           backgroundColor: generatingExercisePlan
                             ? colors.textMuted
                             : colors.primary,
-                          marginTop: 8,
+                          marginTop: 4,
                         },
                       ]}
                     >
@@ -2507,7 +3306,14 @@ export default function ActiveDietScreen({ navigation }: any) {
                     isLight && styles.surfaceLift,
                     {
                       backgroundColor: colors.card,
-                      borderColor: colors.border,
+                      borderWidth: 0, // Kenarlık kaldır
+                      shadowColor: colors.primary,
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.04,
+                      shadowRadius: 16,
+                      elevation: 2,
+                      marginHorizontal: 0, // En geniş
+                      borderRadius: 28, // Daha da yuvarlatılmış köşeler
                     },
                   ]}
                 >
@@ -2516,7 +3322,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                       flexDirection: "row",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      marginBottom: 16,
+                      marginBottom: 12,
                     }}
                   >
                     <View>
@@ -2531,148 +3337,145 @@ export default function ActiveDietScreen({ navigation }: any) {
                       <Text
                         style={[
                           styles.sectionSubtitle,
-                          { color: colors.textMuted },
+                          { color: colors.textMuted, marginBottom: 8 },
                         ]}
                       >
                         {format(selectedDate, "d MMMM yyyy", { locale: tr })}
                       </Text>
                     </View>
-                    <TouchableOpacity
-                      onPress={async () => {
-                        if (!member || !profile?.id) return;
+                    {/* Yenile butonu - eğer egzersiz başlanmamışsa göster */}
+                    {!hasUnfinishedExercise &&
+                      !(() => {
+                        // Tamamlanan herhangi bir egzersiz var mı kontrol et
+                        const stats = calculateCompletedExerciseStats();
+                        return stats.count > 0;
+                      })() && (
+                        <TouchableOpacity
+                          onPress={async () => {
+                            if (!member || !profile?.id) return;
 
-                        const age = calculateAge(member.birth_date);
-                        const exerciseCalorieTarget =
-                          calculateExerciseCalorieTarget(
-                            age || undefined,
-                            member.weight,
-                            member.height,
-                            member.gender,
-                          );
+                            const age = calculateAge(member.birth_date);
+                            const exerciseCalorieTarget =
+                              calculateExerciseCalorieTarget(
+                                age || undefined,
+                                member.weight,
+                                member.height,
+                                member.gender,
+                              );
 
-                        setGeneratingExercisePlan(true);
-                        try {
-                          const result = await generateExercisePlan({
-                            age: age || undefined,
-                            weight: member.weight,
-                            height: member.height,
-                            gender: member.gender,
-                            fitnessLevel: fitnessLevel,
-                            equipmentType: equipmentPreference,
-                            targetCalories: exerciseCalorieTarget,
-                            availableTime: 45,
-                            language: "tr",
-                          });
+                            setGeneratingExercisePlan(true);
+                            try {
+                              const result = await generateExercisePlan({
+                                age: age || undefined,
+                                weight: member.weight,
+                                height: member.height,
+                                gender: member.gender,
+                                fitnessLevel: fitnessLevel,
+                                equipmentType: equipmentPreference,
+                                targetCalories: exerciseCalorieTarget,
+                                availableTime: 45,
+                                language: "tr",
+                              });
 
-                          if (result.error || !result.data) {
-                            Alert.alert(
-                              "Hata",
-                              result.error || "Egzersiz planı oluşturulamadı.",
-                            );
-                            setGeneratingExercisePlan(false);
-                            return;
-                          }
+                              if (result.error || !result.data) {
+                                Alert.alert(
+                                  "Hata",
+                                  result.error ||
+                                    "Egzersiz planı oluşturulamadı.",
+                                );
+                                setGeneratingExercisePlan(false);
+                                return;
+                              }
 
-                          const saveResult = await saveExercisePlan(
-                            selectedDateStr,
-                            result.data,
-                            equipmentPreference,
-                          );
+                              const saveResult = await saveExercisePlan(
+                                selectedDateStr,
+                                result.data,
+                                equipmentPreference,
+                              );
 
-                          if (saveResult.error) {
-                            Alert.alert(
-                              "Hata",
-                              "Egzersiz planı kaydedilemedi: " +
-                                saveResult.error,
-                            );
-                            setGeneratingExercisePlan(false);
-                            return;
-                          }
+                              if (saveResult.error) {
+                                Alert.alert(
+                                  "Hata",
+                                  "Egzersiz planı kaydedilemedi: " +
+                                    saveResult.error,
+                                );
+                                setGeneratingExercisePlan(false);
+                                return;
+                              }
 
-                          setCurrentExercisePlan(result.data);
-                          Alert.alert(
-                            "Başarılı",
-                            "Egzersiz planı güncellendi!",
-                          );
-                        } catch (error: any) {
-                          Alert.alert(
-                            "Hata",
-                            error.message || "Egzersiz planı oluşturulamadı.",
-                          );
-                        } finally {
-                          setGeneratingExercisePlan(false);
-                        }
-                      }}
-                      disabled={generatingExercisePlan}
-                      style={{
-                        padding: 8,
-                        borderRadius: 8,
-                        backgroundColor: colors.background,
-                      }}
-                    >
-                      {generatingExercisePlan ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={colors.primary}
-                        />
-                      ) : (
-                        <Settings size={18} color={colors.primary} />
+                              setCurrentExercisePlan(result.data);
+                              Alert.alert(
+                                "Başarılı",
+                                "Egzersiz planı güncellendi!",
+                              );
+                            } catch (error: any) {
+                              Alert.alert(
+                                "Hata",
+                                error.message ||
+                                  "Egzersiz planı oluşturulamadı.",
+                              );
+                            } finally {
+                              setGeneratingExercisePlan(false);
+                            }
+                          }}
+                          disabled={generatingExercisePlan}
+                          style={{
+                            padding: 6,
+                            borderRadius: 8,
+                            backgroundColor: colors.background,
+                          }}
+                        >
+                          {generatingExercisePlan ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={colors.primary}
+                            />
+                          ) : (
+                            <RotateCcw size={18} color={colors.primary} />
+                          )}
+                        </TouchableOpacity>
                       )}
-                    </TouchableOpacity>
                   </View>
 
-                  {/* Özet Bilgiler */}
+                  {/* Birleştirilmiş İlerleme ve Özet Bilgiler */}
                   <View
                     style={{
                       flexDirection: "row",
                       justifyContent: "space-around",
-                      marginBottom: 16,
-                      padding: 12,
-                      backgroundColor: colors.background,
-                      borderRadius: 12,
+                      marginTop: 4,
+                      marginBottom: 12,
+                      marginHorizontal: 0, // Kenar boşluğu kaldırıldı
+                      paddingHorizontal: 0,
+                      paddingVertical: 18,
+                      backgroundColor: (() => {
+                        const stats = calculateCompletedExerciseStats();
+                        return stats.count > 0 ? colors.card : colors.card;
+                      })(),
+                      borderRadius: 24,
+                      borderWidth: 0, // Kenarlık kaldırıldı
+                      shadowColor: (() => {
+                        const stats = calculateCompletedExerciseStats();
+                        return stats.count > 0 ? colors.primary : colors.primary;
+                      })(),
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: (() => {
+                        const stats = calculateCompletedExerciseStats();
+                        return stats.count > 0 ? 0.08 : 0.03;
+                      })(),
+                      shadowRadius: 12,
+                      elevation: (() => {
+                        const stats = calculateCompletedExerciseStats();
+                        return stats.count > 0 ? 3 : 1;
+                      })(),
                     }}
                   >
-                    <View style={{ alignItems: "center" }}>
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: colors.textMuted,
-                          marginBottom: 4,
-                        }}
-                      >
-                        Toplam Süre
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 16,
-                          fontWeight: "700",
-                          color: colors.text,
-                        }}
-                      >
-                        {exercisePlan.total_duration} dk
-                      </Text>
-                    </View>
-                    <View style={{ alignItems: "center" }}>
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: colors.textMuted,
-                          marginBottom: 4,
-                        }}
-                      >
-                        Yakılan Kalori
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 16,
-                          fontWeight: "700",
-                          color: colors.primary,
-                        }}
-                      >
-                        {exercisePlan.total_calories} kcal
-                      </Text>
-                    </View>
-                    <View style={{ alignItems: "center" }}>
+                    <View
+                      style={{
+                        alignItems: "center",
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                      }}
+                    >
                       <Text
                         style={{
                           fontSize: 11,
@@ -2686,12 +3489,292 @@ export default function ActiveDietScreen({ navigation }: any) {
                         style={{
                           fontSize: 16,
                           fontWeight: "700",
-                          color: colors.text,
+                          color: (() => {
+                            const stats = calculateCompletedExerciseStats();
+                            return stats.count > 0 ? colors.primary : colors.text;
+                          })(),
                         }}
                       >
-                        {exercisePlan.exercises?.length || 0}
+                        {(() => {
+                          const stats = calculateCompletedExerciseStats();
+                          return `${stats.count}/${exercisePlan.exercises?.length || 0}`;
+                        })()}
                       </Text>
+                      {(() => {
+                        const stats = calculateCompletedExerciseStats();
+                        if (stats.count > 0) {
+                          const percentage = Math.round(
+                            (stats.count /
+                              (exercisePlan.exercises?.length || 1)) *
+                              100,
+                          );
+                          return (
+                            <Text
+                              style={{
+                                fontSize: 9,
+                                color: colors.primary,
+                                marginTop: 2,
+                              }}
+                            >
+                              %{percentage} tamamlandı
+                            </Text>
+                          );
+                        }
+                        return null;
+                      })()}
                     </View>
+
+                    <View
+                      style={{
+                        alignItems: "center",
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: colors.textMuted,
+                          marginBottom: 4,
+                        }}
+                      >
+                        Süre
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          fontWeight: "700",
+                          color: (() => {
+                            const stats = calculateCompletedExerciseStats();
+                            return stats.duration > 0 ? "#8b5cf6" : colors.text;
+                          })(),
+                        }}
+                      >
+                        {(() => {
+                          const stats = calculateCompletedExerciseStats();
+                          return `${stats.duration}/${exercisePlan.total_duration} dk`;
+                        })()}
+                      </Text>
+                      {(() => {
+                        const stats = calculateCompletedExerciseStats();
+                        if (stats.duration > 0) {
+                          const percentage = Math.round(
+                            (stats.duration /
+                              (exercisePlan.total_duration || 1)) *
+                              100,
+                          );
+                          return (
+                            <Text
+                              style={{
+                                fontSize: 9,
+                                color: "#8b5cf6",
+                                marginTop: 2,
+                              }}
+                            >
+                              %{percentage} tamamlandı
+                            </Text>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </View>
+
+                    <View
+                      style={{
+                        alignItems: "center",
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: colors.textMuted,
+                          marginBottom: 4,
+                        }}
+                      >
+                        Kalori
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          fontWeight: "700",
+                          color: (() => {
+                            const stats = calculateCompletedExerciseStats();
+                            return stats.calories > 0
+                              ? "#f59e0b"
+                              : colors.primary;
+                          })(),
+                        }}
+                      >
+                        {(() => {
+                          const stats = calculateCompletedExerciseStats();
+                          return `${stats.calories}/${exercisePlan.total_calories} kcal`;
+                        })()}
+                      </Text>
+                      {(() => {
+                        const stats = calculateCompletedExerciseStats();
+                        if (stats.calories > 0) {
+                          const percentage = Math.round(
+                            (stats.calories /
+                              (exercisePlan.total_calories || 1)) *
+                              100,
+                          );
+                          return (
+                            <Text
+                              style={{
+                                fontSize: 9,
+                                color: "#f59e0b",
+                                marginTop: 2,
+                              }}
+                            >
+                              %{percentage} tamamlandı
+                            </Text>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </View>
+                  </View>
+
+                  {/* EGZERSİZ TIMER İNTERFACE'İ */}
+                  <View
+                    style={{
+                      backgroundColor: colors.card,
+                      borderRadius: 24,
+                      paddingHorizontal: 0,
+                      paddingVertical: 18,
+                      marginBottom: 12,
+                      marginHorizontal: 0, // Kenar boşluğu kaldırıldı
+                      borderWidth: 0, // Kenarlık kaldırıldı
+                      shadowColor: exerciseTimerActive
+                        ? colors.primary
+                        : colors.primary,
+                      shadowOffset: {
+                        width: 0,
+                        height: exerciseTimerActive ? 6 : 4,
+                      },
+                      shadowOpacity: exerciseTimerActive ? 0.12 : 0.03,
+                      shadowRadius: exerciseTimerActive ? 16 : 12,
+                      elevation: exerciseTimerActive ? 4 : 1,
+                    }}
+                  >
+                    {exerciseTimerActive ? (
+                      // Egzersiz aktif - Sadece modal açma butonu göster
+                      <View style={{ alignItems: "center", padding: 20 }}>
+                        <TouchableOpacity
+                          onPress={() => setExerciseTimerModalVisible(true)}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            backgroundColor: colors.primary,
+                            paddingHorizontal: 24,
+                            paddingVertical: 12,
+                            borderRadius: 12,
+                          }}
+                        >
+                          <Timer size={18} color="#fff" />
+                          <Text
+                            style={{
+                              color: "#fff",
+                              fontWeight: "700",
+                              marginLeft: 8,
+                              fontSize: 16,
+                            }}
+                          >
+                            Egzersiz Ekranını Aç
+                          </Text>
+                        </TouchableOpacity>
+
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            color: colors.textMuted,
+                            textAlign: "center",
+                            marginTop: 12,
+                          }}
+                        >
+                          Egzersize devam etmek için yukarıdaki butona tıklayın
+                        </Text>
+                      </View>
+                    ) : (
+                      // Timer aktif değil - Başlat/Devam butonları
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "center",
+                          gap: 12,
+                          paddingHorizontal: 20,
+                          paddingVertical: 8,
+                        }}
+                      >
+                        {hasUnfinishedExercise ? (
+                          // Devam Et Butonu
+                          <View style={{ alignItems: "center" }}>
+                            <TouchableOpacity
+                              onPress={continueExercise}
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: "#8b5cf6",
+                                width: 60,
+                                height: 60,
+                                borderRadius: 30,
+                                marginBottom: 6,
+                              }}
+                            >
+                              <Play size={24} color="#fff" />
+                            </TouchableOpacity>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: colors.textMuted,
+                                textAlign: "center",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Kaldığınız yerden{"\n"}devam edin
+                            </Text>
+                          </View>
+                        ) : (
+                          // Başlat Butonu
+                          <TouchableOpacity
+                            onPress={() => {
+                              if (
+                                exercisePlan.exercises &&
+                                exercisePlan.total_duration
+                              ) {
+                                startExerciseTimer(
+                                  exercisePlan.total_duration,
+                                  exercisePlan.exercises,
+                                );
+                              }
+                            }}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              backgroundColor: colors.primary,
+                              paddingHorizontal: 24,
+                              paddingVertical: 12,
+                              borderRadius: 12,
+                            }}
+                          >
+                            <Play size={18} color="#fff" />
+                            <Text
+                              style={{
+                                color: "#fff",
+                                fontWeight: "700",
+                                marginLeft: 8,
+                                fontSize: 16,
+                              }}
+                            >
+                              Egzersizi Başlat
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
                   </View>
 
                   {/* Egzersiz Listesi */}
@@ -2710,16 +3793,33 @@ export default function ActiveDietScreen({ navigation }: any) {
                                     ? "Denge"
                                     : "Diğer";
 
+                          // Egzersizin tamamlanıp tamamlanmadığını kontrol et
+                          const dateStr = formatDateToLocalString(selectedDate);
+                          const exerciseKey = `${dateStr}_${index}`;
+                          const isCompleted =
+                            completedExercises[exerciseKey] || false;
+
                           return (
                             <View
                               key={index}
                               style={{
-                                marginBottom: 12,
-                                padding: 14,
-                                backgroundColor: colors.background,
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                borderColor: colors.border,
+                                marginBottom: 10,
+                                marginHorizontal: 0, // Kenar boşluğu kaldırıldı
+                                paddingHorizontal: 0,
+                                paddingVertical: 18,
+                                backgroundColor: isCompleted
+                                  ? "#10b981" + "06"
+                                  : colors.card,
+                                borderRadius: 24,
+                                borderWidth: 0, // Kenarlık kaldırıldı
+                                shadowColor: isCompleted
+                                  ? "#10b981"
+                                  : colors.primary,
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: isCompleted ? 0.08 : 0.03,
+                                shadowRadius: 12,
+                                elevation: isCompleted ? 3 : 1,
+                                opacity: isCompleted ? 0.95 : 1,
                               }}
                             >
                               <View
@@ -2727,9 +3827,11 @@ export default function ActiveDietScreen({ navigation }: any) {
                                   flexDirection: "row",
                                   justifyContent: "space-between",
                                   alignItems: "flex-start",
+                                  paddingHorizontal: 16,
+                                  paddingVertical: 4,
                                 }}
                               >
-                                <View style={{ flex: 1, marginRight: 12 }}>
+                                <View style={{ flex: 1, marginRight: 10 }}>
                                   <View
                                     style={{
                                       flexDirection: "row",
@@ -2782,17 +3884,33 @@ export default function ActiveDietScreen({ navigation }: any) {
                                       </>
                                     )}
                                   </View>
-                                  <Text
+                                  <View
                                     style={{
-                                      fontSize: 15,
-                                      color: colors.text,
-                                      fontWeight: "600",
-                                      lineHeight: 22,
+                                      flexDirection: "row",
+                                      alignItems: "center",
                                       marginBottom: 4,
                                     }}
                                   >
-                                    {exercise.name}
-                                  </Text>
+                                    <Text
+                                      style={{
+                                        fontSize: 15,
+                                        color: isCompleted
+                                          ? "#10b981"
+                                          : colors.text,
+                                        fontWeight: "600",
+                                        lineHeight: 22,
+                                        textDecorationLine: isCompleted
+                                          ? "line-through"
+                                          : "none",
+                                        flex: 1,
+                                      }}
+                                    >
+                                      {exercise.name?.replace(
+                                        /\s*\([^)]*\)/g,
+                                        "",
+                                      ) || exercise.name}
+                                    </Text>
+                                  </View>
                                   {exercise.instructions && (
                                     <Text
                                       style={{
@@ -2830,6 +3948,55 @@ export default function ActiveDietScreen({ navigation }: any) {
                                   >
                                     {exercise.calories} kcal
                                   </Text>
+
+                                  {/* Egzersiz Durumu - Otomatik Geçiş veya Tamamlanan */}
+                                  {(exerciseTimerActive || isCompleted) && (
+                                    <View
+                                      style={{
+                                        marginTop: 8,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 8,
+                                        backgroundColor:
+                                          (exerciseTimerActive &&
+                                            index < currentExerciseStep) ||
+                                          isCompleted
+                                            ? "#10b981" // Tamamlandı - Yeşil
+                                            : exerciseTimerActive &&
+                                                index === currentExerciseStep
+                                              ? colors.primary // Şu anki - Mavi
+                                              : colors.border, // Henüz gelmedik - Gri
+                                        opacity:
+                                          exerciseTimerActive &&
+                                          index > currentExerciseStep
+                                            ? 0.5
+                                            : 1,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 11,
+                                          fontWeight: "600",
+                                          color:
+                                            (exerciseTimerActive &&
+                                              index <= currentExerciseStep) ||
+                                            isCompleted
+                                              ? "#fff"
+                                              : colors.textMuted,
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        {(exerciseTimerActive &&
+                                          index < currentExerciseStep) ||
+                                        isCompleted
+                                          ? "✓"
+                                          : exerciseTimerActive &&
+                                              index === currentExerciseStep
+                                            ? "🔥 Şu Anda"
+                                            : `${index + 1}. Sıra`}
+                                      </Text>
+                                    </View>
+                                  )}
                                 </View>
                               </View>
                             </View>
@@ -2851,7 +4018,17 @@ export default function ActiveDietScreen({ navigation }: any) {
               style={[
                 styles.unifiedDashboardCard,
                 isLight && styles.surfaceLift,
-                { backgroundColor: colors.card, borderColor: colors.border },
+                {
+                  backgroundColor: colors.card,
+                  borderWidth: 0,
+                  shadowColor: colors.primary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.04,
+                  shadowRadius: 16,
+                  elevation: 2,
+                  marginHorizontal: -8,
+                  borderRadius: 28,
+                },
               ]}
             >
               {/* HEADER - Başlık ve Ayarlar Butonu */}
@@ -2900,10 +4077,10 @@ export default function ActiveDietScreen({ navigation }: any) {
                   <View
                     style={[
                       styles.statIconCircle,
-                      { backgroundColor: "#10b98120" },
+                      { backgroundColor: "#f59e0b20" },
                     ]}
                   >
-                    <Flame size={20} color="#10b981" />
+                    <Flame size={20} color="#f59e0b" />
                   </View>
                   <Text
                     style={[styles.dashboardStatValue, { color: colors.text }]}
@@ -3235,14 +4412,14 @@ export default function ActiveDietScreen({ navigation }: any) {
                       styles.settingsIconCircleSmall,
                       {
                         backgroundColor: isMonday()
-                          ? "#10b98120"
+                          ? colors.primary + "20"
                           : colors.border + "40",
                       },
                     ]}
                   >
                     <Target
                       size={20}
-                      color={isMonday() ? "#10b981" : colors.textMuted}
+                      color={isMonday() ? colors.primary : colors.textMuted}
                     />
                   </View>
                   <View style={styles.settingsItemTextContainer}>
@@ -3346,7 +4523,7 @@ export default function ActiveDietScreen({ navigation }: any) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.fabBase, { backgroundColor: "#10b981" }]}
+            style={[styles.fabBase, { backgroundColor: colors.primary }]}
             onPress={() => {
               setExerciseNameInput("");
               setExerciseDurationInput("");
@@ -4765,13 +5942,13 @@ export default function ActiveDietScreen({ navigation }: any) {
                       width: 48,
                       height: 48,
                       borderRadius: 24,
-                      backgroundColor: "#10b98120",
+                      backgroundColor: "#8b5cf620",
                       justifyContent: "center",
                       alignItems: "center",
                       marginRight: 12,
                     }}
                   >
-                    <Dumbbell size={24} color="#10b981" />
+                    <Dumbbell size={24} color="#8b5cf6" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text
@@ -4847,14 +6024,14 @@ export default function ActiveDietScreen({ navigation }: any) {
                   {/* Kalori Kartı */}
                   <View
                     style={{
-                      backgroundColor: "#10b98110",
+                      backgroundColor: "#f59e0b10",
                       padding: 12,
                       borderRadius: 12,
                       flexDirection: "row",
                       justifyContent: "space-between",
                       alignItems: "center",
                       borderWidth: 1,
-                      borderColor: "#10b98120",
+                      borderColor: "#f59e0b20",
                     }}
                   >
                     <View>
@@ -4891,7 +6068,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                         style={[
                           styles.modalTitle,
                           {
-                            color: "#10b981",
+                            color: "#f59e0b",
                             fontSize: 20,
                             fontWeight: "700",
                             lineHeight: 24,
@@ -5633,6 +6810,516 @@ export default function ActiveDietScreen({ navigation }: any) {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* EGZERSİZ TIMER FULL SCREEN MODAL */}
+      <Modal
+        visible={exerciseTimerModalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => {
+          // Android geri butonu ile kapatmayı engelle
+        }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+          <View
+            style={{
+              flex: 1,
+              padding: 24,
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            {/* HEADER - Minimize Button */}
+            <View
+              style={{
+                width: "100%",
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                marginBottom: 20,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setExerciseTimerModalVisible(false)}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: colors.border,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <X size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* MAIN CONTENT */}
+            <View
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              {/* BIG TIMER - TOP */}
+              <View style={{ alignItems: "center", marginBottom: 20 }}>
+                <Text
+                  style={{
+                    fontSize: 80,
+                    fontWeight: "900",
+                    color: exerciseTimerPaused
+                      ? colors.textMuted
+                      : isReadingTime
+                        ? "#f59e0b"
+                        : colors.primary,
+                    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+                    textAlign: "center",
+                  }}
+                >
+                  {formatTime(remainingTime)}
+                </Text>
+              </View>
+
+              {/* TWO CIRCLES SIDE BY SIDE - MOVED UNDER TIMER */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  marginBottom: 30,
+                  paddingHorizontal: 20,
+                  gap: 30, // Modern gap between circles
+                }}
+              >
+                {/* PROGRESS CIRCLE - MODERN */}
+                <View
+                  style={{
+                    width: 150,
+                    height: 150,
+                    borderRadius: 75,
+                    backgroundColor: colors.card,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    position: "relative",
+                    shadowColor: colors.primary,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 8,
+                    elevation: 6,
+                    borderWidth: 3,
+                    borderColor: colors.primary + "30",
+                  }}
+                >
+                  {/* Progress Circle SVG */}
+                  <Svg
+                    width="150"
+                    height="150"
+                    style={{ position: "absolute" }}
+                  >
+                    <SvgCircle
+                      cx="75"
+                      cy="75"
+                      r="65"
+                      stroke={colors.border}
+                      strokeWidth="6"
+                      fill="transparent"
+                    />
+                    <SvgCircle
+                      cx="75"
+                      cy="75"
+                      r="65"
+                      stroke={colors.primary}
+                      strokeWidth="6"
+                      fill="transparent"
+                      strokeDasharray={`${2 * Math.PI * 65}`}
+                      strokeDashoffset={`${
+                        2 *
+                        Math.PI *
+                        65 *
+                        (1 -
+                          currentExerciseStep /
+                            (currentExercisePlan?.exercises?.length || 1))
+                      }`}
+                      strokeLinecap="round"
+                      transform="rotate(-90 75 75)"
+                    />
+                  </Svg>
+
+                  {/* Center Content */}
+                  <View style={{ alignItems: "center" }}>
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: "800",
+                        color: colors.text,
+                      }}
+                    >
+                      {Math.round(
+                        (currentExerciseStep /
+                          (currentExercisePlan?.exercises?.length || 1)) *
+                          100,
+                      )}
+                      %
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: colors.textMuted,
+                        marginTop: 2,
+                        textAlign: "center",
+                      }}
+                    >
+                      Egzersiz{"\n"}Tamamlandı
+                    </Text>
+                  </View>
+                </View>
+
+                {/* CALORIES CIRCLE - MODERN */}
+                <View
+                  style={{
+                    width: 150,
+                    height: 150,
+                    borderRadius: 75,
+                    backgroundColor: colors.card,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    position: "relative",
+                    shadowColor: "#ff6b35",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 8,
+                    elevation: 6,
+                    borderWidth: 3,
+                    borderColor: "#ff6b35" + "30",
+                  }}
+                >
+                  {/* Calorie Progress Circle SVG */}
+                  <Svg
+                    width="150"
+                    height="150"
+                    style={{ position: "absolute" }}
+                  >
+                    <SvgCircle
+                      cx="75"
+                      cy="75"
+                      r="65"
+                      stroke={colors.border}
+                      strokeWidth="6"
+                      fill="transparent"
+                    />
+                    <SvgCircle
+                      cx="75"
+                      cy="75"
+                      r="65"
+                      stroke="#ff6b35"
+                      strokeWidth="6"
+                      fill="transparent"
+                      strokeDasharray={`${2 * Math.PI * 65}`}
+                      strokeDashoffset={`${
+                        2 *
+                        Math.PI *
+                        65 *
+                        (1 -
+                          burnedCaloriesInSession /
+                            (currentExercisePlan?.total_calories || 1))
+                      }`}
+                      strokeLinecap="round"
+                      transform="rotate(-90 75 75)"
+                    />
+                  </Svg>
+
+                  {/* Center Content */}
+                  <View style={{ alignItems: "center" }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: 2,
+                      }}
+                    >
+                      <Flame size={16} color="#ff6b35" />
+                      <Text
+                        style={{
+                          fontSize: 18,
+                          fontWeight: "800",
+                          color: colors.text,
+                          marginLeft: 4,
+                        }}
+                      >
+                        {burnedCaloriesInSession}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: colors.textMuted,
+                        textAlign: "center",
+                      }}
+                    >
+                      / {currentExercisePlan?.total_calories || 0}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: colors.textMuted,
+                        marginTop: 2,
+                        textAlign: "center",
+                      }}
+                    >
+                      Yakılan{"\n"}Kalori
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* CURRENT EXERCISE - DETAILED - MOVED AFTER CIRCLES */}
+              <Animated.View
+                style={{
+                  alignItems: "center",
+                  marginBottom: 30,
+                  backgroundColor: colors.card,
+                  marginHorizontal: 6,
+                  paddingTop: 12,
+                  paddingBottom: 20,
+                  paddingHorizontal: 20,
+                  borderRadius: 16,
+                  borderWidth: isReadingTime ? 3 : 0,
+                  borderColor: borderOpacity.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ["transparent", "#f59e0b"],
+                  }),
+                  shadowColor: isReadingTime ? "#f59e0b" : "transparent",
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: borderOpacity,
+                  shadowRadius: 8,
+                  elevation: isReadingTime ? 8 : 0,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontWeight: "800",
+                    color: colors.text,
+                    textAlign: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  {currentExercisePlan?.exercises?.[
+                    currentExerciseStep
+                  ]?.name?.replace(/\s*\([^)]*\)/g, "") || "Egzersiz"}
+                </Text>
+
+                {/* Exercise Type & Details */}
+                {(() => {
+                  const exercise =
+                    currentExercisePlan?.exercises?.[currentExerciseStep];
+                  if (!exercise) return null;
+
+                  const typeLabel =
+                    exercise.type === "cardio"
+                      ? "Kardiyovasküler"
+                      : exercise.type === "strength"
+                        ? "Güç"
+                        : exercise.type === "flexibility"
+                          ? "Esneklik"
+                          : exercise.type === "balance"
+                            ? "Denge"
+                            : "Diğer";
+
+                  return (
+                    <>
+                      {/* Type & Duration/Reps */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          marginBottom: 12,
+                          flexWrap: "wrap",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <View
+                          style={{
+                            backgroundColor: colors.primary + "20",
+                            paddingHorizontal: 12,
+                            paddingVertical: 4,
+                            borderRadius: 12,
+                            marginRight: 8,
+                            marginBottom: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: colors.primary,
+                              fontWeight: "600",
+                            }}
+                          >
+                            {typeLabel}
+                          </Text>
+                        </View>
+
+                        <View
+                          style={{
+                            backgroundColor: colors.border + "40",
+                            paddingHorizontal: 12,
+                            paddingVertical: 4,
+                            borderRadius: 12,
+                            marginRight: 8,
+                            marginBottom: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: colors.text,
+                              fontWeight: "600",
+                            }}
+                          >
+                            {exercise.duration} dk
+                          </Text>
+                        </View>
+
+                        {exercise.sets && exercise.reps && (
+                          <View
+                            style={{
+                              backgroundColor: "#ff6b35" + "20",
+                              paddingHorizontal: 12,
+                              paddingVertical: 4,
+                              borderRadius: 12,
+                              marginBottom: 4,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: "#ff6b35",
+                                fontWeight: "600",
+                              }}
+                            >
+                              {exercise.sets} set × {exercise.reps} tekrar
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Instructions */}
+                      {exercise.instructions && (
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            color: colors.textMuted,
+                            textAlign: "center",
+                            lineHeight: 20,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          "{exercise.instructions}"
+                        </Text>
+                      )}
+                    </>
+                  );
+                })()}
+              </Animated.View>
+            </View>
+
+            {/* BIG CONTROL BUTTONS */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 40, // Increased gap between buttons
+                width: "100%",
+                paddingBottom: 40,
+              }}
+            >
+              {/* PAUSE/RESUME BUTTON */}
+              <TouchableOpacity
+                onPress={
+                  exerciseTimerPaused ? resumeExerciseTimer : pauseExerciseTimer
+                }
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: 40,
+                  backgroundColor: exerciseTimerPaused
+                    ? colors.primary
+                    : "#f59e0b",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 8,
+                }}
+              >
+                {exerciseTimerPaused ? (
+                  <Play size={32} color="#fff" />
+                ) : (
+                  <Pause size={32} color="#fff" />
+                )}
+              </TouchableOpacity>
+
+              {/* STOP BUTTON */}
+              <TouchableOpacity
+                onPress={stopExerciseTimer}
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: 40,
+                  backgroundColor: "#ef4444",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 8,
+                }}
+              >
+                <Square size={32} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* BUTTON LABELS */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 40, // Matched with button gap
+                width: "100%",
+                position: "absolute",
+                bottom: 20,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: colors.textMuted,
+                  width: 80,
+                  textAlign: "center",
+                }}
+              >
+                {exerciseTimerPaused ? "Devam" : "Duraklat"}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: colors.textMuted,
+                  width: 80,
+                  textAlign: "center",
+                }}
+              >
+                Durdur
+              </Text>
+            </View>
+          </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
