@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { startOfWeek, addDays, format } from "date-fns";
 
 // AI Yapılandırması (Web sürümü ile uyumlu model ismi)
 const geminiApiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
@@ -1347,11 +1348,19 @@ export async function generateDietPlan(input: {
   bmi: number;
   weight: number;
   height: number;
+  age?: number;
   gender?: string;
   currentDiet?: string;
   currentCuisine?: string;
   currentAvoid?: string;
   language?: string;
+  allergies?: string;
+  medications?: string;
+  notes?: string;
+  startDate?: string; // YYYY-MM-DD formatında başlangıç tarihi
+  endDate?: string; // YYYY-MM-DD formatında bitiş tarihi (Pazartesi)
+  budgetPreference?: "affordable" | "moderate" | "expensive"; // Masraf tercihi
+  difficultyPreference?: "easy" | "moderate" | "difficult"; // Yapılış zorluğu
 }) {
   try {
     if (!geminiApiKey) {
@@ -1368,15 +1377,43 @@ export async function generateDietPlan(input: {
     
     if (input.bmi < 18.5) {
       goal = lang === "English" ? "weight gain" : lang === "Deutsch" ? "Gewichtszunahme" : "kilo alma";
+      // Yaş ve cinsiyete göre bazal metabolizma hızı (BMR) hesapla
+      let baseCalories = 2000; // Varsayılan
+      if (input.age && input.gender) {
+        if (input.gender === "female" || input.gender === "kadın") {
+          // Kadınlar için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş - 161
+          baseCalories = 10 * input.weight + 6.25 * input.height - 5 * input.age - 161;
+        } else if (input.gender === "male" || input.gender === "erkek") {
+          // Erkekler için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş + 5
+          baseCalories = 10 * input.weight + 6.25 * input.height - 5 * input.age + 5;
+        }
+        // Orta seviye aktivite için TDEE = BMR × 1.55
+        baseCalories = baseCalories * 1.55;
+      } else {
+        baseCalories = input.gender === "female" ? 1800 : 2200;
+      }
       // Sağlıklı kilo alma için günlük +300-500 kalori
-      const baseCalories = input.gender === "female" ? 1800 : 2200;
-      calorieTarget = String(baseCalories + 400);
+      calorieTarget = String(Math.round(baseCalories + 400));
       dietType = "weight_gain";
     } else if (input.bmi >= 25) {
       goal = lang === "English" ? "weight loss" : lang === "Deutsch" ? "Gewichtsverlust" : "kilo verme";
+      // Yaş ve cinsiyete göre bazal metabolizma hızı (BMR) hesapla
+      let baseCalories = 2000; // Varsayılan
+      if (input.age && input.gender) {
+        if (input.gender === "female" || input.gender === "kadın") {
+          // Kadınlar için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş - 161
+          baseCalories = 10 * input.weight + 6.25 * input.height - 5 * input.age - 161;
+        } else if (input.gender === "male" || input.gender === "erkek") {
+          // Erkekler için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş + 5
+          baseCalories = 10 * input.weight + 6.25 * input.height - 5 * input.age + 5;
+        }
+        // Orta seviye aktivite için TDEE = BMR × 1.55
+        baseCalories = baseCalories * 1.55;
+      } else {
+        baseCalories = input.gender === "female" ? 1800 : 2200;
+      }
       // Sağlıklı kilo verme için günlük -500 kalori (hafif açık)
-      const baseCalories = input.gender === "female" ? 1800 : 2200;
-      calorieTarget = String(Math.max(1200, baseCalories - 500));
+      calorieTarget = String(Math.max(1200, Math.round(baseCalories - 500)));
       dietType = "weight_loss";
     } else {
       // Normal BMI - diyet gerekmez
@@ -1390,27 +1427,89 @@ export async function generateDietPlan(input: {
       };
     }
     
+    // Başlangıç ve bitiş tarihlerini hesapla
+    let startDate = input.startDate ? new Date(input.startDate) : new Date();
+    let endDate = input.endDate ? new Date(input.endDate) : null;
+    
+    // Eğer endDate yoksa, başlangıç tarihinden itibaren bir sonraki Pazartesi'yi bul
+    if (!endDate) {
+      const nextMonday = startOfWeek(addDays(startDate, 7), { weekStartsOn: 1 });
+      endDate = nextMonday;
+    }
+    
+    // Gün sayısını hesapla
+    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const numDays = Math.min(7, Math.max(1, daysDiff)); // En az 1, en fazla 7 gün
+    
+    // Gün isimlerini oluştur
+    const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const dayNamesTR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
+    const dayNamesDE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+    
+    const dayNameList = lang === "English" ? dayNames : lang === "Deutsch" ? dayNamesDE : dayNamesTR;
+    const startDayIndex = startDate.getDay() === 0 ? 6 : startDate.getDay() - 1; // Pazartesi = 0
+    
+    // Günlük program için gün listesi oluştur
+    const daysList = [];
+    for (let i = 0; i < numDays; i++) {
+      const dayIndex = (startDayIndex + i) % 7;
+      daysList.push({
+        day: dayNameList[dayIndex],
+        date: format(addDays(startDate, i), "yyyy-MM-dd"),
+      });
+    }
+    
+    // Masraf tercihi çevirisi
+    const budgetLabel = 
+      input.budgetPreference === "affordable" 
+        ? (lang === "English" ? "affordable" : lang === "Deutsch" ? "günstig" : "uygun")
+        : input.budgetPreference === "expensive"
+        ? (lang === "English" ? "expensive" : lang === "Deutsch" ? "teuer" : "pahalı")
+        : (lang === "English" ? "moderate" : lang === "Deutsch" ? "mittel" : "orta");
+    
+    // Zorluk tercihi çevirisi
+    const difficultyLabel = 
+      input.difficultyPreference === "easy"
+        ? (lang === "English" ? "easy" : lang === "Deutsch" ? "einfach" : "kolay")
+        : input.difficultyPreference === "difficult"
+        ? (lang === "English" ? "difficult" : lang === "Deutsch" ? "schwierig" : "zor")
+        : (lang === "English" ? "moderate" : lang === "Deutsch" ? "mittel" : "orta");
+
     const prompt = `You are a nutritionist and dietitian. Respond strictly in ${lang}.
 
 User profile:
 - BMI: ${input.bmi}
 - Weight: ${input.weight} kg
 - Height: ${input.height} cm
+- Age: ${input.age || "not specified"} years
 - Gender: ${input.gender || "not specified"}
 - Goal: ${goal}
 - Daily calorie target: ${calorieTarget} kcal
 - Current diet preference: ${input.currentDiet || "standard"}
 - Current cuisine preference: ${input.currentCuisine || "world"}
 - Foods to avoid: ${input.currentAvoid || "none"}
+${input.allergies ? `- Allergies: ${input.allergies}` : ""}
+${input.medications ? `- Medications: ${input.medications}` : ""}
+${input.notes ? `- Health notes: ${input.notes}` : ""}
+${input.budgetPreference ? `- Budget preference: ${budgetLabel} (${lang === "English" ? "choose ingredients and meals that fit this budget level" : lang === "Deutsch" ? "wählen Sie Zutaten und Mahlzeiten, die diesem Budgetniveau entsprechen" : "bu bütçe seviyesine uygun malzemeler ve yemekler seçin"})` : ""}
+${input.difficultyPreference ? `- Cooking difficulty preference: ${difficultyLabel} (${lang === "English" ? "choose recipes that match this difficulty level" : lang === "Deutsch" ? "wählen Sie Rezepte, die diesem Schwierigkeitsgrad entsprechen" : "bu zorluk seviyesine uygun tarifler seçin"})` : ""}
 
-Create a 1-month (30-day) diet plan for ${goal}. The plan should:
-1. Include balanced meals (breakfast, lunch, dinner, snacks)
+Create a ${numDays}-day diet plan starting from ${format(startDate, "yyyy-MM-dd")} until ${format(endDate, "yyyy-MM-dd")} for ${goal}. The plan should:
+1. Include balanced meals for each day with SPECIFIC TIMES (breakfast around 08:00, lunch around 13:00, dinner around 19:00, snacks between meals)
 2. Respect the calorie target (${calorieTarget} kcal/day)
 3. Consider the user's current diet type (${input.currentDiet || "standard"})
 4. Consider cuisine preferences (${input.currentCuisine || "world"})
-5. Avoid foods listed: ${input.currentAvoid || "none"}
-6. Be realistic and sustainable
-7. Include variety to prevent boredom
+5. STRICTLY AVOID any foods that the user is allergic to: ${input.allergies || "none"}
+6. Consider medications and health conditions: ${input.medications || "none"} ${input.notes || ""}
+7. Avoid foods listed: ${input.currentAvoid || "none"}
+8. Be realistic and sustainable
+9. Include variety to prevent boredom
+10. Ensure all meals are safe considering allergies and medications
+11. Provide hourly meal schedule with specific times for each meal
+${input.budgetPreference ? `12. IMPORTANT: Choose ingredients and meals that are ${budgetLabel} in cost. ${input.budgetPreference === "affordable" ? "Use budget-friendly ingredients and simple, cost-effective recipes." : input.budgetPreference === "expensive" ? "You can include premium ingredients and more elaborate dishes." : "Use a balanced mix of affordable and moderately priced ingredients."}` : ""}
+${input.difficultyPreference ? `13. IMPORTANT: Choose recipes that are ${difficultyLabel} to prepare. ${input.difficultyPreference === "easy" ? "Use simple recipes with minimal steps and common cooking techniques." : input.difficultyPreference === "difficult" ? "You can include more complex recipes with advanced techniques." : "Use recipes with moderate complexity and standard cooking techniques."}` : ""}
+
+IMPORTANT: If the user has allergies, you MUST NOT include any foods that could cause allergic reactions. If the user is taking medications, consider potential food-drug interactions.
 
 Return ONLY a JSON object in this exact format:
 {
@@ -1418,14 +1517,45 @@ Return ONLY a JSON object in this exact format:
     "goal": "${goal}",
     "daily_calories": ${calorieTarget},
     "diet_type": "${dietType}",
-    "weekly_meal_suggestions": [
-      {
-        "day": "Monday",
-        "breakfast": "meal name and brief description",
-        "lunch": "meal name and brief description",
-        "dinner": "meal name and brief description",
-        "snacks": "snack suggestions"
-      }
+    "start_date": "${format(startDate, "yyyy-MM-dd")}",
+    "end_date": "${format(endDate, "yyyy-MM-dd")}",
+    "daily_meal_plans": [
+${daysList.map((day, index) => `      {
+        "date": "${day.date}",
+        "day": "${day.day}",
+        "meals": [
+          {
+            "time": "08:00",
+            "type": "breakfast",
+            "meal": "meal name and brief description",
+            "calories": approximate calories for this meal
+          },
+          {
+            "time": "10:00",
+            "type": "snack",
+            "meal": "snack suggestion",
+            "calories": approximate calories for this snack
+          },
+          {
+            "time": "13:00",
+            "type": "lunch",
+            "meal": "meal name and brief description",
+            "calories": approximate calories for this meal
+          },
+          {
+            "time": "16:00",
+            "type": "snack",
+            "meal": "snack suggestion",
+            "calories": approximate calories for this snack
+          },
+          {
+            "time": "19:00",
+            "type": "dinner",
+            "meal": "meal name and brief description",
+            "calories": approximate calories for this meal
+          }
+        ]
+      }${index < daysList.length - 1 ? "," : ""}`).join("\n")}
     ]
   },
   "updated_preferences": {
@@ -1433,7 +1563,7 @@ Return ONLY a JSON object in this exact format:
     "calories": "${calorieTarget}",
     "cuisine": "preferred cuisine",
     "avoid": "foods to avoid",
-    "notes": "diet plan notes and recommendations"
+    "notes": ""
   }
 }
 

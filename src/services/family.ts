@@ -72,6 +72,11 @@ export interface FamilyMember {
     notes?: string;
     diet_start_date?: string; // ISO date string
     diet_active?: boolean;
+    diet_plan?: any; // Günlük diyet programı
+    last_diet_plan_date?: string; // Son diyet planı tarihi (YYYY-MM-DD)
+    target_weight?: string;
+    diet_enabled?: boolean; // Diyet özelliği açık/kapalı
+    exercise_enabled?: boolean; // Egzersiz özelliği açık/kapalı
   };
 }
 

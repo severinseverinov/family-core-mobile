@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useAuth } from "../../contexts/AuthContext";
 import ModernInput from "../../components/ui/ModernInput";
 import {
   updateMemberDetails,
@@ -19,6 +20,8 @@ import {
   getMemberById,
 } from "../../services/family";
 import { generateDietPlan } from "../../services/kitchen";
+import { saveDietPlan } from "../../services/dietPlans";
+import { generateExercisePlan, saveExercisePlan } from "../../services/exercisePlans";
 import {
   ShieldAlert,
   Save,
@@ -29,18 +32,39 @@ import {
   ChevronLeft,
   Apple,
 } from "lucide-react-native";
+import { calculateAge } from "../../services/waterReminder";
 import SelectionGroup from "../../components/ui/SelectionGroup";
 import { useFocusEffect } from "@react-navigation/native";
+import { startOfWeek, addDays, format, eachDayOfInterval } from "date-fns";
+import { tr } from "date-fns/locale";
 
 export default function MemberDetailScreen({ route, navigation }: any) {
-  const { member, showDietModal }: { member: FamilyMember; showDietModal?: boolean } = route.params || {};
+  const { member, showDietModal, isMemberEdit }: { member: FamilyMember; showDietModal?: boolean; isMemberEdit?: boolean } = route.params || {};
   const { colors } = useTheme();
+  const { profile } = useAuth();
   const [editMember, setEditMember] = useState<FamilyMember>(member);
+  
+  // Üye kendi bilgilerini düzenliyorsa, önemli alanları readonly yap
+  const isReadOnlyField = isMemberEdit;
+  
+  // Kullanıcı yönetici mi kontrol et
+  const isAdmin = ["owner", "admin"].includes(profile?.role || "");
+  const canEditNotes = isAdmin || !isMemberEdit; // Yönetici veya kendi bilgilerini düzenliyorsa notları düzenleyebilir
+  
   const [qrVisible, setQrVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dietModalVisible, setDietModalVisible] = useState(false);
   const [dietLoading, setDietLoading] = useState(false);
-  const [monthlyDietApproved, setMonthlyDietApproved] = useState(false);
+  const [dietPlan, setDietPlan] = useState<any>(null);
+  const [dietPlanApprovalVisible, setDietPlanApprovalVisible] = useState(false);
+  const [budgetPreference, setBudgetPreference] = useState<"affordable" | "moderate" | "expensive">("moderate"); // Masraf tercihi
+  const [difficultyPreference, setDifficultyPreference] = useState<"easy" | "moderate" | "difficult">("moderate"); // Yapılış zorluğu
+  const [exerciseModalVisible, setExerciseModalVisible] = useState(false); // Egzersiz planı modalı
+  const [exerciseLoading, setExerciseLoading] = useState(false);
+  const [exercisePlan, setExercisePlan] = useState<any>(null);
+  const [exercisePlanApprovalVisible, setExercisePlanApprovalVisible] = useState(false);
+  const [equipmentPreference, setEquipmentPreference] = useState<"home_no_equipment" | "home_with_equipment" | "gym">("home_no_equipment"); // Ekipman tercihi
+  const [fitnessLevel, setFitnessLevel] = useState<"beginner" | "intermediate" | "advanced">("intermediate"); // Fitness seviyesi
   const centeredInputStyle = { textAlignVertical: "center" as const };
   const centeredMultilineStyle = {
     textAlignVertical: "center" as const,
@@ -59,7 +83,17 @@ export default function MemberDetailScreen({ route, navigation }: any) {
   const [infoMode, setInfoMode] = useState<"school" | "work" | "both">(
     resolveInfoMode(member)
   );
-  const [mealPreferences, setMealPreferences] = useState({
+  const [mealPreferences, setMealPreferences] = useState<{
+    cuisine: string;
+    calories: string;
+    avoid: string;
+    diet: string;
+    notes: string;
+    diet_start_date: string;
+    diet_active: boolean;
+    diet_enabled?: boolean;
+    exercise_enabled?: boolean;
+  }>({
     cuisine: member?.meal_preferences?.cuisine || "world",
     calories: member?.meal_preferences?.calories || "",
     avoid: member?.meal_preferences?.avoid || "",
@@ -67,7 +101,28 @@ export default function MemberDetailScreen({ route, navigation }: any) {
     notes: member?.meal_preferences?.notes || "",
     diet_start_date: member?.meal_preferences?.diet_start_date || "",
     diet_active: member?.meal_preferences?.diet_active || false,
+    diet_enabled: member?.meal_preferences?.diet_enabled !== false,
+    exercise_enabled: member?.meal_preferences?.exercise_enabled !== false,
   });
+  
+  // Diyet programı aktif mi kontrol et
+  const hasActiveDiet = useMemo(() => {
+    if (!mealPreferences) return false;
+    
+    // diet_active boolean olarak tanımlı, ama JSONB'den string olarak gelebilir
+    const dietActiveValue: any = mealPreferences.diet_active;
+    const isActive = 
+      dietActiveValue === true || 
+      (typeof dietActiveValue === "string" && dietActiveValue.toLowerCase() === "true") ||
+      (typeof dietActiveValue === "number" && dietActiveValue === 1);
+    
+    const startDate = mealPreferences.diet_start_date;
+    const hasStartDate = startDate && String(startDate).trim() !== "" && String(startDate).trim() !== "null";
+    
+    const result = Boolean(isActive && hasStartDate);
+    
+    return result;
+  }, [mealPreferences]);
   
   const [dietRenewalModalVisible, setDietRenewalModalVisible] = useState(false);
 
@@ -83,6 +138,8 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         notes: next?.meal_preferences?.notes || "",
         diet_start_date: next?.meal_preferences?.diet_start_date || "",
         diet_active: next?.meal_preferences?.diet_active || false,
+        diet_enabled: next?.meal_preferences?.diet_enabled !== false, // Varsayılan true
+        exercise_enabled: next?.meal_preferences?.exercise_enabled !== false, // Varsayılan true
       });
       
       // 30 gün kontrolü
@@ -125,6 +182,7 @@ export default function MemberDetailScreen({ route, navigation }: any) {
     }, [member.id, hydrateFromMember, route.params])
   );
 
+
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -134,6 +192,11 @@ export default function MemberDetailScreen({ route, navigation }: any) {
       });
     if (res.success) {
       Alert.alert("Başarılı", "Bilgiler güncellendi.");
+      // Üye bilgilerini yeniden yükle
+      const memberRes = await getMemberById(member.id);
+      if (memberRes.member) {
+        hydrateFromMember(memberRes.member as FamilyMember);
+      }
       navigation.goBack();
         return;
       }
@@ -197,6 +260,474 @@ export default function MemberDetailScreen({ route, navigation }: any) {
             Üye Detayları
           </Text>
         </View>
+
+      {/* FİZİKSEL BİLGİLER */}
+      <SectionTitle icon={Activity} title="Fiziksel Bilgiler" />
+      <SelectionGroup
+        label="Cinsiyet"
+        options={[
+          { label: "Erkek", value: "male" },
+          { label: "Kadın", value: "female" },
+          { label: "Belirtmek İstemiyorum", value: "other" },
+        ]}
+        selectedValue={editMember.gender || "other"}
+        onSelect={val => setEditMember({ ...editMember, gender: val })}
+      />
+      <ModernInput
+        label="Doğum Tarihi"
+        value={editMember.birth_date || ""}
+        onChangeText={t => {
+          if (isReadOnlyField) return; // Üye kendi bilgilerini düzenliyorsa değiştirilemez
+          // YYYY-MM-DD formatında tarih girişi
+          let formatted = t.replace(/[^0-9-]/g, '');
+          if (formatted.length > 10) formatted = formatted.slice(0, 10);
+          setEditMember({ ...editMember, birth_date: formatted });
+        }}
+        keyboardType="default"
+        style={[centeredInputStyle, isReadOnlyField && { opacity: 0.5 }]}
+        placeholder="YYYY-MM-DD (Örn: 1990-01-15)"
+        editable={!isReadOnlyField}
+      />
+      {isReadOnlyField && (
+        <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, marginLeft: 4, marginBottom: 8 }}>
+          Bu bilgi sadece ebeveynler tarafından değiştirilebilir
+        </Text>
+      )}
+      <View style={styles.row}>
+        <View style={{ flex: 1, marginRight: 10 }}>
+      <ModernInput
+            label="Kilo (kg) *"
+            value={editMember.weight ? String(editMember.weight) : ""}
+            onChangeText={t => {
+              if (isReadOnlyField) return; // Üye kendi bilgilerini düzenliyorsa değiştirilemez
+              const num = t.replace(/[^0-9.]/g, '');
+              setEditMember({ ...editMember, weight: num ? Number(num) : undefined });
+            }}
+            keyboardType="numeric"
+            style={[centeredInputStyle, isReadOnlyField && { opacity: 0.5 }]}
+            placeholder="Örn: 70"
+            editable={!isReadOnlyField}
+          />
+          {isReadOnlyField && (
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, marginLeft: 4 }}>
+              Bu bilgi sadece ebeveynler tarafından değiştirilebilir
+            </Text>
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <ModernInput
+            label="Boy (cm) *"
+            value={editMember.height ? String(editMember.height) : ""}
+            onChangeText={t => {
+              if (isReadOnlyField) return; // Üye kendi bilgilerini düzenliyorsa değiştirilemez
+              const num = t.replace(/[^0-9.]/g, '');
+              setEditMember({ ...editMember, height: num ? Number(num) : undefined });
+            }}
+            keyboardType="numeric"
+            style={[centeredInputStyle, isReadOnlyField && { opacity: 0.5 }]}
+            placeholder="Örn: 175"
+            editable={!isReadOnlyField}
+          />
+          {isReadOnlyField && (
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, marginLeft: 4 }}>
+              Bu bilgi sadece ebeveynler tarafından değiştirilebilir
+            </Text>
+          )}
+        </View>
+      </View>
+      <View style={styles.row}>
+        <View style={{ flex: 1, marginRight: 10 }}>
+          <ModernInput
+            label="Tişört Bedeni"
+            value={editMember.tshirt_size}
+            onChangeText={t => setEditMember({ ...editMember, tshirt_size: t })}
+            style={centeredInputStyle}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <ModernInput
+            label="Ayakkabı No"
+            value={editMember.shoe_size}
+            onChangeText={t => setEditMember({ ...editMember, shoe_size: t })}
+            keyboardType="numeric"
+            style={centeredInputStyle}
+          />
+        </View>
+      </View>
+
+      {/* BMI GÖSTERİMİ */}
+      {editMember.weight && editMember.height && bmi && bmiCategory && (
+        <View style={{
+          padding: 16,
+          borderRadius: 16,
+          marginTop: 12,
+          backgroundColor: bmiCategory.color + "15",
+          borderWidth: 1,
+          borderColor: bmiCategory.color + "40",
+        }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <View>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+                Vücut Kitle İndeksi (BMI)
+              </Text>
+              <Text style={{ fontSize: 24, fontWeight: "800", color: bmiCategory.color }}>
+                {bmi}
+              </Text>
+            </View>
+            <View style={{
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 20,
+              backgroundColor: bmiCategory.color,
+            }}>
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
+                {bmiCategory.status}
+              </Text>
+            </View>
+          </View>
+          <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 18 }}>
+            {bmiCategory.advice}
+          </Text>
+        </View>
+      )}
+
+      {/* DİYET VE EGZERSİZ AÇMA/KAPAMA SWİTCH'LERİ */}
+      {editMember.weight && editMember.height && bmi && bmiCategory && (
+        <View style={{
+          padding: 16,
+          borderRadius: 16,
+          marginTop: 12,
+          backgroundColor: colors.background,
+          borderWidth: 1,
+          borderColor: colors.border,
+        }}>
+          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: 16 }}>
+            Diyet ve Egzersiz Ayarları
+          </Text>
+          
+          {/* DİYET SWİTCH */}
+          <View style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 16,
+            paddingBottom: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+          }}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                <Apple size={18} color={colors.primary} style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.text }}>
+                  Diyet Programı
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginLeft: 26 }}>
+                Diyet programı özelliklerini aktif/pasif yapın
+              </Text>
+            </View>
+            <Switch
+              value={mealPreferences.diet_enabled !== false}
+              onValueChange={async (value) => {
+                // Eğer kapatılıyorsa (false yapılıyorsa), onay iste
+                if (!value) {
+                  Alert.alert(
+                    "Diyet Programını Kapat",
+                    "Diyet programı özelliğini kapatmak istediğinizden emin misiniz? Aktif bir diyet programı varsa sonlandırılacaktır.",
+                    [
+                      {
+                        text: "İptal",
+                        style: "cancel",
+                        onPress: () => {
+                          // Switch'i geri al (değişiklik yapma)
+                        },
+                      },
+                      {
+                        text: "Kapat",
+                        style: "destructive",
+                        onPress: async () => {
+                          const updatedPrefs = {
+                            ...mealPreferences,
+                            diet_enabled: false,
+                          };
+                          
+                          // Eğer aktif diyet varsa, sonlandır
+                          if (mealPreferences.diet_active) {
+                            updatedPrefs.diet_active = false;
+                            updatedPrefs.diet_start_date = "";
+                          }
+                          
+                          setMealPreferences(updatedPrefs);
+                          
+                          // Veritabanına kaydet
+                          try {
+                            await updateMemberDetails(member.id, {
+                              meal_preferences: updatedPrefs,
+                            });
+                            
+                            // Üye bilgilerini yeniden yükle
+                            const res = await getMemberById(member.id);
+                            if (res.member) {
+                              hydrateFromMember(res.member as FamilyMember);
+                            }
+                          } catch (error) {
+                            Alert.alert("Hata", "Ayarlar kaydedilemedi.");
+                            // Geri al
+                            setMealPreferences({
+                              ...mealPreferences,
+                              diet_enabled: true,
+                            });
+                          }
+                        },
+                      },
+                    ]
+                  );
+                  return;
+                }
+                
+                // Açılıyorsa (true yapılıyorsa), direkt kaydet
+                const updatedPrefs = {
+                  ...mealPreferences,
+                  diet_enabled: value,
+                };
+                
+                setMealPreferences(updatedPrefs);
+                
+                // Veritabanına kaydet
+                try {
+                  await updateMemberDetails(member.id, {
+                    meal_preferences: updatedPrefs,
+                  });
+                  
+                  // Üye bilgilerini yeniden yükle
+                  const res = await getMemberById(member.id);
+                  if (res.member) {
+                    hydrateFromMember(res.member as FamilyMember);
+                  }
+                } catch (error) {
+                  Alert.alert("Hata", "Ayarlar kaydedilemedi.");
+                  // Geri al
+                  setMealPreferences({
+                    ...mealPreferences,
+                    diet_enabled: !value,
+                  });
+                }
+              }}
+              trackColor={{
+                false: colors.border,
+                true: colors.primary,
+              }}
+              thumbColor="#fff"
+              ios_backgroundColor={colors.border}
+            />
+          </View>
+          
+          {/* EGZERSİZ SWİTCH */}
+          <View style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: hasActiveDiet ? 12 : 0,
+          }}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                <Activity size={18} color={colors.primary} style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.text }}>
+                  Egzersiz Programı
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginLeft: 26 }}>
+                Egzersiz programı özelliklerini aktif/pasif yapın
+              </Text>
+            </View>
+            <Switch
+              value={mealPreferences.exercise_enabled !== false}
+              onValueChange={async (value) => {
+                // Eğer kapatılıyorsa (false yapılıyorsa), onay iste
+                if (!value) {
+                  Alert.alert(
+                    "Egzersiz Programını Kapat",
+                    "Egzersiz programı özelliğini kapatmak istediğinizden emin misiniz?",
+                    [
+                      {
+                        text: "İptal",
+                        style: "cancel",
+                        onPress: () => {
+                          // Switch'i geri al (değişiklik yapma)
+                        },
+                      },
+                      {
+                        text: "Kapat",
+                        style: "destructive",
+                        onPress: async () => {
+                          const updatedPrefs = {
+                            ...mealPreferences,
+                            exercise_enabled: false,
+                          };
+                          
+                          setMealPreferences(updatedPrefs);
+                          
+                          // Veritabanına kaydet
+                          try {
+                            await updateMemberDetails(member.id, {
+                              meal_preferences: updatedPrefs,
+                            });
+                            
+                            // Üye bilgilerini yeniden yükle
+                            const res = await getMemberById(member.id);
+                            if (res.member) {
+                              hydrateFromMember(res.member as FamilyMember);
+                            }
+                          } catch (error) {
+                            Alert.alert("Hata", "Ayarlar kaydedilemedi.");
+                            // Geri al
+                            setMealPreferences({
+                              ...mealPreferences,
+                              exercise_enabled: true,
+                            });
+                          }
+                        },
+                      },
+                    ]
+                  );
+                  return;
+                }
+                
+                // Açılıyorsa (true yapılıyorsa), direkt kaydet
+                const updatedPrefs = {
+                  ...mealPreferences,
+                  exercise_enabled: value,
+                };
+                
+                setMealPreferences(updatedPrefs);
+                
+                // Veritabanına kaydet
+                try {
+                  await updateMemberDetails(member.id, {
+                    meal_preferences: updatedPrefs,
+                  });
+                  
+                  // Üye bilgilerini yeniden yükle
+                  const res = await getMemberById(member.id);
+                  if (res.member) {
+                    hydrateFromMember(res.member as FamilyMember);
+                  }
+                } catch (error) {
+                  Alert.alert("Hata", "Ayarlar kaydedilemedi.");
+                  // Geri al
+                  setMealPreferences({
+                    ...mealPreferences,
+                    exercise_enabled: !value,
+                  });
+                }
+              }}
+              trackColor={{
+                false: colors.border,
+                true: colors.primary,
+              }}
+              thumbColor="#fff"
+              ios_backgroundColor={colors.border}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* SAĞLIK VE GEÇMİŞ */}
+      <SectionTitle icon={ShieldAlert} title="Sağlık ve Kritik Bilgiler" />
+      <ModernInput
+        label="Kan Grubu"
+        value={editMember.blood_type}
+        onChangeText={t => setEditMember({ ...editMember, blood_type: t })}
+        style={centeredInputStyle}
+      />
+      <ModernInput
+        label="Alerjiler"
+        value={editMember.allergies}
+        onChangeText={t => setEditMember({ ...editMember, allergies: t })}
+        multiline
+        style={centeredMultilineStyle}
+      />
+      <ModernInput
+        label="Kullandığı İlaçlar"
+        value={editMember.medications}
+        onChangeText={t => setEditMember({ ...editMember, medications: t })}
+        multiline
+        style={centeredMultilineStyle}
+      />
+      <ModernInput
+        label="Notlar"
+        value={editMember.notes}
+        onChangeText={t => setEditMember({ ...editMember, notes: t })}
+        multiline
+        style={centeredMultilineStyle}
+      />
+
+      {/* YEMEK TERCİHLERİ */}
+      <SectionTitle icon={Utensils} title="Yemek Tercihleri" />
+      <SelectionGroup
+        label="Mutfak"
+        options={[
+          { label: "Dünya", value: "world" },
+          { label: "Türk", value: "turkish" },
+          { label: "İtalyan", value: "italian" },
+          { label: "Meksika", value: "mexican" },
+          { label: "Asya", value: "asian" },
+        ]}
+        selectedValue={mealPreferences.cuisine}
+        onSelect={(val: any) =>
+          setMealPreferences(prev => ({ ...prev, cuisine: val }))
+        }
+      />
+      <SelectionGroup
+        label="Diyet tipi"
+        options={[
+          { label: "Standart", value: "standard" },
+          { label: "Vejetaryen", value: "vegetarian" },
+          { label: "Vegan", value: "vegan" },
+          { label: "Keto", value: "keto" },
+          { label: "Glutensiz", value: "gluten_free" },
+        ]}
+        selectedValue={mealPreferences.diet}
+        onSelect={(val: any) =>
+          setMealPreferences(prev => ({ ...prev, diet: val }))
+        }
+      />
+      {mealPreferences.calories && (
+        <View style={{
+          padding: 12,
+          borderRadius: 12,
+          backgroundColor: colors.background,
+          borderWidth: 1,
+          borderColor: colors.border,
+          marginTop: 8,
+        }}>
+          <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+            Günlük Kalori Hedefi (AI tarafından hesaplandı)
+          </Text>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text }}>
+            {mealPreferences.calories} kcal
+          </Text>
+        </View>
+      )}
+      <ModernInput
+        label="Yemediği içerikler"
+        value={mealPreferences.avoid}
+        onChangeText={t => setMealPreferences(prev => ({ ...prev, avoid: t }))}
+        placeholder="Örn: mantar, deniz ürünleri"
+        style={centeredInputStyle}
+      />
+      <ModernInput
+        label="Notlar / Özel istekler"
+        value={mealPreferences.notes}
+        onChangeText={t => {
+          if (!canEditNotes) return; // Sadece yönetici veya kendi bilgilerini düzenliyorsa değiştirilebilir
+          setMealPreferences(prev => ({ ...prev, notes: t }));
+        }}
+        multiline
+        style={[centeredMultilineStyle, !canEditNotes && { opacity: 0.5 }]}
+        editable={canEditNotes}
+        placeholder={canEditNotes ? "Özel isteklerinizi yazın..." : "Bu alan sadece yöneticiler tarafından düzenlenebilir"}
+      />
 
       {/* GENEL BİLGİLER */}
       <SectionTitle icon={GraduationCap} title="Genel ve Eğitim" />
@@ -262,210 +793,6 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         style={centeredInputStyle}
       />
 
-      {/* FİZİKSEL BİLGİLER */}
-      <SectionTitle icon={Activity} title="Fiziksel Bilgiler" />
-      <SelectionGroup
-        label="Cinsiyet"
-        options={[
-          { label: "Erkek", value: "male" },
-          { label: "Kadın", value: "female" },
-          { label: "Belirtmek İstemiyorum", value: "other" },
-        ]}
-        selectedValue={editMember.gender || "other"}
-        onSelect={val => setEditMember({ ...editMember, gender: val })}
-      />
-      <View style={styles.row}>
-        <View style={{ flex: 1, marginRight: 10 }}>
-          <ModernInput
-            label="Kilo (kg) *"
-            value={editMember.weight ? String(editMember.weight) : ""}
-            onChangeText={t => {
-              const num = t.replace(/[^0-9.]/g, '');
-              setEditMember({ ...editMember, weight: num ? Number(num) : undefined });
-            }}
-            keyboardType="numeric"
-            style={centeredInputStyle}
-            placeholder="Örn: 70"
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <ModernInput
-            label="Boy (cm) *"
-            value={editMember.height ? String(editMember.height) : ""}
-            onChangeText={t => {
-              const num = t.replace(/[^0-9.]/g, '');
-              setEditMember({ ...editMember, height: num ? Number(num) : undefined });
-            }}
-            keyboardType="numeric"
-            style={centeredInputStyle}
-            placeholder="Örn: 175"
-          />
-        </View>
-      </View>
-      <View style={styles.row}>
-        <View style={{ flex: 1, marginRight: 10 }}>
-          <ModernInput
-            label="Tişört Bedeni"
-            value={editMember.tshirt_size}
-            onChangeText={t => setEditMember({ ...editMember, tshirt_size: t })}
-            style={centeredInputStyle}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <ModernInput
-            label="Ayakkabı No"
-            value={editMember.shoe_size}
-            onChangeText={t => setEditMember({ ...editMember, shoe_size: t })}
-            keyboardType="numeric"
-            style={centeredInputStyle}
-          />
-        </View>
-      </View>
-
-      {/* BMI GÖSTERİMİ */}
-      {editMember.weight && editMember.height && bmi && bmiCategory && (
-        <View style={{
-          padding: 16,
-          borderRadius: 16,
-          marginTop: 12,
-          backgroundColor: bmiCategory.color + "15",
-          borderWidth: 1,
-          borderColor: bmiCategory.color + "40",
-        }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <View>
-              <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
-                Vücut Kitle İndeksi (BMI)
-              </Text>
-              <Text style={{ fontSize: 24, fontWeight: "800", color: bmiCategory.color }}>
-                {bmi}
-              </Text>
-            </View>
-            <View style={{
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 20,
-              backgroundColor: bmiCategory.color,
-            }}>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
-                {bmiCategory.status}
-              </Text>
-            </View>
-          </View>
-          <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 18 }}>
-            {bmiCategory.advice}
-          </Text>
-        </View>
-      )}
-
-      {/* DİYET BUTONU */}
-      {editMember.weight && editMember.height && bmi && bmiCategory && (
-        <TouchableOpacity
-          style={{
-            marginTop: 12,
-            padding: 16,
-            borderRadius: 16,
-            backgroundColor: colors.primary + "15",
-            borderWidth: 1,
-            borderColor: colors.primary + "40",
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-          }}
-          onPress={() => setDietModalVisible(true)}
-        >
-          <Apple size={20} color={colors.primary} />
-          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.primary }}>
-            Diyet Programı Oluştur
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {/* SAĞLIK VE GEÇMİŞ */}
-      <SectionTitle icon={ShieldAlert} title="Sağlık ve Kritik Bilgiler" />
-      <ModernInput
-        label="Kan Grubu"
-        value={editMember.blood_type}
-        onChangeText={t => setEditMember({ ...editMember, blood_type: t })}
-        style={centeredInputStyle}
-      />
-      <ModernInput
-        label="Alerjiler"
-        value={editMember.allergies}
-        onChangeText={t => setEditMember({ ...editMember, allergies: t })}
-        multiline
-        style={centeredMultilineStyle}
-      />
-      <ModernInput
-        label="Kullandığı İlaçlar"
-        value={editMember.medications}
-        onChangeText={t => setEditMember({ ...editMember, medications: t })}
-        multiline
-        style={centeredMultilineStyle}
-      />
-      <ModernInput
-        label="Notlar"
-        value={editMember.notes}
-        onChangeText={t => setEditMember({ ...editMember, notes: t })}
-        multiline
-        style={centeredMultilineStyle}
-      />
-
-      {/* YEMEK TERCİHLERİ */}
-      <SectionTitle icon={Utensils} title="Yemek Tercihleri" />
-      <SelectionGroup
-        label="Mutfak"
-        options={[
-          { label: "Dünya", value: "world" },
-          { label: "Türk", value: "turkish" },
-          { label: "İtalyan", value: "italian" },
-          { label: "Meksika", value: "mexican" },
-          { label: "Asya", value: "asian" },
-        ]}
-        selectedValue={mealPreferences.cuisine}
-        onSelect={(val: any) =>
-          setMealPreferences(prev => ({ ...prev, cuisine: val }))
-        }
-      />
-      <SelectionGroup
-        label="Diyet tipi"
-        options={[
-          { label: "Standart", value: "standard" },
-          { label: "Vejetaryen", value: "vegetarian" },
-          { label: "Vegan", value: "vegan" },
-          { label: "Keto", value: "keto" },
-          { label: "Glutensiz", value: "gluten_free" },
-        ]}
-        selectedValue={mealPreferences.diet}
-        onSelect={(val: any) =>
-          setMealPreferences(prev => ({ ...prev, diet: val }))
-        }
-      />
-      <ModernInput
-        label="Kalori hedefi"
-        value={mealPreferences.calories}
-        onChangeText={t =>
-          setMealPreferences(prev => ({ ...prev, calories: t }))
-        }
-        keyboardType="numeric"
-        style={centeredInputStyle}
-      />
-      <ModernInput
-        label="Yemediği içerikler"
-        value={mealPreferences.avoid}
-        onChangeText={t => setMealPreferences(prev => ({ ...prev, avoid: t }))}
-        placeholder="Örn: mantar, deniz ürünleri"
-        style={centeredInputStyle}
-      />
-      <ModernInput
-        label="Notlar / Özel istekler"
-        value={mealPreferences.notes}
-        onChangeText={t => setMealPreferences(prev => ({ ...prev, notes: t }))}
-        multiline
-        style={centeredMultilineStyle}
-      />
-
       {/* AKSİYON BUTONLARI */}
       <View style={styles.actions}>
         <TouchableOpacity
@@ -496,75 +823,99 @@ export default function MemberDetailScreen({ route, navigation }: any) {
               Diyet Programı Oluştur
             </Text>
             <Text style={[styles.qrDesc, { color: colors.textMuted, marginBottom: 20 }]}>
-              BMI değerinize göre kişiselleştirilmiş bir aylık diyet programı hazırlanacak ve yemek tercihleriniz buna göre otomatik olarak güncellenecektir.
+              BMI değerinize, alerji ve sağlık bilgilerinize göre kişiselleştirilmiş 7 günlük diyet programı hazırlanacaktır.
             </Text>
             
-            {/* 1 Aylık Diyet Onay Checkbox */}
-            <View style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              borderRadius: 12,
-              backgroundColor: colors.background,
-              marginBottom: 20,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 4 }}>
-                  1 Aylık Diyet Programı
-                </Text>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>
-                  Yemek tercihleri otomatik olarak bu programa göre ayarlanacak
-                </Text>
+            {/* MUTFAK BİLGİSİ SEÇİMLERİ */}
+            <View style={{ gap: 16, width: "100%", marginBottom: 20 }}>
+              {/* MASRAF TERCIHİ */}
+              <View>
+                <SelectionGroup
+                  label="Masraf Tercihi"
+                  options={[
+                    { label: "Uygun", value: "affordable" },
+                    { label: "Orta", value: "moderate" },
+                    { label: "Pahalı", value: "expensive" },
+                  ]}
+                  selectedValue={budgetPreference}
+                  onSelect={(val: any) => setBudgetPreference(val)}
+                />
               </View>
-              <Switch
-                value={monthlyDietApproved}
-                onValueChange={setMonthlyDietApproved}
-                trackColor={{ false: colors.border, true: colors.primary + "80" }}
-                thumbColor={monthlyDietApproved ? colors.primary : "#f4f3f4"}
-              />
+              
+              {/* YAPILIŞ ZORLUĞU */}
+              <View>
+                <SelectionGroup
+                  label="Yapılış Zorluğu"
+                  options={[
+                    { label: "Kolay", value: "easy" },
+                    { label: "Orta", value: "moderate" },
+                    { label: "Zor", value: "difficult" },
+                  ]}
+                  selectedValue={difficultyPreference}
+                  onSelect={(val: any) => setDifficultyPreference(val)}
+                />
+              </View>
             </View>
             
             <View style={{ gap: 12, width: "100%" }}>
               <TouchableOpacity
-                style={[
-                  styles.btn, 
-                  { 
-                    backgroundColor: monthlyDietApproved ? colors.primary : colors.border,
-                    opacity: monthlyDietApproved ? 1 : 0.5,
-                  }
-                ]}
+                style={[styles.btn, { backgroundColor: colors.primary }]}
                 onPress={async () => {
-                  if (!monthlyDietApproved) {
+                  if (!bmi || !editMember.weight || !editMember.height) return;
+                  
+                  // Yaş hesapla
+                  const age = calculateAge(editMember.birth_date);
+                  if (!age) {
                     Alert.alert(
-                      "Onay Gerekli",
-                      "Lütfen 1 aylık diyet programını onaylayın."
+                      "Eksik Bilgi",
+                      "Diyet programı oluşturmak için doğum tarihi gereklidir. Lütfen doğum tarihini girin."
                     );
                     return;
                   }
                   
-                  if (!bmi || !editMember.weight || !editMember.height) return;
-                  
                   setDietLoading(true);
                   try {
+                    // Başlangıç tarihi: Bugün
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    
+                    // Bir sonraki Pazartesi'yi bul (eğer bugün Pazartesi ise bir sonraki pazartesi)
+                    const todayDay = today.getDay(); // 0 = Pazar, 1 = Pazartesi, ...
+                    let nextMonday: Date;
+                    
+                    if (todayDay === 1) {
+                      // Bugün Pazartesi ise, bir sonraki pazartesi (7 gün sonra)
+                      nextMonday = addDays(today, 7);
+                    } else {
+                      // Bir sonraki Pazartesi'yi bul
+                      const daysUntilMonday = (8 - todayDay) % 7 || 7;
+                      nextMonday = startOfWeek(addDays(today, daysUntilMonday), { weekStartsOn: 1 });
+                    }
+                    
+                    const startDateStr = format(today, "yyyy-MM-dd");
+                    const endDateStr = format(nextMonday, "yyyy-MM-dd");
+                    
                     const result = await generateDietPlan({
                       bmi,
                       weight: editMember.weight,
                       height: editMember.height,
+                      age: age,
                       gender: editMember.gender,
                       currentDiet: mealPreferences.diet,
                       currentCuisine: mealPreferences.cuisine,
                       currentAvoid: mealPreferences.avoid,
+                      allergies: editMember.allergies,
+                      medications: editMember.medications,
+                      notes: editMember.notes,
+                      startDate: startDateStr,
+                      endDate: endDateStr,
+                      budgetPreference: budgetPreference,
+                      difficultyPreference: difficultyPreference,
                     });
                     
                     if (result.error) {
                       Alert.alert("Hata", result.error);
-                      setDietModalVisible(false);
                       setDietLoading(false);
-                      setMonthlyDietApproved(false);
                       return;
                     }
                     
@@ -575,70 +926,29 @@ export default function MemberDetailScreen({ route, navigation }: any) {
                       );
                       setDietModalVisible(false);
                       setDietLoading(false);
-                      setMonthlyDietApproved(false);
                       return;
                     }
                     
-                    // 1 aylık onay verildiğinde yemek tercihlerini otomatik güncelle
-                    if (result.updatedPreferences && monthlyDietApproved) {
-                      // Diyet tipi güncelle
-                      let newDiet = result.updatedPreferences.diet || mealPreferences.diet;
-                      
-                      // BMI'ye göre diyet tipini belirle
-                      if (bmi < 18.5) {
-                        // Kilo alma için protein ağırlıklı standart diyet
-                        newDiet = "standard";
-                      } else if (bmi >= 25) {
-                        // Kilo verme için düşük karbonhidrat veya standart
-                        if (mealPreferences.diet === "keto" || mealPreferences.diet === "low_carb") {
-                          newDiet = mealPreferences.diet;
-                        } else {
-                          newDiet = "standard";
-                        }
-                      }
-                      
-                      // Kalori hedefi BMI'ye göre hesaplanacak (AI'dan gelen değer)
-                      const newCalories = result.updatedPreferences.calories || "";
-                      
-                      // Yemek tercihlerini güncelle ve diyet başlangıç tarihini kaydet
-                      setMealPreferences(prev => ({
-                        ...prev,
-                        diet: newDiet,
-                        calories: newCalories,
-                        cuisine: result.updatedPreferences?.cuisine || prev.cuisine,
-                        avoid: result.updatedPreferences?.avoid || prev.avoid,
-                        notes: result.updatedPreferences?.notes 
-                          ? (prev.notes ? prev.notes + "\n\n" : "") + result.updatedPreferences.notes
-                          : prev.notes,
-                        diet_start_date: new Date().toISOString(), // Diyet başlangıç tarihi
-                        diet_active: true, // Diyet aktif
-                      }));
-                      
-                      Alert.alert(
-                        "Başarılı",
-                        "Bir aylık diyet programınız hazırlandı ve yemek tercihleriniz otomatik olarak güncellendi:\n\n" +
-                        `• Diyet Tipi: ${newDiet === "standard" ? "Standart" : newDiet}\n` +
-                        `• Günlük Kalori Hedefi: ${newCalories} kcal\n\n` +
-                        "Lütfen değişiklikleri kaydedin."
-                      );
+                    // Diyet planını kaydet ve onay ekranını göster
+                    if (result.dietPlan) {
+                      setDietPlan(result);
+                      setDietModalVisible(false);
+                      setDietPlanApprovalVisible(true);
                     }
-                    
-                    setDietModalVisible(false);
-                    setMonthlyDietApproved(false);
                   } catch (error: any) {
                     Alert.alert("Hata", error.message || "Diyet programı oluşturulamadı.");
                   } finally {
                     setDietLoading(false);
                   }
                 }}
-                disabled={dietLoading || !monthlyDietApproved}
+                disabled={dietLoading}
               >
                 {dietLoading ? (
                   <Text style={styles.btnText}>Hazırlanıyor...</Text>
                 ) : (
                   <>
                     <Apple size={20} color="#fff" />
-                    <Text style={styles.btnText}>Onayla ve Oluştur</Text>
+                    <Text style={styles.btnText}>7 Günlük Program Oluştur</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -647,9 +957,512 @@ export default function MemberDetailScreen({ route, navigation }: any) {
                 style={[styles.btn, { backgroundColor: colors.border }]}
                 onPress={() => {
                   setDietModalVisible(false);
-                  setMonthlyDietApproved(false);
                 }}
                 disabled={dietLoading}
+              >
+                <Text style={[styles.btnText, { color: colors.text }]}>İptal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* DİYET PLANI ONAY MODAL */}
+      <Modal visible={dietPlanApprovalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.qrCard, { backgroundColor: colors.card, maxHeight: "90%", width: "90%" }]}>
+            <Text style={[styles.qrTitle, { color: colors.text, marginBottom: 16 }]}>
+              7 Günlük Diyet Programı
+            </Text>
+            
+            <ScrollView 
+              style={{ maxHeight: "70%", width: "100%" }}
+              contentContainerStyle={{ paddingBottom: 16 }}
+            >
+              {dietPlan?.dietPlan && (
+                <>
+                  <View style={{ marginBottom: 16, padding: 12, backgroundColor: colors.background, borderRadius: 12 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: 8 }}>
+                      Program Özeti
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+                      Hedef: {dietPlan.dietPlan.goal || "Sağlıklı beslenme"}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+                      Günlük Kalori: {dietPlan.dietPlan.daily_calories || "Hesaplanıyor"} kcal
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                      Diyet Tipi: {dietPlan.dietPlan.diet_type || "Standart"}
+                    </Text>
+                  </View>
+                  
+                  {dietPlan.dietPlan.daily_meal_plans && dietPlan.dietPlan.daily_meal_plans.length > 0 && (
+                    <View>
+                      <Text style={{ fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: 12 }}>
+                        Günlük Yemek Planı
+                      </Text>
+                      {dietPlan.dietPlan.daily_meal_plans.map((dayPlan: any, index: number) => (
+                        <View 
+                          key={index} 
+                          style={{ 
+                            marginBottom: 16, 
+                            padding: 12, 
+                            backgroundColor: colors.background, 
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                          }}
+                        >
+                          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primary, marginBottom: 8 }}>
+                            {dayPlan.day || `Gün ${index + 1}`} ({dayPlan.date})
+                          </Text>
+                          {dayPlan.meals && dayPlan.meals.map((meal: any, mealIndex: number) => (
+                            <View key={mealIndex} style={{ marginBottom: 8, paddingBottom: 8, borderBottomWidth: mealIndex < dayPlan.meals.length - 1 ? 1 : 0, borderBottomColor: colors.border }}>
+                              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 2, textTransform: "uppercase" }}>
+                                    {meal.time} • {meal.type === "breakfast" ? "Kahvaltı" : meal.type === "lunch" ? "Öğle Yemeği" : meal.type === "dinner" ? "Akşam Yemeği" : "Atıştırmalık"}
+                                  </Text>
+                                  <Text style={{ fontSize: 13, color: colors.text, fontWeight: "600" }}>{meal.meal}</Text>
+                                </View>
+                                {meal.calories && (
+                                  <Text style={{ fontSize: 11, color: colors.primary, fontWeight: "600", marginLeft: 8 }}>
+                                    {meal.calories} kcal
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {/* Eski format desteği (backward compatibility) */}
+                  {dietPlan.dietPlan.weekly_meal_suggestions && dietPlan.dietPlan.weekly_meal_suggestions.length > 0 && !dietPlan.dietPlan.daily_meal_plans && (
+                    <View>
+                      <Text style={{ fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: 12 }}>
+                        Haftalık Yemek Planı
+                      </Text>
+                      {dietPlan.dietPlan.weekly_meal_suggestions.map((day: any, index: number) => (
+                        <View 
+                          key={index} 
+                          style={{ 
+                            marginBottom: 16, 
+                            padding: 12, 
+                            backgroundColor: colors.background, 
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                          }}
+                        >
+                          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primary, marginBottom: 8 }}>
+                            {day.day || `Gün ${index + 1}`}
+                          </Text>
+                          {day.breakfast && (
+                            <View style={{ marginBottom: 6 }}>
+                              <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 2 }}>Kahvaltı:</Text>
+                              <Text style={{ fontSize: 12, color: colors.text }}>{day.breakfast}</Text>
+                            </View>
+                          )}
+                          {day.lunch && (
+                            <View style={{ marginBottom: 6 }}>
+                              <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 2 }}>Öğle Yemeği:</Text>
+                              <Text style={{ fontSize: 12, color: colors.text }}>{day.lunch}</Text>
+                            </View>
+                          )}
+                          {day.dinner && (
+                            <View style={{ marginBottom: 6 }}>
+                              <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 2 }}>Akşam Yemeği:</Text>
+                              <Text style={{ fontSize: 12, color: colors.text }}>{day.dinner}</Text>
+                            </View>
+                          )}
+                          {day.snacks && (
+                            <View>
+                              <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 2 }}>Atıştırmalıklar:</Text>
+                              <Text style={{ fontSize: 12, color: colors.text }}>{day.snacks}</Text>
+                            </View>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+            
+            <View style={{ gap: 12, width: "100%", marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.primary }]}
+                onPress={async () => {
+                  if (!dietPlan?.updatedPreferences) return;
+                  
+                  // Diyet tipi güncelle
+                  let newDiet = dietPlan.updatedPreferences.diet || mealPreferences.diet;
+                  
+                  // BMI'ye göre diyet tipini belirle
+                  if (bmi && bmi < 18.5) {
+                    newDiet = "standard";
+                  } else if (bmi && bmi >= 25) {
+                    if (mealPreferences.diet === "keto" || mealPreferences.diet === "low_carb") {
+                      newDiet = mealPreferences.diet;
+                    } else {
+                      newDiet = "standard";
+                    }
+                  }
+                  
+                  // Kalori hedefi
+                  const newCalories = dietPlan.updatedPreferences.calories || "";
+                  
+                  // Yemek tercihlerini güncelle ve diyet planını kaydet
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  
+                  // Diyet planını veritabanına kaydet
+                  const startDateStr = format(today, "yyyy-MM-dd");
+                  const nextMonday = startOfWeek(addDays(today, 7), { weekStartsOn: 1 });
+                  const endDateStr = format(nextMonday, "yyyy-MM-dd");
+                  
+                  const saveResult = await saveDietPlan(
+                    startDateStr,
+                    endDateStr,
+                    dietPlan.dietPlan,
+                    dietPlan.dietPlan.goal,
+                    dietPlan.dietPlan.daily_calories,
+                    dietPlan.dietPlan.diet_type
+                  );
+                  
+                  if (saveResult.error) {
+                    Alert.alert("Hata", "Diyet programı kaydedilemedi: " + saveResult.error);
+                    return;
+                  }
+                  
+                  const updatedMealPreferences = {
+                    ...mealPreferences,
+                    diet: newDiet,
+                    calories: newCalories,
+                    cuisine: dietPlan.updatedPreferences?.cuisine || mealPreferences.cuisine,
+                    avoid: dietPlan.updatedPreferences?.avoid || mealPreferences.avoid,
+                    notes: mealPreferences.notes || "",
+                    diet_start_date: today.toISOString(),
+                    diet_active: true,
+                    last_diet_plan_date: format(today, "yyyy-MM-dd"),
+                  };
+                  
+                  setMealPreferences(updatedMealPreferences);
+                  
+                  // meal_preferences'ı da güncelle (diet_plan artık ayrı tabloda, ama backward compatibility için)
+                  if (member?.id) {
+                    try {
+                      await updateMemberDetails(member.id, {
+                        meal_preferences: updatedMealPreferences,
+                      });
+                    } catch (error: any) {
+                      Alert.alert("Hata", "Tercihler kaydedilemedi: " + (error.message || "Bilinmeyen hata"));
+                      return;
+                    }
+                  }
+                  
+                  setDietPlanApprovalVisible(false);
+                  setDietPlan(null);
+                  Alert.alert("Başarılı", "7 günlük diyet programınız kaydedildi.");
+                }}
+              >
+                <Text style={styles.btnText}>Onayla ve Kaydet</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.border }]}
+                onPress={() => {
+                  setDietPlanApprovalVisible(false);
+                  setDietPlan(null);
+                }}
+              >
+                <Text style={[styles.btnText, { color: colors.text }]}>İptal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* EGZERSİZ PLANI MODAL */}
+      <Modal visible={exerciseModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.qrCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.qrTitle, { color: colors.text }]}>
+              Egzersiz Planı Oluştur
+            </Text>
+            <Text style={[styles.qrDesc, { color: colors.textMuted, marginBottom: 20 }]}>
+              Yaş, kilo, boy ve sağlık bilgilerinize göre kişiselleştirilmiş haftalık egzersiz programı hazırlanacaktır.
+            </Text>
+            
+            {/* EKİPMAN VE FİTNESS SEVİYESİ SEÇİMLERİ */}
+            <View style={{ gap: 16, width: "100%", marginBottom: 20 }}>
+              {/* EKİPMAN TERCIHİ */}
+              <View>
+                <SelectionGroup
+                  label="Ekipman Tercihi"
+                  options={[
+                    { label: "Evde Aletsiz", value: "home_no_equipment" },
+                    { label: "Evde Aletli", value: "home_with_equipment" },
+                    { label: "Spor Salonu", value: "gym" },
+                  ]}
+                  selectedValue={equipmentPreference}
+                  onSelect={(val: any) => setEquipmentPreference(val)}
+                />
+              </View>
+              
+              {/* FİTNESS SEVİYESİ */}
+              <View>
+                <SelectionGroup
+                  label="Fitness Seviyesi"
+                  options={[
+                    { label: "Başlangıç", value: "beginner" },
+                    { label: "Orta", value: "intermediate" },
+                    { label: "İleri", value: "advanced" },
+                  ]}
+                  selectedValue={fitnessLevel}
+                  onSelect={(val: any) => setFitnessLevel(val)}
+                />
+              </View>
+            </View>
+            
+            <View style={{ gap: 12, width: "100%" }}>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.primary }]}
+                onPress={async () => {
+                  if (!editMember.weight || !editMember.height) return;
+                  
+                  // Yaş hesapla
+                  const age = calculateAge(editMember.birth_date);
+                  if (!age) {
+                    Alert.alert(
+                      "Eksik Bilgi",
+                      "Egzersiz programı oluşturmak için doğum tarihi gereklidir. Lütfen doğum tarihini girin."
+                    );
+                    return;
+                  }
+                  
+                  setExerciseLoading(true);
+                  try {
+                    // Bugünün gününü kontrol et
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const todayDay = today.getDay(); // 0 = Pazar, 1 = Pazartesi, ...
+                    
+                    // Diyet planı gibi: Eğer bugün pazartesi ise bugünden başla ve bir sonraki pazartesiye kadar, değilse bugünden başla ve bir sonraki pazartesiye kadar
+                    let startDate: Date = today;
+                    let endDate: Date;
+                    
+                    if (todayDay === 1) {
+                      // Pazartesi ise, bugünden başla ve bir sonraki pazartesiye kadar (7 gün sonra)
+                      endDate = addDays(today, 7);
+                    } else {
+                      // Pazartesi değilse, bugünden başla ve bir sonraki pazartesiye kadar (pazartesi dahil)
+                      const daysUntilNextMonday = (8 - todayDay) % 7 || 7;
+                      endDate = startOfWeek(addDays(today, daysUntilNextMonday), { weekStartsOn: 1 });
+                    }
+                    
+                    const startDateStr = format(startDate, "yyyy-MM-dd");
+                    const endDateStr = format(endDate, "yyyy-MM-dd");
+                    const numDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    
+                    // BMI hesapla (egzersiz planı için gerekli olabilir)
+                    const heightInMeters = (editMember.height || 0) / 100;
+                    const bmi = editMember.weight && heightInMeters > 0
+                      ? (editMember.weight / (heightInMeters * heightInMeters))
+                      : 0;
+                    
+                    // Egzersiz kalori hedefi hesapla (yaş, kilo, boy, cinsiyete göre)
+                    // BMR (Bazal Metabolizma Hızı) hesaplama
+                    let bmr = 0;
+                    if (age && editMember.weight && editMember.height) {
+                      if (editMember.gender === "male" || editMember.gender === "erkek") {
+                        bmr = 10 * editMember.weight + 6.25 * editMember.height - 5 * age + 5;
+                      } else {
+                        bmr = 10 * editMember.weight + 6.25 * editMember.height - 5 * age - 161;
+                      }
+                    }
+                    const tdee = bmr * 1.55; // Orta seviye aktivite
+                    const exerciseCalorieTarget = Math.max(300, Math.min(600, Math.round(tdee * 0.22)));
+                    
+                    // Her gün için egzersiz planı oluştur
+                    const exercisePlans: any[] = [];
+                    const days = eachDayOfInterval({ start: startDate, end: endDate });
+                    
+                    for (const day of days) {
+                      const dayStr = format(day, "yyyy-MM-dd");
+                      
+                      const result = await generateExercisePlan({
+                        age: age,
+                        weight: editMember.weight,
+                        height: editMember.height,
+                        gender: editMember.gender,
+                        fitnessLevel: fitnessLevel,
+                        equipmentType: equipmentPreference,
+                        targetCalories: exerciseCalorieTarget,
+                        availableTime: 45, // Varsayılan 45 dakika
+                        language: "tr",
+                        injuries: editMember.notes || undefined, // Kronik hastalıklar/notlar
+                        preferences: editMember.allergies || undefined, // Alerjiler (egzersiz için değil ama genel sağlık bilgisi)
+                      });
+                      
+                      if (result.error || !result.data) {
+                        Alert.alert("Hata", `Egzersiz planı oluşturulamadı: ${result.error || "Bilinmeyen hata"}`);
+                        setExerciseLoading(false);
+                        return;
+                      }
+                      
+                      // Planı veritabanına kaydet
+                      const saveResult = await saveExercisePlan(
+                        dayStr,
+                        result.data,
+                        equipmentPreference
+                      );
+                      
+                      if (saveResult.error) {
+                        // Hata sessizce yok sayılıyor
+                      } else {
+                        exercisePlans.push({
+                          date: dayStr,
+                          plan: result.data,
+                        });
+                      }
+                    }
+                    
+                    if (exercisePlans.length === 0) {
+                      Alert.alert("Hata", "Hiçbir egzersiz planı oluşturulamadı.");
+                      setExerciseLoading(false);
+                      return;
+                    }
+                    
+                    // Planları onay için sakla
+                    setExercisePlan({
+                      plans: exercisePlans,
+                      startDate: startDateStr,
+                      endDate: endDateStr,
+                      numDays: numDays,
+                    });
+                    
+                    setExerciseModalVisible(false);
+                    setExercisePlanApprovalVisible(true);
+                  } catch (error: any) {
+                    Alert.alert("Hata", error.message || "Egzersiz planı oluşturulamadı.");
+                  } finally {
+                    setExerciseLoading(false);
+                  }
+                }}
+                disabled={exerciseLoading}
+              >
+                {exerciseLoading ? (
+                  <Text style={styles.btnText}>Oluşturuluyor...</Text>
+                ) : (
+                  <Text style={styles.btnText}>Oluştur</Text>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.border }]}
+                onPress={() => setExerciseModalVisible(false)}
+                disabled={exerciseLoading}
+              >
+                <Text style={[styles.btnText, { color: colors.text }]}>İptal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* EGZERSİZ PLANI ONAY MODAL */}
+      <Modal visible={exercisePlanApprovalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.qrCard, { backgroundColor: colors.card, maxHeight: "90%", width: "90%" }]}>
+            <Text style={[styles.qrTitle, { color: colors.text, marginBottom: 16 }]}>
+              {exercisePlan?.numDays || 7} Günlük Egzersiz Programı
+            </Text>
+            
+            <ScrollView 
+              style={{ maxHeight: "70%", width: "100%" }}
+              contentContainerStyle={{ paddingBottom: 16 }}
+            >
+              {exercisePlan?.plans && exercisePlan.plans.length > 0 && (
+                <>
+                  <View style={{ marginBottom: 16, padding: 12, backgroundColor: colors.background, borderRadius: 12 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: 8 }}>
+                      Program Özeti
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+                      Başlangıç: {format(new Date(exercisePlan.startDate), "d MMMM yyyy", { locale: require("date-fns/locale/tr").tr })}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+                      Bitiş: {format(new Date(exercisePlan.endDate), "d MMMM yyyy", { locale: require("date-fns/locale/tr").tr })}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                      Toplam Gün: {exercisePlan.numDays}
+                    </Text>
+                  </View>
+                  
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: 12 }}>
+                      Günlük Egzersiz Planı
+                    </Text>
+                    {exercisePlan.plans.map((dayPlan: any, index: number) => (
+                      <View 
+                        key={index} 
+                        style={{ 
+                          marginBottom: 16, 
+                          padding: 12, 
+                          backgroundColor: colors.background, 
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primary, marginBottom: 8 }}>
+                          {format(new Date(dayPlan.date), "EEEE, d MMMM", { locale: tr })}
+                        </Text>
+                        {dayPlan.plan.exercises && dayPlan.plan.exercises.map((exercise: any, exerciseIndex: number) => (
+                          <View key={exerciseIndex} style={{ marginBottom: 6 }}>
+                            <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 2 }}>
+                              {exercise.name} ({exercise.duration} dk) - {exercise.calories} kcal
+                            </Text>
+                            {exercise.instructions && (
+                              <Text style={{ fontSize: 10, color: colors.textMuted, fontStyle: "italic" }}>
+                                {exercise.instructions}
+                              </Text>
+                            )}
+                          </View>
+                        ))}
+                        <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                          <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                            Toplam: {dayPlan.plan.total_duration} dk • {dayPlan.plan.total_calories} kcal
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+            
+            <View style={{ gap: 12, width: "100%", marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.primary }]}
+                onPress={async () => {
+                  // Planlar zaten kaydedilmiş (generateExercisePlan içinde kaydedildi)
+                  setExercisePlanApprovalVisible(false);
+                  setExercisePlan(null);
+                  Alert.alert("Başarılı", `${exercisePlan?.numDays || 7} günlük egzersiz programınız kaydedildi.`);
+                }}
+              >
+                <Text style={styles.btnText}>Onayla</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.border }]}
+                onPress={() => {
+                  setExercisePlanApprovalVisible(false);
+                  setExercisePlan(null);
+                }}
               >
                 <Text style={[styles.btnText, { color: colors.text }]}>İptal</Text>
               </TouchableOpacity>
@@ -679,16 +1492,30 @@ export default function MemberDetailScreen({ route, navigation }: any) {
                     return;
                   }
                   
+                  // Yaş hesapla
+                  const age = calculateAge(editMember.birth_date);
+                  if (!age) {
+                    Alert.alert(
+                      "Eksik Bilgi",
+                      "Diyet programı yenilemek için doğum tarihi gereklidir. Lütfen doğum tarihini girin."
+                    );
+                    setDietRenewalModalVisible(false);
+                    return;
+                  }
+                  
                   setDietLoading(true);
                   try {
                     const result = await generateDietPlan({
                       bmi,
                       weight: editMember.weight,
                       height: editMember.height,
+                      age: age,
                       gender: editMember.gender,
                       currentDiet: mealPreferences.diet,
                       currentCuisine: mealPreferences.cuisine,
                       currentAvoid: mealPreferences.avoid,
+                      budgetPreference: budgetPreference,
+                      difficultyPreference: difficultyPreference,
                     });
                     
                     if (result.error || !result.needsDiet) {
@@ -712,15 +1539,15 @@ export default function MemberDetailScreen({ route, navigation }: any) {
                       
                       const newCalories = result.updatedPreferences.calories || "";
                       
+                      // Notlar alanını AI'dan gelen notlarla değiştirme, sadece kullanıcı veya yönetici yazabilir
                       setMealPreferences(prev => ({
                         ...prev,
                         diet: newDiet,
                         calories: newCalories,
                         cuisine: result.updatedPreferences?.cuisine || prev.cuisine,
                         avoid: result.updatedPreferences?.avoid || prev.avoid,
-                        notes: result.updatedPreferences?.notes 
-                          ? (prev.notes ? prev.notes + "\n\n" : "") + result.updatedPreferences.notes
-                          : prev.notes,
+                        // notes alanını koru, AI'dan gelen notları ekleme
+                        notes: prev.notes || "",
                         diet_start_date: new Date().toISOString(), // Yeni başlangıç tarihi
                         diet_active: true, // Diyet aktif
                       }));

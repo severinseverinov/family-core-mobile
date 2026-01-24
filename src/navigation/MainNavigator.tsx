@@ -1,15 +1,18 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { View, Image, StyleSheet, Platform } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
   Home,
   CheckSquare,
+  Apple,
   PawPrint,
   ShoppingCart,
   Wallet,
+  Activity,
 } from "lucide-react-native";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useFocusEffect } from "@react-navigation/native";
 
 // Ekranlar
 import DashboardScreen from "../screens/dashboard/DashboardScreen";
@@ -18,6 +21,8 @@ import PetScreen from "../screens/pets/PetScreen";
 import KitchenScreen from "../screens/kitchen/KitchenScreen";
 import FinanceScreen from "../screens/finance/FinanceScreen";
 import ProfileHubScreen from "../screens/profile/ProfileHubScreen";
+import ActiveDietScreen from "../screens/profile/ActiveDietScreen";
+import { getMemberById } from "../services/family";
 
 const Tab = createBottomTabNavigator();
 
@@ -44,6 +49,27 @@ const ProfileTabIcon = ({ focused, color }: any) => {
 
 export default function MainNavigator() {
   const { colors } = useTheme();
+  const { profile } = useAuth();
+  const [hasActiveDiet, setHasActiveDiet] = useState(false);
+
+  const refreshDietStatus = useCallback(async () => {
+    if (!profile?.id) return;
+    const res = await getMemberById(profile.id);
+    const mealPrefs: any = res.member?.meal_preferences || {};
+    const dietEnabledValue: any = mealPrefs.diet_enabled;
+    
+    // Diyet özelliği açık mı kontrol et (diet_enabled true ise sekme göster)
+    const isEnabled =
+      dietEnabledValue !== false; // Varsayılan true
+    
+    setHasActiveDiet(Boolean(isEnabled));
+  }, [profile?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshDietStatus();
+    }, [refreshDietStatus])
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -81,6 +107,16 @@ export default function MainNavigator() {
             tabBarIcon: ({ color }) => <ShoppingCart color={color} size={24} />,
           }}
         />
+        {hasActiveDiet ? (
+          <Tab.Screen
+            name="Diet"
+            component={ActiveDietScreen}
+            options={{
+              tabBarLabel: "Diyet",
+              tabBarIcon: ({ color }) => <Activity color={color} size={24} />,
+            }}
+          />
+        ) : null}
         <Tab.Screen
           name="Pet"
           component={PetScreen}

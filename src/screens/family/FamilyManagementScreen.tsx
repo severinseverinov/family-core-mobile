@@ -269,7 +269,7 @@ export default function FamilyManagementScreen({ navigation }: any) {
       <TouchableOpacity
         style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
         onPress={() => setSelectedMemberDetail(item)}
-      >
+    >
       <Image
         source={{
           uri:
@@ -306,8 +306,8 @@ export default function FamilyManagementScreen({ navigation }: any) {
         onPress={() => navigation.navigate("MemberDetail", { member: item })}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <ChevronRight size={20} color={colors.textMuted} />
-      </TouchableOpacity>
+      <ChevronRight size={20} color={colors.textMuted} />
+    </TouchableOpacity>
     </View>
   );
 
@@ -324,13 +324,13 @@ export default function FamilyManagementScreen({ navigation }: any) {
           >
             <ChevronLeft size={22} color={colors.text} />
           </TouchableOpacity>
-          <View>
-            <Text style={[styles.title, { color: colors.text }]}>
-              {family?.name || "Ailem"}
-            </Text>
-            <Text style={[styles.subTitle, { color: colors.textMuted }]}>
+        <View>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {family?.name || "Ailem"}
+          </Text>
+          <Text style={[styles.subTitle, { color: colors.textMuted }]}>
               Aileyi Yönet
-            </Text>
+          </Text>
           </View>
         </View>
         {isAdmin && (
@@ -362,29 +362,29 @@ export default function FamilyManagementScreen({ navigation }: any) {
             contentContainerStyle={styles.modalOverlay}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>
-                  Yeni Üye Davet Et
-                </Text>
-                <TouchableOpacity onPress={() => setIsInviteModalOpen(false)}>
-                  <X color={colors.text} />
-                </TouchableOpacity>
-              </View>
-              <ModernInput
-                label="E-posta Adresi"
-                placeholder="user@example.com"
-                value={inviteEmail}
-                onChangeText={setInviteEmail}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-                onPress={handleInvite}
-              >
-                <Text style={styles.btnText}>Davet Gönder</Text>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Yeni Üye Davet Et
+              </Text>
+              <TouchableOpacity onPress={() => setIsInviteModalOpen(false)}>
+                <X color={colors.text} />
               </TouchableOpacity>
             </View>
+            <ModernInput
+              label="E-posta Adresi"
+              placeholder="user@example.com"
+              value={inviteEmail}
+              onChangeText={setInviteEmail}
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+              onPress={handleInvite}
+            >
+              <Text style={styles.btnText}>Davet Gönder</Text>
+            </TouchableOpacity>
+          </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
@@ -464,13 +464,13 @@ export default function FamilyManagementScreen({ navigation }: any) {
                         : "Yönetici Yap"}
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.removeBtn}
+                <TouchableOpacity
+                  style={styles.removeBtn}
                     onPress={() => handleRemove(selectedMemberDetail!)}
-                  >
-                    <Trash2 size={20} color="#ef4444" />
-                    <Text style={styles.removeBtnText}>Aileden Çıkar</Text>
-                  </TouchableOpacity>
+                >
+                  <Trash2 size={20} color="#ef4444" />
+                  <Text style={styles.removeBtnText}>Aileden Çıkar</Text>
+                </TouchableOpacity>
                 </>
               )}
           </View>

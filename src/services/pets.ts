@@ -172,7 +172,7 @@ export async function addRoutine(
 
     await supabase.from("notifications").insert(
       assignedTo.map(userId => ({
-        family_id: profile.family_id,
+      family_id: profile.family_id,
         user_id: userId,
         title: `Rutin Hatırlatma: ${pet?.name || "Pet"}`,
         message: `${pet?.name || "Pet"} için "${title}" rutini yaklaşyor.`,
@@ -182,7 +182,7 @@ export async function addRoutine(
     );
   }
 
-  return { success: true };
+    return { success: true };
 }
 
 function buildRoutineReminderDate(recurrence: string, time: string) {

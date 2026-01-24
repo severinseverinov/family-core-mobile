@@ -17,7 +17,6 @@ import {
   Landmark, // Finans ikonu
   ChevronRight,
   Users,
-  Apple,
 } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -29,27 +28,7 @@ export default function ProfileHubScreen({ navigation }: any) {
   const isLight = themeMode === "light";
   const { profile } = useAuth();
   const [qrVisible, setQrVisible] = useState(false);
-  const [memberData, setMemberData] = useState<FamilyMember | null>(null);
-  const [loadingMember, setLoadingMember] = useState(false);
   const isParent = ["owner", "admin"].includes(profile?.role || "");
-
-  // Kullanıcının tam profil bilgilerini çek
-  useEffect(() => {
-    if (profile?.id) {
-      setLoadingMember(true);
-      getMemberById(profile.id).then((res) => {
-        if (res.member) {
-          setMemberData(res.member as FamilyMember);
-        }
-        setLoadingMember(false);
-      });
-    }
-  }, [profile?.id]);
-
-  // Diyet programı aktif mi kontrol et
-  const hasActiveDiet =
-    memberData?.meal_preferences?.diet_active === true &&
-    memberData?.meal_preferences?.diet_start_date;
 
   const vCardData = `BEGIN:VCARD
 VERSION:3.0
@@ -66,14 +45,14 @@ END:VCARD`;
         {/* ÜST PROFİL BÖLÜMÜ */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <Image
+          <Image
               source={{
                 uri:
                   profile?.avatar_url ||
                   `https://api.dicebear.com/7.x/avataaars/png?seed=${profile?.id}`,
               }}
-              style={[styles.mainAvatar, { borderColor: colors.primary }]}
-            />
+            style={[styles.mainAvatar, { borderColor: colors.primary }]}
+          />
             <TouchableOpacity
               style={[
                 styles.qrShortcut,
@@ -150,12 +129,15 @@ END:VCARD`;
                 // Ebeveynler için: Aileyi Yönet
                 navigation.navigate("FamilyManagement");
               } else {
-                // Diğer kullanıcılar için: Kendi üye detayları
+                // Diğer kullanıcılar için: Kendi üye detayları (sadece genel bilgiler)
                 if (profile?.id) {
                   // Profil verisini tam olarak çek
                   const memberRes = await getMemberById(profile.id);
                   if (memberRes.member) {
-                    navigation.navigate("MemberDetail", { member: memberRes.member });
+                    navigation.navigate("MemberDetail", { 
+                      member: memberRes.member,
+                      isMemberEdit: true // Üye kendi bilgilerini düzenliyor
+                    });
                   }
                 }
               }
@@ -168,14 +150,14 @@ END:VCARD`;
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={[styles.listText, { color: colors.text }]}>
-                {isParent ? "Aileyi Yönet" : "Profil Ayarları"}
+                {isParent ? "Aileyi Yönet" : "Kişisel Bilgilerimi Değiştir"}
               </Text>
               <Text style={{ fontSize: 12, color: colors.textMuted }}>
-                {isParent ? "Üyeler, Roller ve İzinler" : "Kişisel bilgiler ve tercihler"}
+                {isParent ? "Üyelere roller, izinler, kendi kişisel bilgileriniz gibi" : "Genel bilgilerinizi düzenleyin"}
               </Text>
             </View>
-            <ChevronRight size={18} color={colors.border} />
-          </TouchableOpacity>
+              <ChevronRight size={18} color={colors.border} />
+            </TouchableOpacity>
         </View>
 
         {/* YENİ: AİLE FİNANS MERKEZİ (Buraya Taşındı) */}
@@ -203,42 +185,9 @@ END:VCARD`;
                 Bütçe, Raporlar ve Kumbara
               </Text>
             </View>
-            <ChevronRight size={18} color={colors.border} />
-          </TouchableOpacity>
-        </View>
-
-        {/* DİYET PROGRAMI KISAYOLU (Sadece aktif diyet varsa) */}
-        {hasActiveDiet && (
-          <View
-            style={[
-              styles.listCard,
-              isLight && styles.surfaceLift,
-              { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 },
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.listItem}
-              onPress={() => {
-                navigation.navigate("ActiveDiet");
-              }}
-            >
-              <View
-                style={[styles.iconCircleSmall, { backgroundColor: "#10b98120" }]}
-              >
-                <Apple size={24} color="#10b981" />
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={[styles.listText, { color: colors.text }]}>
-                  Aktif Diyet Programı
-                </Text>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>
-                  Diyet detaylarını görüntüle ve yönet
-                </Text>
-              </View>
               <ChevronRight size={18} color={colors.border} />
             </TouchableOpacity>
-          </View>
-        )}
+        </View>
 
         {/* ACİL DURUM QR MODAL */}
         <Modal visible={qrVisible} transparent animationType="fade">
@@ -269,8 +218,8 @@ END:VCARD`;
                 Acil bir durumda bu kod taranarak kan grubunuza, alerjilerinize
                 ve iletişim bilgilerinize ulaşılabilir.
               </Text>
-            </View>
           </View>
+        </View>
         </Modal>
       </ScrollView>
     </SafeAreaView>

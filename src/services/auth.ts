@@ -140,9 +140,7 @@ export async function signInWithGoogle() {
         }
       } else if (result.type === "cancel") {
         return { error: "Authentication was cancelled" };
-      }
-
-      return { error: "Authentication failed" };
+      }      return { error: "Authentication failed" };
     }    return { error: "Failed to initiate Google sign in" };
   } catch (error: any) {
     return {
