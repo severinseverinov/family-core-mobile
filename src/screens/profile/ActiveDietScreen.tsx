@@ -102,11 +102,20 @@ import {
   getExercisePlanForDate,
   ExercisePlan,
 } from "../../services/exercisePlans";
+import {
+  playStartWhistle,
+  playShortWhistle,
+  playTick,
+  initAudioAndRequestPermission,
+  setSoundsEnabled,
+} from "../../utils/exerciseSounds";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ActiveDietScreen({ navigation }: any) {
   const { colors, themeMode } = useTheme();
   const isLight = themeMode === "light";
   const { profile } = useAuth();
+  const insets = useSafeAreaInsets();
   const [member, setMember] = useState<FamilyMember | null>(null);
   const [loading, setLoading] = useState(true);
   const [dietProgress, setDietProgress] = useState<Record<string, boolean>>({});
@@ -242,6 +251,8 @@ export default function ActiveDietScreen({ navigation }: any) {
   const [hasUnfinishedExercise, setHasUnfinishedExercise] = useState(false);
   const [isReadingTime, setIsReadingTime] = useState(false); // Egzersiz arası okuma süresi
   const [readingTimeLeft, setReadingTimeLeft] = useState(10); // Kalan okuma süresi
+  const [readingTimeNextExerciseIndex, setReadingTimeNextExerciseIndex] =
+    useState<number | null>(null); // Okuma ekranında gösterilecek sonraki egzersiz indeksi
   const [borderOpacity] = useState(new Animated.Value(0)); // Kart kenarlığı animasyonu
   const [completedMeals, setCompletedMeals] = useState<Record<string, boolean>>(
     {},
@@ -1096,6 +1107,8 @@ export default function ActiveDietScreen({ navigation }: any) {
           const newRemainingTime = prev - 1;
 
           if (newRemainingTime <= 0) {
+            playStartWhistle().catch(() => {});
+
             // Timer bittiğinde - tüm egzersizleri tamamlandı olarak işaretle (toplu)
             const dateStr = formatDateToLocalString(selectedDate);
             const totalExercises = currentExercisePlan?.exercises?.length || 0;
@@ -1184,8 +1197,10 @@ export default function ActiveDietScreen({ navigation }: any) {
       const markCompletedExercises = async () => {
         const dateStr = formatDateToLocalString(selectedDate);
 
-        // Okuma süresi başlat (son egzersiz değilse)
+        // Okuma süresi başlat (son egzersiz değilse) — sonraki egzersizi göster
         if (shouldBeAtStep < exercises.length) {
+          playShortWhistle().catch(() => {});
+          setReadingTimeNextExerciseIndex(shouldBeAtStep);
           setIsReadingTime(true);
           setReadingTimeLeft(10);
 
@@ -1231,7 +1246,10 @@ export default function ActiveDietScreen({ navigation }: any) {
       readingInterval = setInterval(() => {
         setReadingTimeLeft(prev => {
           if (prev <= 1) {
-            // Okuma süresi bitti, bir sonraki egzersize geç
+            // Okuma süresi bitti, bir sonraki egzersize geç — kısa düdük
+            playShortWhistle().catch(() => {});
+
+            setReadingTimeNextExerciseIndex(null);
             setIsReadingTime(false);
 
             // Step'i ilerlet
@@ -1259,6 +1277,7 @@ export default function ActiveDietScreen({ navigation }: any) {
             setReadingTimeLeft(10); // Sıfırla
             return 10;
           }
+          playTick().catch(() => {});
           return prev - 1;
         });
       }, 1000);
@@ -1309,9 +1328,40 @@ export default function ActiveDietScreen({ navigation }: any) {
     }
   }, [isReadingTime, borderOpacity]);
 
+  // Ses onayı sonrası egzersiz başlat / devam
+  const askSoundApprovalThen = useCallback(
+    (action: () => void | Promise<void>) => {
+      Alert.alert(
+        "Sesli Uyarılar",
+        "Egzersiz sırasında sesli uyarılar (düdük, tik) kullanılacak. İzin verilsin mi?",
+        [
+          {
+            text: "Hayır",
+            style: "cancel",
+            onPress: () => {
+              setSoundsEnabled(false);
+              void Promise.resolve(action()).catch(() => {});
+            },
+          },
+          {
+            text: "Evet",
+            onPress: async () => {
+              const ok = await initAudioAndRequestPermission();
+              if (!ok) setSoundsEnabled(false);
+              await action();
+            },
+          },
+        ],
+      );
+    },
+    [],
+  );
+
   // Timer Fonksiyonları
   const startExerciseTimer = useCallback(
     (totalMinutes: number, exerciseSteps: any[]) => {
+      playStartWhistle().catch(() => {});
+      setReadingTimeNextExerciseIndex(null);
       const totalSeconds = totalMinutes * 60;
       setTotalExerciseTime(totalSeconds);
       setRemainingTime(totalSeconds);
@@ -1358,6 +1408,10 @@ export default function ActiveDietScreen({ navigation }: any) {
                   dateStr: formatDateToLocalString(selectedDate),
                   isReadingTime: isReadingTime,
                   readingTimeLeft: readingTimeLeft,
+                  readingTimeNextExerciseIndex:
+                    isReadingTime && readingTimeNextExerciseIndex != null
+                      ? readingTimeNextExerciseIndex
+                      : undefined,
                 }),
               );
             } catch (error) {
@@ -1410,6 +1464,7 @@ export default function ActiveDietScreen({ navigation }: any) {
             setExerciseTimerModalVisible(false);
             setIsReadingTime(false);
             setReadingTimeLeft(10);
+            setReadingTimeNextExerciseIndex(null);
             setHasUnfinishedExercise(true);
 
             Alert.alert(
@@ -1515,6 +1570,11 @@ export default function ActiveDietScreen({ navigation }: any) {
           setTotalExerciseTime(state.totalTime);
           setIsReadingTime(state.isReadingTime || false);
           setReadingTimeLeft(state.readingTimeLeft || 10);
+          setReadingTimeNextExerciseIndex(
+            state.isReadingTime && typeof state.readingTimeNextExerciseIndex === "number"
+              ? state.readingTimeNextExerciseIndex
+              : null,
+          );
           setExerciseTimerActive(true);
           setExerciseTimerPaused(false);
           setExerciseTimerModalVisible(true); // Timer Modal'ını aç
@@ -1745,38 +1805,137 @@ export default function ActiveDietScreen({ navigation }: any) {
       setWeightModalVisible(false);
       setNewWeight("");
 
-      // Diyete devam etme sorusu
-      Alert.alert(
-        "Kilo Kaydedildi",
-        "Bu hafta için kilonuz kaydedildi. Diyete devam etmek istiyor musunuz?",
-        [
-          {
-            text: "Hayır",
-            style: "cancel",
-            onPress: async () => {
-              // Diyeti sonlandır
-              if (member) {
-                const updatedPrefs = {
-                  ...member.meal_preferences,
-                  diet_active: false,
-                };
-                await updateMemberDetails(profile.id, {
-                  meal_preferences: updatedPrefs,
-                });
-                Alert.alert("Bilgi", "Diyet programı sonlandırıldı.");
-                await loadMember();
-              }
-            },
-          },
-          {
-            text: "Evet, Devam Et",
-            onPress: () => {
-              // Diyet programı oluşturma modalını aç
-              setDietPlanModalVisible(true);
-            },
-          },
-        ],
+      const mealPrefs = member?.meal_preferences || {};
+      const hasDiet = Boolean(
+        mealPrefs.diet_active &&
+          mealPrefs.diet_start_date &&
+          String(mealPrefs.diet_start_date).trim() !== "",
       );
+      const hasExercise = mealPrefs.exercise_enabled !== false;
+
+      if (!hasDiet && !hasExercise) {
+        Alert.alert("Kilo Kaydedildi", "Bu hafta için kilonuz kaydedildi.");
+        return;
+      }
+
+      const continueMessage = hasDiet && hasExercise
+        ? "Bu hafta için kilonuz kaydedildi. Diyet ve egzersiz programı devam etsin mi?"
+        : hasDiet
+          ? "Bu hafta için kilonuz kaydedildi. Diyet programı devam etsin mi?"
+          : "Bu hafta için kilonuz kaydedildi. Egzersiz programı devam etsin mi?";
+
+      Alert.alert("Kilo Kaydedildi", continueMessage, [
+        {
+          text: "Hayır",
+          style: "cancel",
+          onPress: async () => {
+            if (!member) return;
+            const updatedPrefs = { ...member.meal_preferences };
+            if (hasDiet) {
+              updatedPrefs.diet_active = false;
+              (updatedPrefs as any).diet_start_date = "";
+            }
+            if (hasExercise) {
+              (updatedPrefs as any).exercise_enabled = false;
+            }
+            await updateMemberDetails(profile.id, {
+              meal_preferences: updatedPrefs,
+            });
+            const msg = hasDiet && hasExercise
+              ? "Diyet ve egzersiz programı sonlandırıldı."
+              : hasDiet
+                ? "Diyet programı sonlandırıldı."
+                : "Egzersiz programı sonlandırıldı.";
+            Alert.alert("Bilgi", msg);
+            await loadMember();
+          },
+        },
+        {
+          text: "Evet, Devam Et",
+          onPress: async () => {
+            if (hasExercise && member) {
+              setGeneratingExercisePlan(true);
+              try {
+                const age = calculateAge(member.birth_date);
+                const exerciseCalorieTarget = calculateExerciseCalorieTarget(
+                  age ?? undefined,
+                  member.weight,
+                  member.height,
+                  member.gender,
+                );
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const todayDay = today.getDay();
+                let endDate: Date;
+                if (todayDay === 1) {
+                  endDate = addDays(today, 7);
+                } else {
+                  const daysUntilNextMonday = (8 - todayDay) % 7 || 7;
+                  endDate = startOfWeek(
+                    addDays(today, daysUntilNextMonday),
+                    { weekStartsOn: 1 },
+                  );
+                }
+                const planDates = eachDayOfInterval({
+                  start: today,
+                  end: endDate,
+                });
+                let successCount = 0;
+                for (const date of planDates) {
+                  const dateStr = format(date, "yyyy-MM-dd");
+                  const result = await generateExercisePlan({
+                    age: age ?? undefined,
+                    weight: member.weight,
+                    height: member.height,
+                    gender: member.gender,
+                    fitnessLevel,
+                    equipmentType: equipmentPreference,
+                    targetCalories: exerciseCalorieTarget,
+                    availableTime: 45,
+                    language: "tr",
+                  });
+                  if (result.error || !result.data) continue;
+                  const saveResult = await saveExercisePlan(
+                    dateStr,
+                    result.data,
+                    equipmentPreference,
+                  );
+                  if (!saveResult.error) successCount++;
+                }
+                if (successCount > 0) {
+                  Alert.alert(
+                    "Başarılı",
+                    `${successCount} günlük egzersiz programı hazırlandı.`,
+                    hasDiet
+                      ? [
+                          {
+                            text: "Tamam",
+                            onPress: () => {
+                              setDietPlanModalVisible(true);
+                            },
+                          },
+                        ]
+                      : undefined,
+                  );
+                } else if (hasDiet) {
+                  setDietPlanModalVisible(true);
+                }
+                await loadMember();
+              } catch (e: any) {
+                Alert.alert(
+                  "Hata",
+                  e?.message ?? "Egzersiz programı oluşturulamadı.",
+                );
+                if (hasDiet) setDietPlanModalVisible(true);
+              } finally {
+                setGeneratingExercisePlan(false);
+              }
+            } else if (hasDiet) {
+              setDietPlanModalVisible(true);
+            }
+          },
+        },
+      ]);
     } catch (error) {
       Alert.alert("Hata", "Kilo kaydedilemedi.");
     } finally {
@@ -2909,8 +3068,8 @@ export default function ActiveDietScreen({ navigation }: any) {
                           key={index}
                           style={{
                             marginBottom: 10,
-                            marginHorizontal: -8, // Kartları bir tık daha geniş
-                            paddingHorizontal: 20,
+                            marginHorizontal: -10, // Günlük diyet kartları geniş
+                            paddingHorizontal: 18,
                             paddingVertical: 18,
                             backgroundColor: isCompleted
                               ? colors.primary + "08"
@@ -3712,7 +3871,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                           // Devam Et Butonu
                           <View style={{ alignItems: "center" }}>
                             <TouchableOpacity
-                              onPress={continueExercise}
+                              onPress={() =>
+                                askSoundApprovalThen(() => continueExercise())
+                              }
                               style={{
                                 flexDirection: "row",
                                 alignItems: "center",
@@ -3745,10 +3906,12 @@ export default function ActiveDietScreen({ navigation }: any) {
                                 exercisePlan.exercises &&
                                 exercisePlan.total_duration
                               ) {
-                                startExerciseTimer(
-                                  exercisePlan.total_duration,
-                                  exercisePlan.exercises,
-                                );
+                                askSoundApprovalThen(() => {
+                                  startExerciseTimer(
+                                    exercisePlan.total_duration,
+                                    exercisePlan.exercises,
+                                  );
+                                });
                               }
                             }}
                             style={{
@@ -6822,47 +6985,49 @@ export default function ActiveDietScreen({ navigation }: any) {
         }}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-          <View
-            style={{
-              flex: 1,
-              padding: 24,
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            {/* HEADER - Minimize Button */}
-            <View
-              style={{
-                width: "100%",
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                marginBottom: 20,
+          <View style={{ flex: 1, flexDirection: "column" }}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{
+                paddingHorizontal: 24,
+                paddingTop: 24,
+                paddingBottom: 220,
+                alignItems: "center",
               }}
+              showsVerticalScrollIndicator={false}
             >
-              <TouchableOpacity
-                onPress={() => setExerciseTimerModalVisible(false)}
+              {/* HEADER - Minimize Button */}
+              <View
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: colors.border,
-                  justifyContent: "center",
-                  alignItems: "center",
+                  width: "100%",
+                  flexDirection: "row",
+                  justifyContent: "flex-end",
+                  marginBottom: 20,
                 }}
               >
-                <X size={20} color={colors.text} />
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  onPress={() => setExerciseTimerModalVisible(false)}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: colors.border,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <X size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
 
-            {/* MAIN CONTENT */}
-            <View
-              style={{
-                flex: 1,
-                justifyContent: "center",
-                alignItems: "center",
-                width: "100%",
-              }}
-            >
+              {/* MAIN CONTENT */}
+              <View
+                style={{
+                  justifyContent: "center",
+                  alignItems: "center",
+                  width: "100%",
+                }}
+              >
               {/* BIG TIMER - TOP */}
               <View style={{ alignItems: "center", marginBottom: 20 }}>
                 <Text
@@ -7097,6 +7262,19 @@ export default function ActiveDietScreen({ navigation }: any) {
                   elevation: isReadingTime ? 8 : 0,
                 }}
               >
+                {isReadingTime && (
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: "600",
+                      color: "#f59e0b",
+                      textAlign: "center",
+                      marginBottom: 8,
+                    }}
+                  >
+                    Sıradaki egzersiz • {readingTimeLeft} sn dinlenme
+                  </Text>
+                )}
                 <Text
                   style={{
                     fontSize: 20,
@@ -7106,15 +7284,18 @@ export default function ActiveDietScreen({ navigation }: any) {
                     marginBottom: 12,
                   }}
                 >
-                  {currentExercisePlan?.exercises?.[
-                    currentExerciseStep
-                  ]?.name?.replace(/\s*\([^)]*\)/g, "") || "Egzersiz"}
+                  {(isReadingTime && readingTimeNextExerciseIndex != null
+                    ? currentExercisePlan?.exercises?.[readingTimeNextExerciseIndex]
+                    : currentExercisePlan?.exercises?.[currentExerciseStep]
+                  )?.name?.replace(/\s*\([^)]*\)/g, "") || "Egzersiz"}
                 </Text>
 
                 {/* Exercise Type & Details */}
                 {(() => {
                   const exercise =
-                    currentExercisePlan?.exercises?.[currentExerciseStep];
+                    isReadingTime && readingTimeNextExerciseIndex != null
+                      ? currentExercisePlan?.exercises?.[readingTimeNextExerciseIndex]
+                      : currentExercisePlan?.exercises?.[currentExerciseStep];
                   if (!exercise) return null;
 
                   const typeLabel =
@@ -7224,99 +7405,108 @@ export default function ActiveDietScreen({ navigation }: any) {
                 })()}
               </Animated.View>
             </View>
+            </ScrollView>
 
-            {/* BIG CONTROL BUTTONS */}
+            {/* ALTTA SABİT: her buton kendi gölgesiyle, sarmalayan kutu yok */}
             <View
               style={{
-                flexDirection: "row",
-                justifyContent: "center",
-                gap: 40, // Increased gap between buttons
-                width: "100%",
-                paddingBottom: 40,
-              }}
-            >
-              {/* PAUSE/RESUME BUTTON */}
-              <TouchableOpacity
-                onPress={
-                  exerciseTimerPaused ? resumeExerciseTimer : pauseExerciseTimer
-                }
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 40,
-                  backgroundColor: exerciseTimerPaused
-                    ? colors.primary
-                    : "#f59e0b",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 8,
-                }}
-              >
-                {exerciseTimerPaused ? (
-                  <Play size={32} color="#fff" />
-                ) : (
-                  <Pause size={32} color="#fff" />
-                )}
-              </TouchableOpacity>
-
-              {/* STOP BUTTON */}
-              <TouchableOpacity
-                onPress={stopExerciseTimer}
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 40,
-                  backgroundColor: "#ef4444",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 8,
-                }}
-              >
-                <Square size={32} color="#fff" />
-              </TouchableOpacity>
-            </View>
-
-            {/* BUTTON LABELS */}
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "center",
-                gap: 40, // Matched with button gap
-                width: "100%",
                 position: "absolute",
-                bottom: 20,
+                bottom: 0,
+                left: 0,
+                right: 0,
+                flexDirection: "column",
+                alignItems: "center",
+                paddingHorizontal: 24,
+                paddingBottom: Math.max(insets.bottom, 24),
               }}
             >
-              <Text
+              <View
                 style={{
-                  fontSize: 16,
-                  fontWeight: "600",
-                  color: colors.textMuted,
-                  width: 80,
-                  textAlign: "center",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 40,
                 }}
               >
-                {exerciseTimerPaused ? "Devam" : "Duraklat"}
-              </Text>
-              <Text
+                <TouchableOpacity
+                  onPress={
+                    exerciseTimerPaused
+                      ? resumeExerciseTimer
+                      : pauseExerciseTimer
+                  }
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: 40,
+                    backgroundColor: exerciseTimerPaused
+                      ? colors.primary
+                      : "#f59e0b",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.35,
+                    shadowRadius: 10,
+                    elevation: 8,
+                  }}
+                >
+                  {exerciseTimerPaused ? (
+                    <Play size={32} color="#fff" />
+                  ) : (
+                    <Pause size={32} color="#fff" />
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={stopExerciseTimer}
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: 40,
+                    backgroundColor: "#ef4444",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.35,
+                    shadowRadius: 10,
+                    elevation: 8,
+                  }}
+                >
+                  <Square size={32} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View
                 style={{
-                  fontSize: 16,
-                  fontWeight: "600",
-                  color: colors.textMuted,
-                  width: 80,
-                  textAlign: "center",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 40,
+                  marginTop: 8,
                 }}
               >
-                Durdur
-              </Text>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "600",
+                    color: colors.textMuted,
+                    width: 80,
+                    textAlign: "center",
+                  }}
+                >
+                  {exerciseTimerPaused ? "Devam" : "Duraklat"}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "600",
+                    color: colors.textMuted,
+                    width: 80,
+                    textAlign: "center",
+                  }}
+                >
+                  Durdur
+                </Text>
+              </View>
             </View>
           </View>
         </SafeAreaView>
@@ -7364,7 +7554,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   container: {
-    padding: 20,
+    paddingHorizontal: 12,
+    paddingTop: 20,
     paddingBottom: 40,
   },
   infoCard: {
@@ -7595,8 +7786,8 @@ const styles = StyleSheet.create({
   },
   fabWrapper: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 85 : 75,
-    right: 20,
+    bottom: Platform.OS === "ios" ? 98 : 88,
+    right: 12,
     flexDirection: "column",
     gap: 12,
     zIndex: 1000,

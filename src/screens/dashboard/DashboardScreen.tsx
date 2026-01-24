@@ -181,8 +181,8 @@ const styles = StyleSheet.create({
   },
   fabWrapper: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 35 : 25,
-    right: 20,
+    bottom: Platform.OS === "ios" ? 98 : 88,
+    right: 12,
   },
   mainFab: {
     width: 52,

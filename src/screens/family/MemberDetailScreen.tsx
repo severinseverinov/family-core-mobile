@@ -527,7 +527,10 @@ export default function MemberDetailScreen({ route, navigation }: any) {
             flexDirection: "row",
             justifyContent: "space-between",
             alignItems: "center",
-            marginBottom: hasActiveDiet ? 12 : 0,
+            marginBottom: 16,
+            paddingBottom: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
           }}>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
@@ -629,6 +632,47 @@ export default function MemberDetailScreen({ route, navigation }: any) {
               ios_backgroundColor={colors.border}
             />
           </View>
+
+          {/* DİYET / EGZERSİZ PROGRAMI OLUŞTUR BUTONLARI */}
+          {mealPreferences.diet_enabled !== false && (
+            <TouchableOpacity
+              onPress={() => setDietModalVisible(true)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 12,
+                backgroundColor: colors.primary + "20",
+                marginBottom: 8,
+              }}
+            >
+              <Apple size={18} color={colors.primary} style={{ marginRight: 8 }} />
+              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.primary }}>
+                7 Günlük Diyet Programı Oluştur
+              </Text>
+            </TouchableOpacity>
+          )}
+          {mealPreferences.exercise_enabled !== false && (
+            <TouchableOpacity
+              onPress={() => setExerciseModalVisible(true)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 12,
+                backgroundColor: colors.primary + "20",
+              }}
+            >
+              <Activity size={18} color={colors.primary} style={{ marginRight: 8 }} />
+              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.primary }}>
+                Egzersiz Programı Oluştur
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -869,6 +913,15 @@ export default function MemberDetailScreen({ route, navigation }: any) {
                     Alert.alert(
                       "Eksik Bilgi",
                       "Diyet programı oluşturmak için doğum tarihi gereklidir. Lütfen doğum tarihini girin."
+                    );
+                    return;
+                  }
+                  
+                  // 18 yaşından küçükler için ebeveyn onayı gerekli
+                  if (age < 18 && !isAdmin) {
+                    Alert.alert(
+                      "Ebeveyn Onayı Gerekli",
+                      "18 yaşından küçükler için diyet programı oluşturmak ebeveyn onayı gerektirir. Lütfen ailenizdeki yönetici (ebeveyn) ile iletişime geçin. Program ancak ebeveyn hesabıyla oluşturulabilir."
                     );
                     return;
                   }
@@ -1238,6 +1291,15 @@ export default function MemberDetailScreen({ route, navigation }: any) {
                     Alert.alert(
                       "Eksik Bilgi",
                       "Egzersiz programı oluşturmak için doğum tarihi gereklidir. Lütfen doğum tarihini girin."
+                    );
+                    return;
+                  }
+                  
+                  // 18 yaşından küçükler için ebeveyn onayı gerekli
+                  if (age < 18 && !isAdmin) {
+                    Alert.alert(
+                      "Ebeveyn Onayı Gerekli",
+                      "18 yaşından küçükler için egzersiz programı oluşturmak ebeveyn onayı gerektirir. Lütfen ailenizdeki yönetici (ebeveyn) ile iletişime geçin. Program ancak ebeveyn hesabıyla oluşturulabilir."
                     );
                     return;
                   }

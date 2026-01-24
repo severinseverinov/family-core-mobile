@@ -3985,16 +3985,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  // YENİ BUTON KONUMLANDIRMASI
+  // YENİ BUTON KONUMLANDIRMASI (Özet ekranıyla aynı yükseklik: 85/75)
   fabWrapper: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 85 : 75, // Alt menüye (70px) çok daha yakın
-    right: 20,
+    bottom: Platform.OS === "ios" ? 98 : 88,
+    right: 12,
     flexDirection: "column",
     gap: 12,
   },
   fabInventoryOffset: {
-    bottom: Platform.OS === "ios" ? 70 : 60,
+    bottom: Platform.OS === "ios" ? 98 : 88,
   },
   fabBase: {
     width: 50,
