@@ -45,11 +45,13 @@ import { fetchWeather } from "../../services/weather";
 
 export default function CalendarWidget({
   events = [],
+  routines = [],
   countryCode, // Opsiyonel prop
   selectedDate: controlledSelectedDate,
   onDateChange,
 }: {
   events: any[];
+  routines?: any[];
   countryCode?: string;
   selectedDate?: Date;
   onDateChange?: (date: Date) => void;
@@ -178,17 +180,62 @@ export default function CalendarWidget({
     }
   }, [activeCountryCode]);
 
+  const dayShort = (day: Date) =>
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day.getDay()];
+
+  const isRoutineInRange = (routine: any, day: Date) => {
+    const start = routine.start_date ? new Date(routine.start_date) : null;
+    const end = routine.end_date ? new Date(routine.end_date) : null;
+    if (start && day < startOfDay(start)) return false;
+    if (end && day > endOfDay(end)) return false;
+    return true;
+  };
+
+  const isRoutineOnDay = (routine: any, day: Date) => {
+    if (!isRoutineInRange(routine, day)) return false;
+    const recurrence = routine.recurrence_type || "daily";
+    if (recurrence === "weekly") {
+      return routine.days_of_week?.includes(dayShort(day));
+    }
+    if (recurrence === "monthly") {
+      return routine.day_of_months?.includes(day.getDate());
+    }
+    return true;
+  };
+
+  const getRoutineEventsForDay = (day: Date) => {
+    return (routines || [])
+      .filter(r => isRoutineOnDay(r, day))
+      .map((r: any) => {
+        const d = new Date(day);
+        const time = r.start_time || "09:00";
+        const [hh, mm] = String(time).split(":");
+        d.setHours(Number(hh) || 9, Number(mm) || 0, 0, 0);
+        return {
+          id: `routine-${r.id}-${d.toISOString().slice(0, 10)}`,
+          type: "routine",
+          title: r.title,
+          time: d.toISOString(),
+          shift_type: r.shift_type,
+        };
+      });
+  };
+
+  const getEventsForDay = (day: Date) => {
+    const dayEvents = events.filter(e => isSameDay(new Date(e.time), day));
+    const routineEvents = getRoutineEventsForDay(day);
+    return [...dayEvents, ...routineEvents];
+  };
+
   // Seçili gün verilerini hesapla
   const activeDayData = useMemo(() => {
-    const dayEvents = events.filter(e =>
-      isSameDay(new Date(e.time), selectedDate)
-    );
+    const dayEvents = getEventsForDay(selectedDate);
     // Holidays dizisi boşsa veya undefined ise hata vermesin
     const dayHoliday = (holidays || []).find(h =>
       isSameDay(new Date(h.date), selectedDate)
     );
     return { dayHoliday, dayEvents };
-  }, [selectedDate, events, holidays]);
+  }, [selectedDate, events, routines, holidays]);
 
   const handleSwipe = (direction: "left" | "right") => {
     if (viewMode === "daily") {
@@ -268,7 +315,20 @@ export default function CalendarWidget({
     if (type === "task") {
       return <Clock size={10} color={colors.primary} />;
     }
+    if (type === "routine") {
+      return <Clock size={10} color="#f59e0b" />;
+    }
     return <Info size={10} color={colors.textMuted} />;
+  };
+
+  const getEventPillBg = (ev: any) => {
+    if (ev.type === "task") return colors.primary + "22";
+    if (ev.type === "routine") {
+      if (ev.shift_type === "night") return "#2563eb22";
+      if (ev.shift_type === "evening") return "#8b5cf622";
+      return "#f59e0b22";
+    }
+    return colors.border + "40";
   };
 
   const panResponder = useMemo(
@@ -375,15 +435,11 @@ export default function CalendarWidget({
             const isSelected = isSameDay(day, selectedDate);
                 const isToday = isSameDay(day, new Date());
                 const dayWeatherMain = getDayWeatherMain(day);
-                const dayEvents = events.filter(e =>
-                  isSameDay(new Date(e.time), day)
-                );
+                const dayEvents = getEventsForDay(day);
                 const hasHoliday = (holidays || []).some(h =>
                   isSameDay(new Date(h.date), day)
                 );
-                const hasEvent = events.some(e =>
-                  isSameDay(new Date(e.time), day)
-                );
+                const hasEvent = dayEvents.length > 0;
 
             return (
               <TouchableOpacity
@@ -472,7 +528,7 @@ export default function CalendarWidget({
                       key={idx}
                       style={[
                         styles.eventPill,
-                        { backgroundColor: colors.background },
+                        { backgroundColor: getEventPillBg(ev) },
                       ]}
                     >
                           <View style={styles.eventPillIcon}>

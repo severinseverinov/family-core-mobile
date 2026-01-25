@@ -1,15 +1,15 @@
-import React from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
-import { RootStackParamList } from './types';
-import LoginScreen from '../screens/auth/LoginScreen';
-import SignUpScreen from '../screens/auth/SignUpScreen';
-import JoinScreen from '../screens/auth/JoinScreen';
+import React from "react";
+import { createStackNavigator } from "@react-navigation/stack";
+import { RootStackParamList } from "./types";
+import LoginScreen from "../screens/auth/LoginScreen";
+import SignUpScreen from "../screens/auth/SignUpScreen";
+import JoinScreen from "../screens/auth/JoinScreen";
 
 const Stack = createStackNavigator<RootStackParamList>();
 
 export default function AuthNavigator() {
   return (
-      <Stack.Navigator
+    <Stack.Navigator
       screenOptions={{
         headerShown: false,
         animationEnabled: false,
@@ -23,4 +23,3 @@ export default function AuthNavigator() {
     </Stack.Navigator>
   );
 }
-

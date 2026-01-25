@@ -23,7 +23,7 @@ export function useDashboardData(dateStr?: string) {
       if (!profile?.family_id) return null;
 
       // 2. Tüm widget verilerini paralel olarak çek (Performans için Promise.all)
-      const [eventsRes, membersRes, familyRes, petsRes, kitchenRes] =
+      const [eventsRes, membersRes, familyRes, petsRes, kitchenRes, routinesRes, todosRes] =
         await Promise.all([
           // Etkinlikler ve Görevler
           getDashboardItems(dateStr),
@@ -56,6 +56,21 @@ export function useDashboardData(dateStr?: string) {
           // Mutfak verileri (Envanter, Liste ve Bütçe)
           // Not: Tablo isimlerini projenize göre kontrol edin
           fetchKitchenData(profile.family_id),
+
+          // Günlük rutinler / okul / çalışma programı
+          supabase
+            .from("daily_routines")
+            .select("*")
+            .eq("family_id", profile.family_id)
+            .order("start_time", { ascending: true }),
+
+          // Kişisel yapılacaklar listesi (todo)
+          supabase
+            .from("todo_items")
+            .select("*")
+            .eq("family_id", profile.family_id)
+            .eq("profile_id", user.id)
+            .order("created_at", { ascending: false }),
         ]);
 
       return {
@@ -64,6 +79,8 @@ export function useDashboardData(dateStr?: string) {
         family: { family: familyRes.data },
         pets: { pets: petsRes.data || [] },
         kitchen: kitchenRes,
+        routines: { items: routinesRes.data || [] },
+        todos: { items: todosRes.data || [] },
       };
     },
     // Veri 5 dakika boyunca "taze" kabul edilir, gereksiz API isteği atılmaz

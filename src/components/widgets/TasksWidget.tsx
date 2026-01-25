@@ -12,12 +12,16 @@ interface TasksWidgetProps {
   initialItems: any[];
   hideHeader?: boolean;
   userRole?: string;
+  onAdd?: () => void;
+  emptyActionLabel?: string;
 }
 
 export default function TasksWidget({
   initialItems = [], // Varsayılan değer undefined hatasını engeller
   hideHeader = false,
   userRole = "member",
+  onAdd,
+  emptyActionLabel = "Görev Ekle",
 }: TasksWidgetProps) {
   const { colors, themeMode } = useTheme();
 
@@ -46,9 +50,18 @@ export default function TasksWidget({
       )}
 
       {safeItems.length === 0 ? (
-        <Text style={[styles.empty, { color: colors.textMuted }]}>
-          Henüz bir görev bulunmuyor.
-        </Text>
+        <View style={styles.emptyWrap}>
+          <Text style={[styles.empty, { color: colors.textMuted }]}>
+            Henüz bir görev bulunmuyor.
+          </Text>
+          {onAdd ? (
+            <TouchableOpacity onPress={onAdd} style={styles.emptyBtn}>
+              <Text style={[styles.emptyBtnText, { color: colors.primary }]}>
+                {emptyActionLabel}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : (
         safeItems.map(item => (
           <View
@@ -132,5 +145,8 @@ const styles = StyleSheet.create({
   actionRow: {
     marginLeft: 12,
   },
-  empty: { textAlign: "center", padding: 30, fontSize: 14 },
+  emptyWrap: { alignItems: "center", paddingVertical: 18 },
+  empty: { textAlign: "center", paddingHorizontal: 16, fontSize: 14 },
+  emptyBtn: { marginTop: 8 },
+  emptyBtnText: { fontWeight: "700", fontSize: 13 },
 });

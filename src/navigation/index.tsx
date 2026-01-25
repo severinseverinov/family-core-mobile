@@ -52,7 +52,7 @@ export default function AppNavigator() {
         const loc = await Location.getCurrentPositionAsync({});
         const data = await fetchWeather(
           loc.coords.latitude,
-          loc.coords.longitude
+          loc.coords.longitude,
         );
         const main = data?.current?.weather?.[0]?.main || "";
         const palette: Record<string, string> = {
@@ -75,7 +75,7 @@ export default function AppNavigator() {
         if (!cancelled) {
           setWeatherColor(palette[main] || fallbackTint);
           setWeatherImage(images[main] || images.Clouds);
-      }
+        }
       } catch (e) {
         if (!cancelled) setWeatherColor(fallbackTint);
       }
@@ -128,12 +128,12 @@ export default function AppNavigator() {
             backgroundColor="transparent"
           />
 
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
+          <Stack.Navigator
+            screenOptions={{
+              headerShown: false,
               cardStyle: { backgroundColor: colors.background },
               animation: "default",
-          gestureEnabled: false,
+              gestureEnabled: false,
             }}
           >
             {!user ? (
@@ -201,22 +201,25 @@ export default function AppNavigator() {
                 <Stack.Screen
                   name="ActiveDiet"
                   component={ActiveDietScreen}
-                  options={{ headerShown: false, title: "Aktif Diyet Programı" }}
+                  options={{
+                    headerShown: false,
+                    title: "Aktif Diyet Programı",
+                  }}
                 />
-            <Stack.Screen
+                <Stack.Screen
                   name="FinanceSettings"
                   component={FinanceSettingsScreen}
                   options={{ headerShown: false }}
-            />
-            <Stack.Screen
+                />
+                <Stack.Screen
                   name="FamilyFinance"
                   component={FamilyFinanceScreen}
                   options={{ headerShown: false, title: "Aile Finansları" }}
-            />
-          </>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+                />
+              </>
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
       </View>
     </View>
   );

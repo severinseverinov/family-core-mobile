@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from "react";
-import { View, Image, StyleSheet, Platform } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { View, Image, StyleSheet, Platform, PanResponder } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
   Home,
@@ -59,6 +59,7 @@ export default function MainNavigator() {
   const { profile } = useAuth();
   const transparentBg = hexToTransparent(colors.background);
   const [hasActiveDiet, setHasActiveDiet] = useState(false);
+  const tabRef = useRef<any>(null);
 
   const refreshDietStatus = useCallback(async () => {
     if (!profile?.id) return;
@@ -78,9 +79,55 @@ export default function MainNavigator() {
     }, [refreshDietStatus]),
   );
 
+  const tabNames = useMemo(() => {
+    const names = ["Home", "Mutfak"];
+    if (hasActiveDiet) names.push("Diet");
+    names.push("Pet", "Finance", "Hub");
+    return names;
+  }, [hasActiveDiet]);
+
+  const handleTabSwipe = useCallback(
+    (direction: "left" | "right") => {
+      const state = tabRef.current?.getState?.();
+      if (!state?.routes?.length) return;
+      const routes = state.routes;
+      const currentIndex =
+        typeof state.index === "number"
+          ? state.index
+          : routes.findIndex((r: any) => r.name === state.routeNames?.[0]);
+      if (currentIndex < 0) return;
+      const nextIndex =
+        direction === "left" ? currentIndex + 1 : currentIndex - 1;
+      if (nextIndex < 0 || nextIndex >= routes.length) return;
+      const nextRoute = routes[nextIndex]?.name;
+      if (nextRoute) tabRef.current?.navigate?.(nextRoute);
+    },
+    [],
+  );
+
+  const swipeResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => {
+          const { dx, dy } = gesture;
+          return Math.abs(dx) > 24 && Math.abs(dx) > Math.abs(dy) * 2;
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const { dx, vx } = gesture;
+          if (dx < -60 || vx < -0.6) handleTabSwipe("left");
+          else if (dx > 60 || vx > 0.6) handleTabSwipe("right");
+        },
+      }),
+    [handleTabSwipe],
+  );
+
   return (
-    <View style={{ flex: 1, backgroundColor: "transparent" }}>
+    <View
+      style={{ flex: 1, backgroundColor: "transparent" }}
+      {...swipeResponder.panHandlers}
+    >
       <Tab.Navigator
+        ref={tabRef}
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: colors.primary,

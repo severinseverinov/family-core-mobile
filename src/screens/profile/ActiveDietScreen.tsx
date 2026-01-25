@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
   Modal,
   TextInput,
   Switch,
@@ -89,12 +90,7 @@ import {
   getExerciseCalories,
 } from "../../services/dailyTracking";
 import * as Notifications from "expo-notifications";
-import {
-  generateDietPlan,
-  extractIngredientsFromDietPlan,
-  compareIngredientsWithInventory,
-  addIngredientsToShoppingList,
-} from "../../services/kitchen";
+import { generateDietPlan } from "../../services/kitchen";
 import {
   getDietPlanForDate,
   getActiveDietPlan,
@@ -109,7 +105,7 @@ import {
 import {
   playStartWhistle,
   playShortWhistle,
-  playTickOnce,
+  playTick,
   initAudioAndRequestPermission,
   setSoundsEnabled,
 } from "../../utils/exerciseSounds";
@@ -237,12 +233,6 @@ export default function ActiveDietScreen({ navigation }: any) {
   const [dietPlanModalVisible, setDietPlanModalVisible] = useState(false); // Diyet programı oluşturma modalı
   const [pendingDietPlan, setPendingDietPlan] = useState<any>(null); // Bekleyen diyet planı (onay için)
   const [dietPlanApprovalVisible, setDietPlanApprovalVisible] = useState(false); // Diyet planı onay modalı
-  const [ingredientComparisonVisible, setIngredientComparisonVisible] = useState(false); // Malzeme karşılaştırma modalı
-  const [ingredientComparison, setIngredientComparison] = useState<{
-    matched: Array<{ ingredient: any; inventoryItem: any }>;
-    unmatched: Array<{ ingredient: any; reason: string }>;
-  } | null>(null); // Malzeme karşılaştırma sonuçları
-  const [extractingIngredients, setExtractingIngredients] = useState(false); // Malzeme çıkarma durumu
   const [currentExercisePlan, setCurrentExercisePlan] = useState<
     ExercisePlan["exercise_plan"] | null
   >(null); // Günlük egzersiz planı
@@ -987,70 +977,7 @@ export default function ActiveDietScreen({ navigation }: any) {
             return;
           }
 
-          // Malzemeleri çıkar ve karşılaştır
-          const ingredientsResult = await extractIngredientsFromDietPlan(
-            result.dietPlan
-          );
-
-          if (ingredientsResult.error || !ingredientsResult.ingredients.length) {
-            // Malzeme çıkarılamadı, yine de devam et
-          } else {
-            const comparisonResult = await compareIngredientsWithInventory(
-              ingredientsResult.ingredients
-            );
-
-            if (!comparisonResult.error) {
-              // Karşılaştırma sonuçlarını sakla
-              setIngredientComparison(comparisonResult);
-              setPendingDietPlan({
-                dietPlan: result.dietPlan,
-                updatedPreferences: result.updatedPreferences,
-                startDate: format(todayDate, "yyyy-MM-dd"),
-                endDate: format(nextMonday, "yyyy-MM-dd"),
-              });
-
-              // Kullanıcıya bildir ve malzeme karşılaştırma ekranını göster
-              Alert.alert(
-                "Yeni Haftalık Program",
-                "Bu hafta için yeni diyet programınız hazırlandı. Malzeme kontrolü yapmak ister misiniz?",
-                [
-                  {
-                    text: "Daha Sonra",
-                    style: "cancel",
-                    onPress: async () => {
-                      // Direkt kaydet
-                      const { saveDietPlan } = await import("../../services/dietPlans");
-                      await saveDietPlan(
-                        format(todayDate, "yyyy-MM-dd"),
-                        format(nextMonday, "yyyy-MM-dd"),
-                        result.dietPlan,
-                        result.dietPlan.goal,
-                        result.dietPlan.daily_calories,
-                        result.dietPlan.diet_type,
-                      );
-                      const updatedPrefs = {
-                        ...member.meal_preferences,
-                        last_diet_plan_date: today,
-                      };
-                      await updateMemberDetails(profile.id, {
-                        meal_preferences: updatedPrefs,
-                      });
-                      await loadMember();
-                    },
-                  },
-                  {
-                    text: "Malzeme Kontrolü",
-                    onPress: () => {
-                      setIngredientComparisonVisible(true);
-                    },
-                  },
-                ],
-              );
-              return; // Modal gösterildi, burada dur
-            }
-          }
-
-          // Malzeme kontrolü yapılamadı, direkt kaydet
+          // Yeni diyet planını veritabanına kaydet
           const { saveDietPlan } = await import("../../services/dietPlans");
           const saveResult = await saveDietPlan(
             format(todayDate, "yyyy-MM-dd"),
@@ -1078,12 +1005,17 @@ export default function ActiveDietScreen({ navigation }: any) {
           // Kullanıcıya bildir
           Alert.alert(
             "Yeni Haftalık Program",
-            "Bu hafta için yeni diyet programınız hazırlandı.",
+            "Bu hafta için yeni diyet programınız hazırlandı. Onaylamak ister misiniz?",
             [
               {
-                text: "Tamam",
+                text: "Daha Sonra",
+                style: "cancel",
+              },
+              {
+                text: "Görüntüle",
                 onPress: async () => {
                   await loadMember();
+                  // Diyet planı gösterimini aç (isteğe bağlı)
                 },
               },
             ],
@@ -1097,56 +1029,6 @@ export default function ActiveDietScreen({ navigation }: any) {
     checkAndCreateNewDietPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [member?.meal_preferences?.last_diet_plan_date, profile?.id]);
-
-  // Diyet planını kaydet ve güncelle (helper)
-  const saveDietPlanAndUpdate = useCallback(async () => {
-    if (!pendingDietPlan || !member || !profile?.id) return;
-
-    setSaving(true);
-    try {
-      const { saveDietPlan } = await import("../../services/dietPlans");
-      const saveResult = await saveDietPlan(
-        pendingDietPlan.startDate,
-        pendingDietPlan.endDate,
-        pendingDietPlan.dietPlan,
-        pendingDietPlan.dietPlan.goal,
-        pendingDietPlan.dietPlan.daily_calories,
-        pendingDietPlan.dietPlan.diet_type,
-      );
-
-      if (saveResult.error) {
-        Alert.alert("Hata", "Diyet programı kaydedilemedi: " + saveResult.error);
-        setSaving(false);
-        return;
-      }
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const updatedPrefs = {
-        ...member.meal_preferences,
-        last_diet_plan_date: format(today, "yyyy-MM-dd"),
-      };
-
-      await updateMemberDetails(profile.id, {
-        meal_preferences: updatedPrefs,
-      });
-
-      setIngredientComparisonVisible(false);
-      setDietPlanApprovalVisible(false);
-      setDietPlanModalVisible(false);
-      setPendingDietPlan(null);
-      setIngredientComparison(null);
-      Alert.alert(
-        "Başarılı",
-        "Yeni haftalık diyet programınız hazırlandı!",
-      );
-      await loadMember();
-    } catch (error: any) {
-      Alert.alert("Hata", error.message || "Diyet programı kaydedilemedi.");
-    } finally {
-      setSaving(false);
-    }
-  }, [pendingDietPlan, member, profile?.id, loadMember]);
 
   // Member yüklendiğinde aylık verileri yükle
   useEffect(() => {
@@ -1398,6 +1280,7 @@ export default function ActiveDietScreen({ navigation }: any) {
             setReadingTimeLeft(10); // Sıfırla
             return 10;
           }
+          playTick().catch(() => {});
           return prev - 1;
         });
       }, 1000);
@@ -1413,23 +1296,6 @@ export default function ActiveDietScreen({ navigation }: any) {
     totalExerciseTime,
     remainingTime,
   ]);
-
-  // Okuma süresinde tik: her saniye yeniden başlat (ses dosyası 1 saniyeden kısa)
-  useEffect(() => {
-    if (!isReadingTime) return;
-    
-    // İlk tick'i hemen başlat
-    playTickOnce().catch(() => {});
-    
-    // Sonra her saniye tekrar başlat
-    const tickInterval = setInterval(() => {
-      playTickOnce().catch(() => {});
-    }, 1000);
-    
-    return () => {
-      clearInterval(tickInterval);
-    };
-  }, [isReadingTime]);
 
   // Okuma süresi animasyonu
   useEffect(() => {
@@ -2238,7 +2104,7 @@ export default function ActiveDietScreen({ navigation }: any) {
         <View
           style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
         >
-          <HeartbeatLoader size={60} variant="full" />
+          <HeartbeatLoader size={60} />
         </View>
       </SafeAreaView>
     );
@@ -3598,7 +3464,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                       ]}
                     >
                       {generatingExercisePlan ? (
-                        <HeartbeatLoader size={22} variant="inline" />
+                        <ActivityIndicator size="small" color="#fff" />
                       ) : (
                         <Text
                           style={[styles.modalButtonText, { color: "#fff" }]}
@@ -3739,7 +3605,10 @@ export default function ActiveDietScreen({ navigation }: any) {
                           }}
                         >
                           {generatingExercisePlan ? (
-                            <HeartbeatLoader size={22} variant="inline" />
+                            <ActivityIndicator
+                              size="small"
+                              color={colors.primary}
+                            />
                           ) : (
                             <RotateCcw size={18} color={colors.primary} />
                           )}
@@ -4612,6 +4481,30 @@ export default function ActiveDietScreen({ navigation }: any) {
               style={{ maxHeight: "80%" }}
               showsVerticalScrollIndicator={false}
             >
+              {/* TEMA / GÖRÜNÜM MODU */}
+              <View style={{ marginBottom: 16 }}>
+                <Text
+                  style={[
+                    styles.settingsSectionLabel,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  Tema
+                </Text>
+                <SelectionGroup
+                  label="Görünüm Modu"
+                  options={[
+                    { label: "Aydınlık", value: "light" },
+                    { label: "Karanlık", value: "dark" },
+                    { label: "Renkli", value: "colorful" },
+                  ]}
+                  selectedValue={themeMode}
+                  onSelect={(val: string) =>
+                    setThemeMode(val as "light" | "dark" | "colorful")
+                  }
+                />
+              </View>
+
               {/* SU İÇME HATIRLATICISI */}
               <View
                 style={[
@@ -4662,7 +4555,11 @@ export default function ActiveDietScreen({ navigation }: any) {
                   </View>
                   <View style={styles.settingsSwitchContainer}>
                     {savingWaterReminder ? (
-                      <HeartbeatLoader size={22} variant="inline" />
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.primary}
+                        style={{ marginRight: 8 }}
+                      />
                     ) : null}
                     <Switch
                       value={waterReminderEnabled}
@@ -4781,6 +4678,61 @@ export default function ActiveDietScreen({ navigation }: any) {
                   </TouchableOpacity>
                 </View>
               </View>
+
+              {/* EKRAN YERLEŞİMİ VE TÜM AYARLAR */}
+              <View
+                style={[
+                  styles.settingsItemContainer,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    marginTop: 12,
+                  },
+                ]}
+              >
+                <View style={styles.settingsItemRow}>
+                  <View style={styles.settingsItemLeft}>
+                    <View
+                      style={[
+                        styles.settingsIconCircleSmall,
+                        { backgroundColor: colors.primary + "20" },
+                      ]}
+                    >
+                      <Settings size={20} color={colors.primary} />
+                    </View>
+                    <View style={styles.settingsItemTextContainer}>
+                      <Text
+                        style={[
+                          styles.settingsItemTitleSmall,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Ekran yerleşimi ve tüm ayarlar
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsItemDescriptionSmall,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Dil, para birimi, tema ve diğer tercihler
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSettingsModalVisible(false);
+                      navigation.navigate("Settings");
+                    }}
+                    style={[
+                      styles.settingsActionButton,
+                      { backgroundColor: colors.primary },
+                    ]}
+                  >
+                    <ChevronRight size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -4816,7 +4768,7 @@ export default function ActiveDietScreen({ navigation }: any) {
             activeOpacity={0.8}
           >
             {savingActivity ? (
-              <HeartbeatLoader size={22} variant="inline" />
+              <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Droplet size={22} color="#fff" />
             )}
@@ -5278,7 +5230,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                       ]}
                     >
                       {savingActivity ? (
-                        <HeartbeatLoader size={22} variant="inline" />
+                        <ActivityIndicator size="small" color="#fff" />
                       ) : (
                         <Text
                           style={[styles.modalButtonText, { color: "#fff" }]}
@@ -5456,7 +5408,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                     ]}
                   >
                     {calculatingCalories ? (
-                      <HeartbeatLoader size={22} variant="inline" />
+                      <ActivityIndicator size="small" color="#fff" />
                     ) : (
                       <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                         Hesapla
@@ -5583,7 +5535,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                     ]}
                   >
                     {aiAnalyzing ? (
-                      <HeartbeatLoader size={22} variant="inline" />
+                      <ActivityIndicator size="small" color="#fff" />
                     ) : (
                       <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                         AI'ye Gönder
@@ -5734,7 +5686,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                     ]}
                   >
                     {calculatingExerciseCalories ? (
-                      <HeartbeatLoader size={22} variant="inline" />
+                      <ActivityIndicator size="small" color="#fff" />
                     ) : (
                       <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                         AI ile Hesapla
@@ -6198,7 +6150,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   ]}
                 >
                   {savingActivity ? (
-                    <HeartbeatLoader size={22} variant="inline" />
+                    <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <Check size={24} color="#fff" strokeWidth={2.5} />
                   )}
@@ -6484,7 +6436,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   ]}
                 >
                   {savingActivity ? (
-                    <HeartbeatLoader size={22} variant="inline" />
+                    <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <Check size={24} color="#fff" strokeWidth={2.5} />
                   )}
@@ -6631,7 +6583,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   disabled={saving || !targetWeightInput}
                 >
                   {saving ? (
-                    <HeartbeatLoader size={22} variant="inline" />
+                    <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                       Kaydet
@@ -6698,7 +6650,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                 disabled={saving || !newWeight}
               >
                 {saving ? (
-                  <HeartbeatLoader size={22} variant="inline" />
+                  <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                     Kaydet
@@ -6864,7 +6816,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                 disabled={saving}
               >
                 {saving ? (
-                  <HeartbeatLoader size={22} variant="inline" />
+                  <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                     Oluştur
@@ -7051,65 +7003,62 @@ export default function ActiveDietScreen({ navigation }: any) {
                 onPress={async () => {
                   if (!pendingDietPlan || !member || !profile?.id) return;
 
-                  // Önce malzemeleri çıkar ve karşılaştır
-                  setExtractingIngredients(true);
+                  setSaving(true);
                   try {
-                    const ingredientsResult = await extractIngredientsFromDietPlan(
-                      pendingDietPlan.dietPlan
+                    // Diyet planını veritabanına kaydet
+                    const { saveDietPlan } =
+                      await import("../../services/dietPlans");
+                    const saveResult = await saveDietPlan(
+                      pendingDietPlan.startDate,
+                      pendingDietPlan.endDate,
+                      pendingDietPlan.dietPlan,
+                      pendingDietPlan.dietPlan.goal,
+                      pendingDietPlan.dietPlan.daily_calories,
+                      pendingDietPlan.dietPlan.diet_type,
                     );
 
-                    if (ingredientsResult.error || !ingredientsResult.ingredients.length) {
+                    if (saveResult.error) {
                       Alert.alert(
-                        "Uyarı",
-                        ingredientsResult.error ||
-                          "Malzemeler çıkarılamadı. Yine de devam etmek ister misiniz?",
-                        [
-                          {
-                            text: "İptal",
-                            style: "cancel",
-                          },
-                          {
-                            text: "Devam Et",
-                            onPress: async () => {
-                              await saveDietPlanAndUpdate();
-                            },
-                          },
-                        ]
+                        "Hata",
+                        "Diyet programı kaydedilemedi: " + saveResult.error,
                       );
-                      setExtractingIngredients(false);
+                      setSaving(false);
                       return;
                     }
 
-                    // Malzemeleri envanter ve market listesi ile karşılaştır
-                    const comparisonResult = await compareIngredientsWithInventory(
-                      ingredientsResult.ingredients
-                    );
+                    // meal_preferences'ı güncelle
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const updatedPrefs = {
+                      ...member.meal_preferences,
+                      last_diet_plan_date: format(today, "yyyy-MM-dd"),
+                    };
 
-                    if (comparisonResult.error) {
-                      Alert.alert("Hata", comparisonResult.error);
-                      setExtractingIngredients(false);
-                      return;
-                    }
+                    await updateMemberDetails(profile.id, {
+                      meal_preferences: updatedPrefs,
+                    });
 
-                    // Karşılaştırma sonuçlarını sakla ve modal göster
-                    setIngredientComparison(comparisonResult);
                     setDietPlanApprovalVisible(false);
-                    setIngredientComparisonVisible(true);
+                    setPendingDietPlan(null);
+                    setDietPlanModalVisible(false);
+                    Alert.alert(
+                      "Başarılı",
+                      "Yeni haftalık diyet programınız hazırlandı!",
+                    );
+                    await loadMember();
                   } catch (error: any) {
                     Alert.alert(
                       "Hata",
-                      error.message || "Malzeme analizi yapılamadı.",
+                      error.message || "Diyet programı kaydedilemedi.",
                     );
                   } finally {
-                    setExtractingIngredients(false);
+                    setSaving(false);
                   }
                 }}
                 disabled={saving}
               >
-                {extractingIngredients ? (
-                  <HeartbeatLoader size={22} variant="inline" />
-                ) : saving ? (
-                  <HeartbeatLoader size={22} variant="inline" />
+                {saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                     Onayla ve Kaydet
@@ -7127,314 +7076,6 @@ export default function ActiveDietScreen({ navigation }: any) {
               >
                 <Text style={[styles.modalButtonText, { color: colors.text }]}>
                   İptal
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* MALZEME KARŞILAŞTIRMA MODAL */}
-      <Modal
-        visible={ingredientComparisonVisible}
-        transparent
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalCard,
-              { backgroundColor: colors.card, maxHeight: "90%", width: "90%" },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text
-                style={[
-                  styles.modalTitle,
-                  { color: colors.text, marginBottom: 16 },
-                ]}
-              >
-                Malzeme Karşılaştırması
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setIngredientComparisonVisible(false);
-                  setIngredientComparison(null);
-                }}
-              >
-                <X size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              style={{ maxHeight: "70%", width: "100%" }}
-              contentContainerStyle={{ paddingBottom: 16 }}
-            >
-              {ingredientComparison && (
-                <>
-                  {/* Eşleşen Malzemeler */}
-                  {ingredientComparison.matched.length > 0 && (
-                    <View style={{ marginBottom: 20 }}>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: colors.primary,
-                          marginBottom: 12,
-                        }}
-                      >
-                        ✓ Eşleşen Malzemeler ({ingredientComparison.matched.length})
-                      </Text>
-                      {ingredientComparison.matched.map((item, index) => (
-                        <View
-                          key={index}
-                          style={{
-                            marginBottom: 8,
-                            padding: 12,
-                            backgroundColor: colors.background,
-                            borderRadius: 8,
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              fontWeight: "600",
-                              color: colors.text,
-                              marginBottom: 4,
-                            }}
-                          >
-                            {item.ingredient.name}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: colors.textMuted,
-                            }}
-                          >
-                            Gerekli: {item.ingredient.quantity}{" "}
-                            {item.ingredient.unit}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: colors.textMuted,
-                            }}
-                          >
-                            Mevcut: {item.inventoryItem.quantity}{" "}
-                            {item.inventoryItem.unit}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {/* Eşleşmeyen Malzemeler */}
-                  {ingredientComparison.unmatched.length > 0 && (
-                    <View style={{ marginBottom: 20 }}>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#f59e0b",
-                          marginBottom: 12,
-                        }}
-                      >
-                        ⚠ Eksik Malzemeler ({ingredientComparison.unmatched.length})
-                      </Text>
-                      {ingredientComparison.unmatched.map((item, index) => (
-                        <View
-                          key={index}
-                          style={{
-                            marginBottom: 8,
-                            padding: 12,
-                            backgroundColor: colors.background,
-                            borderRadius: 8,
-                            borderWidth: 1,
-                            borderColor: "#f59e0b",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              fontWeight: "600",
-                              color: colors.text,
-                              marginBottom: 4,
-                            }}
-                          >
-                            {item.ingredient.name}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: colors.textMuted,
-                            }}
-                          >
-                            Miktar: {item.ingredient.quantity}{" "}
-                            {item.ingredient.unit}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: "#f59e0b",
-                              marginTop: 4,
-                            }}
-                          >
-                            {item.reason}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {ingredientComparison.matched.length === 0 &&
-                    ingredientComparison.unmatched.length === 0 && (
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          color: colors.textMuted,
-                          textAlign: "center",
-                          padding: 20,
-                        }}
-                      >
-                        Malzeme bulunamadı.
-                      </Text>
-                    )}
-                </>
-              )}
-            </ScrollView>
-
-            <View style={{ gap: 12, width: "100%", marginTop: 16 }}>
-              {ingredientComparison &&
-                ingredientComparison.unmatched.length > 0 && (
-                  <>
-                    <TouchableOpacity
-                      style={[
-                        styles.modalButton,
-                        { backgroundColor: colors.primary },
-                      ]}
-                      onPress={async () => {
-                        if (!ingredientComparison) return;
-                        const unmatchedIngredients =
-                          ingredientComparison.unmatched.map(
-                            (item) => item.ingredient
-                          );
-                        const result = await addIngredientsToShoppingList(
-                          unmatchedIngredients,
-                          false
-                        );
-                        if (result.success) {
-                          Alert.alert(
-                            "Başarılı",
-                            `${result.added} malzeme market listesine eklendi.`
-                          );
-                          await saveDietPlanAndUpdate();
-                        } else {
-                          Alert.alert("Hata", result.error || "Eklenemedi.");
-                        }
-                      }}
-                      disabled={saving || extractingIngredients}
-                    >
-                      {saving ? (
-                        <HeartbeatLoader size={22} variant="inline" />
-                      ) : (
-                        <Text
-                          style={[styles.modalButtonText, { color: "#fff" }]}
-                        >
-                          Sadece Ekle
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.modalButton,
-                        { backgroundColor: "#f59e0b" },
-                      ]}
-                      onPress={async () => {
-                        if (!ingredientComparison) return;
-                        const unmatchedIngredients =
-                          ingredientComparison.unmatched.map(
-                            (item) => item.ingredient
-                          );
-                        const result = await addIngredientsToShoppingList(
-                          unmatchedIngredients,
-                          true
-                        );
-                        if (result.success) {
-                          Alert.alert(
-                            "Başarılı",
-                            `${result.added} malzeme acil etiketiyle market listesine eklendi.`
-                          );
-                          await saveDietPlanAndUpdate();
-                        } else {
-                          Alert.alert("Hata", result.error || "Eklenemedi.");
-                        }
-                      }}
-                      disabled={saving || extractingIngredients}
-                    >
-                      {saving ? (
-                        <HeartbeatLoader size={22} variant="inline" />
-                      ) : (
-                        <Text
-                          style={[styles.modalButtonText, { color: "#fff" }]}
-                        >
-                          Acil Etiketiyle Ekle
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  </>
-                )}
-
-              {ingredientComparison &&
-                ingredientComparison.unmatched.length === 0 && (
-                  <TouchableOpacity
-                    style={[
-                      styles.modalButton,
-                      { backgroundColor: colors.primary },
-                    ]}
-                    onPress={async () => {
-                      await saveDietPlanAndUpdate();
-                    }}
-                    disabled={saving || extractingIngredients}
-                  >
-                    {saving ? (
-                      <HeartbeatLoader size={22} variant="inline" />
-                    ) : (
-                      <Text style={[styles.modalButtonText, { color: "#fff" }]}>
-                        Onayla ve Kaydet
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: colors.border }]}
-                onPress={() => {
-                  setIngredientComparisonVisible(false);
-                  setDietPlanApprovalVisible(true);
-                }}
-                disabled={saving || extractingIngredients}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.text }]}>
-                  Geri Dön
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: colors.border }]}
-                onPress={() => {
-                  setIngredientComparisonVisible(false);
-                  setIngredientComparison(null);
-                  setDietPlanApprovalVisible(false);
-                  setPendingDietPlan(null);
-                  setDietPlanModalVisible(true);
-                }}
-                disabled={saving || extractingIngredients}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.text }]}>
-                  Tekrar Oluştur
                 </Text>
               </TouchableOpacity>
             </View>
@@ -7469,7 +7110,6 @@ export default function ActiveDietScreen({ navigation }: any) {
                   width: "100%",
                   flexDirection: "row",
                   justifyContent: "flex-end",
-                  paddingTop: 24,
                   marginBottom: 20,
                 }}
               >
