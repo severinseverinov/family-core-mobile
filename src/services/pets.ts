@@ -337,35 +337,120 @@ export async function addPetVaccination(
 
   if (error) return { success: false, error: error.message };
 
-  // 2. Gelecek tarih varsa Hatırlatıcı (Notification) Tablosuna Ekle
-  // Not: Bu basit bir hatırlatma kaydıdır. Gerçek push notification için backend tetikleyicisi gerekir.
-  if (nextDueDate) {
-    // Pet ismini bulalım
-    const { data: pet } = await supabase
-      .from("pets")
-      .select("name")
-      .eq("id", petId)
-      .single();
+  const { data: pet } = await supabase
+    .from("pets")
+    .select("name")
+    .eq("id", petId)
+    .single();
 
+  const { sendPushToFamily } = await import("./notifications");
+  await sendPushToFamily({
+    familyId: profile.family_id,
+    title: "Pet aşısı eklendi",
+    body: `${pet?.name || "Pet"} için ${name} aşısı kaydedildi.${nextDueDate ? ` Sonraki tarih: ${nextDueDate}` : ""}`,
+    excludeUserId: user.id,
+    dataType: "pet_vaccination_added",
+  });
+
+  if (nextDueDate) {
     await supabase.from("notifications").insert({
       family_id: profile.family_id,
-      user_id: user?.id, // Kendine hatırlatma (veya herkese)
+      user_id: user?.id,
       title: `Aşı Hatırlatması: ${pet?.name}`,
       message: `${pet?.name} için ${name} aşısının zamanı geldi (${nextDueDate}).`,
       is_read: false,
-      created_at: new Date(nextDueDate).toISOString(), // Gelecek tarihli kayıt (Uygulama bunu tarih gelince göstermeli)
+      created_at: new Date(nextDueDate).toISOString(),
     });
   }
 
   return { success: true };
 }
 
-// ... (Diğer completeRoutine, reviewRoutine fonksiyonları aynen kalacak) ...
 export async function completeRoutine(routineId: string, imageUri: string) {
-  // ... (Eski kod aynen kalacak)
-  // Önceki cevaptaki fonksiyon içeriğini buraya yapıştırın veya silmeyin
-  // Yer darlığı nedeniyle tekrar yazmıyorum, önceki kod geçerli.
-  return { success: true }; // Placeholder
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Oturum yok" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile?.family_id) return { success: false, error: "Aile bulunamadı" };
+
+  const { data: routine } = await supabase
+    .from("pet_routines")
+    .select("id, family_id, pet_id, title, points, requires_verification")
+    .eq("id", routineId)
+    .eq("family_id", profile.family_id)
+    .single();
+  if (!routine) return { success: false, error: "Rutin bulunamadı" };
+
+  let proofUrl: string | null = null;
+  if (imageUri) {
+    try {
+      const fileExt = imageUri.split(".").pop() || "jpg";
+      const fileName = `routine_logs/${profile.family_id}/${routineId}-${Date.now()}.${fileExt}`;
+      const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: "base64",
+      });
+      await supabase.storage
+        .from("pet-proofs")
+        .upload(fileName, decode(base64), { contentType: `image/${fileExt}` });
+      const { data: { publicUrl } } = supabase.storage
+        .from("pet-proofs")
+        .getPublicUrl(fileName);
+      proofUrl = publicUrl;
+    } catch (e) {
+      console.warn("Rutin kanıtı yüklenemedi:", e);
+    }
+  }
+
+  const status = routine.requires_verification ? "pending_approval" : "approved";
+  const { data: log, error: logError } = await supabase
+    .from("pet_routine_logs")
+    .insert({
+      routine_id: routineId,
+      family_id: profile.family_id,
+      user_id: user.id,
+      proof_url: proofUrl,
+      status,
+      completed_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (logError) return { success: false, error: logError.message };
+
+  const { sendPushToFamily } = await import("./notifications");
+  const { data: pet } = await supabase
+    .from("pets")
+    .select("name")
+    .eq("id", routine.pet_id)
+    .single();
+
+  const { data: parents } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("family_id", profile.family_id)
+    .in("role", ["owner", "admin"])
+    .neq("id", user.id);
+
+  const parentIds = (parents || []).map((p: any) => p.id);
+  if (parentIds.length > 0) {
+    const bodySuffix = routine.requires_verification ? " Onay bekliyor." : " Tamamlandı.";
+    await sendPushToFamily({
+      familyId: profile.family_id,
+      title: "Pet rutini tamamlandı",
+      body: `${pet?.name || "Pet"} için "${routine.title}" rutini tamamlandı.${bodySuffix}`,
+      excludeUserId: user.id,
+      targetUserIds: parentIds,
+      dataType: "pet_routine_completed",
+    });
+  }
+
+  return { success: true };
 }
 
 export async function reviewRoutine(

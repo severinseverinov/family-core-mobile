@@ -187,6 +187,61 @@ export async function completeEvent(eventId: string) {
 
   if (error) return { error: error.message };
 
+  // Bildirim gönder
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.family_id) {
+    if (event.requires_verification) {
+      // Onay gerekiyorsa ebeveynlere bildir
+      const { data: parents } = await supabase
+        .from("profiles")
+        .select("id, push_token, role")
+        .eq("family_id", profile.family_id)
+        .in("role", ["owner", "admin"])
+        .neq("id", user.id); // Tamamlayan kişi bildirim almasın
+
+      const tokens = (parents || [])
+        .map((p: any) => p.push_token)
+        .filter(Boolean);
+
+      if (tokens.length > 0) {
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Accept-Encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(
+            tokens.map((token: string) => ({
+              to: token,
+              sound: "default",
+              title: "Görev tamamlandı - Onay bekliyor",
+              body: `${event.title} tamamlandı, onayınızı bekliyor.`,
+              data: { type: "event_approval" },
+            }))
+          ),
+        });
+      }
+    } else {
+      if (event.created_by && event.created_by !== user.id) {
+        const { sendPushToFamily } = await import("./notifications");
+        await sendPushToFamily({
+          familyId: profile.family_id,
+          title: "Görev tamamlandı",
+          body: `${event.title} tamamlandı.`,
+          excludeUserId: user.id,
+          targetUserIds: [event.created_by],
+          dataType: "event_completed",
+        });
+      }
+    }
+  }
+
   if (!event.requires_verification && event.points > 0) {
     try {
       await givePoints(user.id, event.points, `${event.title} tamamlandı`);
@@ -249,6 +304,41 @@ export async function approveEvent(eventId: string) {
     }
   }
 
+  // Tamamlayan kişiye bildirim gönder (onaylayan hariç)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("family_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.family_id && event.completed_by && event.completed_by !== user.id) {
+    const { data: completer } = await supabase
+      .from("profiles")
+      .select("push_token")
+      .eq("id", event.completed_by)
+      .single();
+
+    if (completer?.push_token) {
+      await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip, deflate",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([
+          {
+            to: completer.push_token,
+            sound: "default",
+            title: "Görev onaylandı",
+            body: `${event.title} göreviniz onaylandı!`,
+            data: { type: "event_approved" },
+          },
+        ]),
+      });
+    }
+  }
+
   return { success: true };
 }
 
@@ -292,12 +382,13 @@ export async function rejectEvent(eventId: string) {
   return { success: true };
 }
 
-// 6. Etkinlik Oluştur
+// 6. Etkinlik Oluştur (assignedTo: atanacak üye id’leri; varsa sadece onlara bildirim)
 export async function createEvent(
   title: string,
   start_date: string,
   end_date?: string,
-  type: string = "event"
+  type: string = "event",
+  assignedTo?: string[]
 ) {
   const {
     data: { user },
@@ -315,7 +406,7 @@ export async function createEvent(
     end_date ||
     new Date(new Date(start_date).getTime() + 60 * 60 * 1000).toISOString();
 
-  const { error } = await supabase.from("events").insert({
+  const insertPayload: any = {
     family_id: profile.family_id,
     created_by: user.id,
     title,
@@ -323,9 +414,28 @@ export async function createEvent(
     end_date: finalEndDate,
     type,
     is_all_day: false,
-  });
+  };
+  if (assignedTo?.length) {
+    insertPayload.assigned_to = assignedTo.join(",");
+  }
+
+  const { error } = await supabase.from("events").insert(insertPayload);
 
   if (error) return { error: error.message };
+
+  const { sendPushToFamily } = await import("./notifications");
+  const notifTitle = type === "task" ? "Yeni görev oluşturuldu" : "Yeni etkinlik oluşturuldu";
+  const notifBody = `${title} ${type === "task" ? "görevi" : "etkinliği"} oluşturuldu.`;
+
+  await sendPushToFamily({
+    familyId: profile.family_id,
+    title: notifTitle,
+    body: notifBody,
+    excludeUserId: user.id,
+    targetUserIds: assignedTo?.length ? assignedTo : undefined,
+    dataType: assignedTo?.length ? "task_assigned" : "event_created",
+  });
+
   return { success: true };
 }
 

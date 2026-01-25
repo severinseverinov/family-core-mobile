@@ -100,3 +100,51 @@ export async function registerForPushNotificationsAsync() {
 
   return token;
 }
+
+/** Aile üyelerine push bildirim gönder. targetUserIds verilirse sadece onlara, yoksa tüm aileye (excludeUserId hariç). */
+export async function sendPushToFamily(params: {
+  familyId: string;
+  title: string;
+  body: string;
+  excludeUserId?: string;
+  targetUserIds?: string[];
+  dataType?: string;
+}) {
+  const { familyId, title, body, excludeUserId, targetUserIds, dataType = "generic" } = params;
+  try {
+    const { data: members } = await supabase
+      .from("profiles")
+      .select("id, push_token")
+      .eq("family_id", familyId);
+
+    const filtered = (members || []).filter((m: any) => {
+      if (!m.push_token) return false;
+      if (excludeUserId && m.id === excludeUserId) return false;
+      if (targetUserIds && targetUserIds.length > 0) return targetUserIds.includes(m.id);
+      return true;
+    });
+
+    const tokens = filtered.map((m: any) => m.push_token);
+    if (tokens.length === 0) return;
+
+    const messages = tokens.map((token: string) => ({
+      to: token,
+      sound: "default",
+      title,
+      body,
+      data: { type: dataType },
+    }));
+
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(messages),
+    });
+  } catch (e) {
+    console.warn("Push bildirimi gönderilemedi:", e);
+  }
+}

@@ -76,6 +76,25 @@ export async function addExpense(
 
   if (expError) return { success: false, error: expError.message };
 
+  const { sendPushToFamily } = await import("./notifications");
+  const { data: parents } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("family_id", profile.family_id)
+    .in("role", ["owner", "admin"])
+    .neq("id", user.id);
+  const parentIds = (parents || []).map((p: any) => p.id);
+  if (parentIds.length > 0) {
+    await sendPushToFamily({
+      familyId: profile.family_id,
+      title: "Finans işlemi eklendi",
+      body: `${category}: ${amount} TL${description ? ` — ${description}` : ""}`,
+      excludeUserId: user.id,
+      targetUserIds: parentIds,
+      dataType: "finance_expense_added",
+    });
+  }
+
   // 2. Eğer kategori 'Mutfak' ise mutfak bütçesini de güncelle
   if (category === "Mutfak") {
     const monthKey = new Date().toISOString().slice(0, 7); // Örn: "2026-01"

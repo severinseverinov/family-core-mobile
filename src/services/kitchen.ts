@@ -202,13 +202,51 @@ export async function approveInventoryItem(itemId: string) {
       return { error: "Yetkisiz işlem." };
     }
 
+    // Envanter öğesini getir (istek sahibini bulmak için)
+    const { data: item } = await supabase
+      .from("inventory")
+      .select("requested_by, product_name")
+      .eq("id", itemId)
+      .single();
+
     const { error } = await supabase
       .from("inventory")
       .update({ is_approved: true })
       .eq("id", itemId)
     .eq("family_id", profile.family_id);
 
-    return { success: !error, error: error?.message };
+    if (error) return { success: false, error: error?.message };
+
+    // İstek sahibine bildirim gönder (onaylayan hariç)
+    if (item?.requested_by && item.requested_by !== user.id) {
+      const { data: requester } = await supabase
+        .from("profiles")
+        .select("push_token")
+        .eq("id", item.requested_by)
+        .single();
+
+      if (requester?.push_token) {
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Accept-Encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify([
+            {
+              to: requester.push_token,
+              sound: "default",
+              title: "Envanter onaylandı",
+              body: `${item.product_name} envanter talebiniz onaylandı.`,
+              data: { type: "inventory_approved" },
+            },
+          ]),
+        });
+      }
+    }
+
+    return { success: true, error: null };
   } catch (error: any) {
     return { error: error.message };
   }
@@ -219,7 +257,8 @@ async function notifyFamilyMembers(
   title: string,
   body: string,
   audience: "parents" | "members" = "parents",
-  memberIds: string[] = []
+  memberIds: string[] = [],
+  excludeUserId?: string // Kendi yaptığı işlemden bildirim almasın
 ) {
   try {
     const { data: members } = await supabase
@@ -228,6 +267,10 @@ async function notifyFamilyMembers(
       .eq("family_id", familyId);
 
     const filtered = (members || []).filter((member: any) => {
+      // Kendi yaptığı işlemden bildirim almasın
+      if (excludeUserId && member.id === excludeUserId) {
+        return false;
+      }
       if (audience === "parents") {
         return ["owner", "admin"].includes(member.role);
       }
@@ -289,7 +332,8 @@ export async function notifyMealPollPublished(payload: {
       payload.title,
       payload.summary,
       payload.audience || "parents",
-      payload.memberIds || []
+      payload.memberIds || [],
+      user.id // Yayınlayan kişi bildirim almasın
     );
     return { success: true };
   } catch (error: any) {
@@ -343,7 +387,8 @@ export async function createMealPoll(input: {
         "Yemek anketi yayınlandı",
         "Yeni yemek anketi hazır.",
         input.audience,
-        input.memberIds || []
+        input.memberIds || [],
+        user.id // Anketi oluşturan kişi bildirim almasın
       );
     }
 
@@ -556,13 +601,14 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
           .update({ is_active: false })
           .eq("id", pollId);
 
-        // Anket oluşturana bildirim gönder
+        // Anket oluşturana bildirim gönder (eğer oy veren değilse)
         await notifyFamilyMembers(
           profile.family_id,
           "Anket tamamlandı",
           "Ankette herkes oy verdi. Sonuçları onaylayabilirsiniz.",
           "members",
-          [poll.created_by]
+          [poll.created_by],
+          profile.id // Oy veren kişi bildirim almasın
         );
       }
     }
@@ -721,7 +767,8 @@ export async function approveMealPoll(pollId: string) {
         "Eksik malzeme listesi güncellendi",
         `Eksik ürünler listeye eklendi: ${missingItems.join(", ")}`,
         poll.audience === "members" ? "members" : "parents",
-        poll.member_ids || []
+        poll.member_ids || [],
+        user.id // Onaylayan kişi bildirim almasın
       );
     }
 

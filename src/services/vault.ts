@@ -152,6 +152,20 @@ export async function addVaultItem(itemData: {
       .insert(dbData);
     if (insertError) throw insertError;
 
+    const { sendPushToFamily } = await import("./notifications");
+    const targetUserIds =
+      itemData.visibility === "member" && (itemData.assignedTo?.length ?? 0) > 0
+        ? itemData.assignedTo
+        : undefined;
+    await sendPushToFamily({
+      familyId: profile.family_id,
+      title: "Vault öğesi eklendi",
+      body: `"${itemData.title}" kasa öğesi eklendi.`,
+      excludeUserId: user?.id,
+      targetUserIds,
+      dataType: "vault_item_added",
+    });
+
     return { success: true };
   } catch (error: any) {
     return { error: error.message };
