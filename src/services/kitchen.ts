@@ -2001,3 +2001,227 @@ export async function toggleShoppingItem(itemId: string, isCompleted: boolean) {
     return { error: error.message };
   }
 }
+
+// Diyet planından malzemeleri çıkar (Gemini API ile)
+export async function extractIngredientsFromDietPlan(dietPlan: any): Promise<{
+  ingredients: Array<{ name: string; quantity: string; unit: string }>;
+  error: string | null;
+}> {
+  try {
+    if (!geminiApiKey) {
+      return { ingredients: [], error: "Gemini API key tanımlı değil." };
+    }
+
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    // Tüm yemekleri topla
+    const allMeals: string[] = [];
+    if (dietPlan?.daily_meal_plans) {
+      dietPlan.daily_meal_plans.forEach((dayPlan: any) => {
+        if (dayPlan.meals) {
+          dayPlan.meals.forEach((meal: any) => {
+            if (meal.meal) {
+              allMeals.push(meal.meal);
+            }
+          });
+        }
+      });
+    }
+
+    if (allMeals.length === 0) {
+      return { ingredients: [], error: "Diyet planında yemek bulunamadı." };
+    }
+
+    const mealsText = allMeals.join("\n");
+
+    const prompt = `Aşağıdaki haftalık diyet programındaki tüm yemekler için gerekli malzemeleri çıkar. Her malzeme için miktar ve birim bilgisi de ver.
+
+Yemekler:
+${mealsText}
+
+Sadece JSON formatında döndür, başka bir şey yazma:
+{
+  "ingredients": [
+    {
+      "name": "malzeme adı",
+      "quantity": "miktar (sayı veya yaklaşık)",
+      "unit": "birim (kg, gr, adet, yemek kaşığı, vb.)"
+    }
+  ]
+}
+
+Önemli:
+- Aynı malzeme birden fazla yemekte kullanılıyorsa, toplam miktarı hesapla
+- Birimleri standartlaştır (ör: 500 gr yerine 0.5 kg)
+- Sadece gerçek malzemeleri listele, baharat ve soslar dahil`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text().replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(text);
+
+    return {
+      ingredients: parsed.ingredients || [],
+      error: null,
+    };
+  } catch (error: any) {
+    return { ingredients: [], error: error.message || "Malzemeler çıkarılamadı." };
+  }
+}
+
+// Malzemeleri envanter ve market listesi ile karşılaştır
+export async function compareIngredientsWithInventory(
+  ingredients: Array<{ name: string; quantity: string; unit: string }>
+): Promise<{
+  matched: Array<{ ingredient: any; inventoryItem: any }>;
+  unmatched: Array<{ ingredient: any; reason: string }>;
+  error: string | null;
+}> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user)
+      return { matched: [], unmatched: [], error: "Kullanıcı bulunamadı." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id)
+      return { matched: [], unmatched: [], error: "Aile bilgisi bulunamadı." };
+
+    // Envanteri getir
+    const { data: inventory } = await supabase
+      .from("inventory")
+      .select("id, product_name, quantity, unit")
+      .eq("family_id", profile.family_id)
+      .eq("is_approved", true);
+
+    // Market listesini getir
+    const { data: shoppingList } = await supabase
+      .from("shopping_list")
+      .select("id, product_name, quantity, unit")
+      .eq("family_id", profile.family_id)
+      .eq("is_completed", false);
+
+    const inventoryItems = inventory || [];
+    const shoppingItems = shoppingList || [];
+
+    const matched: Array<{ ingredient: any; inventoryItem: any }> = [];
+    const unmatched: Array<{ ingredient: any; reason: string }> = [];
+
+    for (const ingredient of ingredients) {
+      // Önce envanterde ara
+      const inventoryMatch = inventoryItems.find((item: any) =>
+        isProductMatch(ingredient.name, item.product_name)
+      );
+
+      if (inventoryMatch) {
+        matched.push({
+          ingredient,
+          inventoryItem: inventoryMatch,
+        });
+        continue;
+      }
+
+      // Sonra market listesinde ara
+      const shoppingMatch = shoppingItems.find((item: any) =>
+        isProductMatch(ingredient.name, item.product_name)
+      );
+
+      if (shoppingMatch) {
+        matched.push({
+          ingredient,
+          inventoryItem: shoppingMatch,
+        });
+        continue;
+      }
+
+      // Hiçbirinde yok
+      unmatched.push({
+        ingredient,
+        reason: "Envanterde ve market listesinde bulunamadı",
+      });
+    }
+
+    return { matched, unmatched, error: null };
+  } catch (error: any) {
+    return {
+      matched: [],
+      unmatched: [],
+      error: error.message || "Karşılaştırma yapılamadı.",
+    };
+  }
+}
+
+// Market listesine malzeme ekle
+export async function addIngredientsToShoppingList(
+  ingredients: Array<{ name: string; quantity: string; unit: string }>,
+  isUrgent: boolean = false
+): Promise<{ success: boolean; error: string | null; added: number }> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user)
+      return { success: false, error: "Kullanıcı bulunamadı.", added: 0 };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("family_id, role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.family_id)
+      return { success: false, error: "Aile bilgisi bulunamadı.", added: 0 };
+
+    // Mevcut market listesini getir (tekrar eklemeyi önlemek için)
+    const { data: existingShopping } = await supabase
+      .from("shopping_list")
+      .select("product_name")
+      .eq("family_id", profile.family_id)
+      .eq("is_completed", false);
+
+    const existingProductNames = new Set(
+      (existingShopping || []).map((item: any) =>
+        normalizeProductName(item.product_name)
+      )
+    );
+
+    const isParent = ["owner", "admin"].includes(profile?.role || "");
+    let added = 0;
+
+    for (const ingredient of ingredients) {
+      const normalizedName = normalizeProductName(ingredient.name);
+      if (existingProductNames.has(normalizedName)) {
+        continue; // Zaten listede var
+      }
+
+      const { error } = await supabase.from("shopping_list").insert({
+        family_id: profile.family_id,
+        product_name: ingredient.name,
+        quantity: ingredient.quantity || "1",
+        unit: ingredient.unit || "adet",
+        is_urgent: isUrgent,
+        is_approved: isParent,
+        requested_by: isParent ? null : user.id,
+      });
+
+      if (!error) {
+        added++;
+        existingProductNames.add(normalizedName);
+      }
+    }
+
+    return { success: true, error: null, added };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || "Market listesine eklenemedi.",
+      added: 0,
+    };
+  }
+}
