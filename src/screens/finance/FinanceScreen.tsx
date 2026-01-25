@@ -29,13 +29,15 @@ import {
   Settings,
   Filter,
   Trash2,
-  Edit2, // Düzenleme ikonu
-  Check, // Güncelleme ikonu
-  X, // İptal ikonu
+  Edit2,
+  Check,
+  X,
+  Layout,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import ModernInput from "../../components/ui/ModernInput";
 import SelectionGroup from "../../components/ui/SelectionGroup";
+import GenelAyarlarModal from "../../components/modals/GenelAyarlarModal";
 import {
   getExpenses,
   addExpense,
@@ -51,7 +53,8 @@ const screenWidth = Dimensions.get("window").width;
 export default function FinanceScreen({ navigation }: any) {
   const { colors, themeMode } = useTheme();
   const isLight = themeMode === "light";
-  const scrollRef = useRef<ScrollView>(null); // Sayfayı yukarı kaydırmak için
+  const scrollRef = useRef<ScrollView>(null);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState("owner");
@@ -269,19 +272,33 @@ export default function FinanceScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => changeMonth(1)}>
           <ChevronRight color={colors.text} />
         </TouchableOpacity>
-        {isParent && (
+        <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.settingsBtn}
-            onPress={() =>
-              navigation.navigate("FinanceSettings", {
-                monthKey: selectedMonth,
-              })
-            }
+            onPress={() => setSettingsModalVisible(true)}
           >
-            <Settings size={22} color={colors.text} />
+            <Layout size={22} color={colors.text} />
           </TouchableOpacity>
-        )}
+          {isParent && (
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() =>
+                navigation.navigate("FinanceSettings", {
+                  monthKey: selectedMonth,
+                })
+              }
+            >
+              <Settings size={22} color={colors.text} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
+
+      <GenelAyarlarModal
+        visible={settingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+        navigation={navigation}
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -638,7 +655,14 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   monthText: { fontSize: 17, fontWeight: "800", textTransform: "capitalize" },
-  settingsBtn: { position: "absolute", right: 20, padding: 10 },
+  headerRight: {
+    position: "absolute",
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  settingsBtn: { padding: 10 },
   summaryCard: {
     marginHorizontal: 8,
     padding: 22,

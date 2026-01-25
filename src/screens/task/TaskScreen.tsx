@@ -7,17 +7,19 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from "react-native";
-import { Plus, ListFilter, Calendar } from "lucide-react-native";
+import { Plus, Settings } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDashboardData } from "../../hooks/useDashboardData";
 import TasksWidget from "../../components/widgets/TasksWidget";
+import GenelAyarlarModal from "../../components/modals/GenelAyarlarModal";
 
 export default function TaskScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { profile } = useAuth();
   const { data } = useDashboardData();
   const [filter, setFilter] = useState<"today" | "upcoming">("today");
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
 
   const tasks =
     data?.events?.items?.filter((i: any) => i.type === "task") || [];
@@ -31,12 +33,20 @@ export default function TaskScreen({ navigation }: any) {
             {filter === "today" ? "Bugünkü İşlerin" : "Yaklaşan Görevler"}
           </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.addBtn, { backgroundColor: colors.primary }]}
-          onPress={() => navigation.navigate("AddTask")}
-        >
-          <Plus size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => setSettingsModalVisible(true)}
+            style={[styles.settingsBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+          >
+            <Settings size={20} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}
+            onPress={() => navigation.navigate("AddTask")}
+          >
+            <Plus size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.filterRow}>
@@ -81,12 +91,18 @@ export default function TaskScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-      <TasksWidget
+        <TasksWidget
           initialItems={tasks}
           hideHeader={true}
           userRole={profile?.role || "member"}
-      />
+        />
       </ScrollView>
+
+      <GenelAyarlarModal
+        visible={settingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+        navigation={navigation}
+      />
     </SafeAreaView>
   );
 }
@@ -97,6 +113,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 24,
     alignItems: "center",
+  },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  settingsBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
   },
   title: { fontSize: 28, fontWeight: "900" },
   sub: { fontSize: 14, marginTop: 4 },

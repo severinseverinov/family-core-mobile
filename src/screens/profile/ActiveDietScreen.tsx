@@ -33,6 +33,7 @@ import { tr } from "date-fns/locale";
 import { format } from "date-fns";
 import {
   ChevronLeft,
+  ChevronRight,
   Apple,
   Calendar,
   CheckCircle2,
@@ -112,7 +113,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ActiveDietScreen({ navigation }: any) {
-  const { colors, themeMode } = useTheme();
+  const { colors, themeMode, setThemeMode } = useTheme();
   const isLight = themeMode === "light";
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
@@ -4453,7 +4454,30 @@ export default function ActiveDietScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            {/* SU İÇME HATIRLATICISI */}
+            <ScrollView
+              style={{ maxHeight: "80%" }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* TEMA / GÖRÜNÜM MODU */}
+              <View style={{ marginBottom: 16 }}>
+                <Text style={[styles.settingsSectionLabel, { color: colors.textMuted }]}>
+                  Tema
+                </Text>
+                <SelectionGroup
+                  label="Görünüm Modu"
+                  options={[
+                    { label: "Aydınlık", value: "light" },
+                    { label: "Karanlık", value: "dark" },
+                    { label: "Renkli", value: "colorful" },
+                  ]}
+                  selectedValue={themeMode}
+                  onSelect={(val: string) =>
+                    setThemeMode(val as "light" | "dark" | "colorful")
+                  }
+                />
+              </View>
+
+              {/* SU İÇME HATIRLATICISI */}
             <View
               style={[
                 styles.settingsItemContainer,
@@ -4626,6 +4650,62 @@ export default function ActiveDietScreen({ navigation }: any) {
                 </TouchableOpacity>
               </View>
             </View>
+
+              {/* EKRAN YERLEŞİMİ VE TÜM AYARLAR */}
+              <View
+                style={[
+                  styles.settingsItemContainer,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    marginTop: 12,
+                  },
+                ]}
+              >
+                <View style={styles.settingsItemRow}>
+                  <View style={styles.settingsItemLeft}>
+                    <View
+                      style={[
+                        styles.settingsIconCircleSmall,
+                        { backgroundColor: colors.primary + "20" },
+                      ]}
+                    >
+                      <Settings size={20} color={colors.primary} />
+                    </View>
+                    <View style={styles.settingsItemTextContainer}>
+                      <Text
+                        style={[
+                          styles.settingsItemTitleSmall,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Ekran yerleşimi ve tüm ayarlar
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsItemDescriptionSmall,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Dil, para birimi, tema ve diğer tercihler
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSettingsModalVisible(false);
+                      navigation.navigate("Settings");
+                    }}
+                    style={[
+                      styles.settingsActionButton,
+                      { backgroundColor: colors.primary },
+                    ]}
+                  >
+                    <ChevronRight size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -8020,6 +8100,12 @@ const styles = StyleSheet.create({
   settingsItem: {
     paddingVertical: 16,
     borderBottomWidth: 1,
+  },
+  settingsSectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 8,
+    textTransform: "uppercase",
   },
   settingsItemContainer: {
     borderRadius: 16,

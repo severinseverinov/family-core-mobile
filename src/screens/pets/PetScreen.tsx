@@ -56,6 +56,7 @@ import {
   updatePet, // YENİ EKLENDİ
 } from "../../services/pets";
 import { getFamilyMembers } from "../../services/family";
+import GenelAyarlarModal from "../../components/modals/GenelAyarlarModal";
 
 const { width } = Dimensions.get("window");
 
@@ -76,6 +77,7 @@ export default function PetScreen({ navigation }: any) {
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
 
   // --- MODAL STATES ---
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [addRoutineVisible, setAddRoutineVisible] = useState(false);
   const [healthModalVisible, setHealthModalVisible] = useState(false);
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
@@ -318,13 +320,24 @@ END:VCARD`;
       >
         {/* HEADER & STORIES */}
         <View style={styles.headerContainer}>
-          <View style={styles.textHeader}>
-            <Text style={[styles.mainTitle, { color: colors.text }]}>
-              Evcil Dostlarımız
-            </Text>
-            <Text style={[styles.subTitle, { color: colors.textMuted }]}>
-              Bakım ve Sağlık Rutinleri
-            </Text>
+          <View style={styles.headerRow}>
+            <View style={styles.textHeader}>
+              <Text style={[styles.mainTitle, { color: colors.text }]}>
+                Evcil Dostlarımız
+              </Text>
+              <Text style={[styles.subTitle, { color: colors.textMuted }]}>
+                Bakım ve Sağlık Rutinleri
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setSettingsModalVisible(true)}
+              style={[
+                styles.settingsBtn,
+                { backgroundColor: colors.background, borderColor: colors.border },
+              ]}
+            >
+              <Settings size={20} color={colors.text} />
+            </TouchableOpacity>
           </View>
 
           <ScrollView
@@ -1193,6 +1206,12 @@ END:VCARD`;
             </View>
           </View>
         </Modal>
+
+        <GenelAyarlarModal
+          visible={settingsModalVisible}
+          onClose={() => setSettingsModalVisible(false)}
+          navigation={navigation}
+        />
     </ScrollView>
     </SafeAreaView>
   );
@@ -1201,7 +1220,22 @@ END:VCARD`;
 const styles = StyleSheet.create({
   container: { paddingBottom: 100 },
   headerContainer: { paddingVertical: 10, paddingBottom: 20 },
-  textHeader: { paddingHorizontal: 20, marginBottom: 15 },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    marginBottom: 15,
+  },
+  textHeader: { flex: 1, paddingHorizontal: 0 },
+  settingsBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+  },
   mainTitle: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5 },
   subTitle: { fontSize: 14, fontWeight: "500" },
   storiesContainer: { paddingHorizontal: 20, gap: 15 },

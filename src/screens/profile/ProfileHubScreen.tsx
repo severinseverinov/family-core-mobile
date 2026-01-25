@@ -22,12 +22,14 @@ import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { getMemberById, FamilyMember } from "../../services/family";
+import GenelAyarlarModal from "../../components/modals/GenelAyarlarModal";
 
 export default function ProfileHubScreen({ navigation }: any) {
   const { colors, themeMode } = useTheme();
   const isLight = themeMode === "light";
   const { profile } = useAuth();
   const [qrVisible, setQrVisible] = useState(false);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const isParent = ["owner", "admin"].includes(profile?.role || "");
 
   const vCardData = `BEGIN:VCARD
@@ -41,6 +43,16 @@ END:VCARD`;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <TouchableOpacity
+        onPress={() => setSettingsModalVisible(true)}
+        style={[
+          styles.settingsFloatingBtn,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        <Settings size={22} color={colors.text} />
+      </TouchableOpacity>
+
       <ScrollView contentContainerStyle={styles.container}>
         {/* ÜST PROFİL BÖLÜMÜ */}
         <View style={styles.profileHeader}>
@@ -219,15 +231,33 @@ END:VCARD`;
                 ve iletişim bilgilerinize ulaşılabilir.
               </Text>
           </View>
-        </View>
+          </View>
         </Modal>
       </ScrollView>
+
+      <GenelAyarlarModal
+        visible={settingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+        navigation={navigation}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 20, paddingTop: 15, paddingBottom: 30 },
+  settingsFloatingBtn: {
+    position: "absolute",
+    top: 12,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    zIndex: 10,
+  },
   profileHeader: { alignItems: "center", marginVertical: 20 },
   avatarContainer: { position: "relative" },
   mainAvatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 4 },

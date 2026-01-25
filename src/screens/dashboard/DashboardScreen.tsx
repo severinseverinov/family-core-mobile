@@ -52,8 +52,9 @@ export default function DashboardScreen({ navigation }: any) {
       ]}
     >
       <StatusBar animated translucent backgroundColor={colors.background} />
+
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView
+        <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
@@ -69,6 +70,12 @@ export default function DashboardScreen({ navigation }: any) {
           {/* 1. HAVA DURUMU WIDGET */}
           <View style={styles.fullWidthWidget}>
             <WeatherWidget selectedDate={selectedDate} />
+            <View
+              style={[
+                styles.sectionSeparator,
+                { backgroundColor: (colors.border || "#e5e7eb") + "50" },
+              ]}
+            />
           </View>
 
           {/* 2. TAKVİM WIDGET (GENİŞ) */}
@@ -77,6 +84,12 @@ export default function DashboardScreen({ navigation }: any) {
               events={events}
               selectedDate={selectedDate}
               onDateChange={setSelectedDate}
+            />
+            <View
+              style={[
+                styles.sectionSeparator,
+                { backgroundColor: (colors.border || "#e5e7eb") + "50" },
+              ]}
             />
           </View>
 
@@ -94,20 +107,18 @@ export default function DashboardScreen({ navigation }: any) {
                   })
                 }
               >
-                {/* Not: Navigasyon yapınıza göre burası TaskScreen'e gitmeli, genellikle Stack içinde tanımlı olmalı */}
                 <Text
                   style={{
                     color: colors.primary,
                     fontWeight: "600",
                     fontSize: 13,
                   }}
-          >
-            Tümünü Gör
-            </Text>
+                >
+                  Tümünü Gör
+                </Text>
               </TouchableOpacity>
-          </View>
+            </View>
 
-            {/* Görevler alanı */}
             <View
               style={[styles.tasksContainer, { backgroundColor: colors.card }]}
             >
@@ -117,9 +128,14 @@ export default function DashboardScreen({ navigation }: any) {
                 userRole={profile?.role || "member"}
               />
             </View>
+            <View
+              style={[
+                styles.sectionSeparator,
+                { backgroundColor: (colors.border || "#e5e7eb") + "50" },
+              ]}
+            />
           </View>
 
-          <View style={{ height: 100 }} />
         </ScrollView>
       </View>
 
@@ -146,22 +162,31 @@ export default function DashboardScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  scrollContent: { paddingVertical: 10 },
+  scrollContent: {
+    paddingHorizontal: 12,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
   fullWidthWidget: {
     marginBottom: 18,
-    paddingHorizontal: 8,
+    paddingHorizontal: 0,
+    width: "100%",
+  },
+  sectionSeparator: {
+    height: 1,
+    marginTop: 14,
     width: "100%",
   },
   tasksSection: {
     marginTop: 5,
-    paddingHorizontal: 8,
+    paddingHorizontal: 0,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
   },
   sectionTitle: {
     fontSize: 17,
@@ -170,14 +195,13 @@ const styles = StyleSheet.create({
   },
   tasksContainer: {
     borderRadius: 28,
-    padding: 8,
+    padding: 12,
     minHeight: 160,
     width: "100%",
-    elevation: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
+    elevation: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
   },
   fabWrapper: {
     position: "absolute",
