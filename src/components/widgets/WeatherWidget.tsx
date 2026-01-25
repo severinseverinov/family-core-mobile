@@ -1,11 +1,7 @@
 import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { useTheme } from "../../contexts/ThemeContext";
+import HeartbeatLoader from "../ui/HeartbeatLoader";
 import { useQuery } from "@tanstack/react-query";
 import * as Location from "expo-location";
 import {
@@ -17,7 +13,6 @@ import {
   CloudOff,
 } from "lucide-react-native";
 import { fetchWeather } from "../../services/weather";
-import { useTheme } from "../../contexts/ThemeContext"; //
 import { addDays, isSameDay, startOfDay } from "date-fns";
 
 type WeatherWidgetProps = {
@@ -25,7 +20,7 @@ type WeatherWidgetProps = {
 };
 
 export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
-  const { colors, themeMode } = useTheme(); //
+  const { colors, themeMode } = useTheme();
 
   const { data, isLoading } = useQuery({
     queryKey: ["weather"],
@@ -99,7 +94,7 @@ export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
     ? "Bugün"
     : selected.toLocaleDateString("tr-TR", { weekday: "short" });
 
-  if (isLoading) return <ActivityIndicator color={colors.primary} />; //
+  if (isLoading) return <HeartbeatLoader size={44} variant="full" />;
   const hasWeatherData = Boolean(current && data?.hourly);
 
   return (
@@ -107,8 +102,8 @@ export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
       style={[
         styles.container,
         {
-          backgroundColor: colors.card, //
-          borderRadius: themeMode === "colorful" ? 25 : 20, //
+          backgroundColor: colors.card,
+          borderRadius: themeMode === "colorful" ? 25 : 20,
         },
       ]}
     >

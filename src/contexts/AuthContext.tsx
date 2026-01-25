@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../services/supabase";
-import { registerForPushNotificationsAsync } from "../services/notifications";
+import {
+  registerForPushNotificationsAsync,
+  ensureNotificationChannels,
+} from "../services/notifications";
 
 type AuthContextType = {
   session: Session | null;
@@ -74,6 +77,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     if (session?.user) {
+      ensureNotificationChannels().catch(() => {});
       registerForPushNotificationsAsync();
     }
   }, [session?.user]);

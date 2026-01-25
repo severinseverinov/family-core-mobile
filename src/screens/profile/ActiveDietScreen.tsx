@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
   Modal,
   TextInput,
   Switch,
@@ -2239,7 +2238,7 @@ export default function ActiveDietScreen({ navigation }: any) {
         <View
           style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
         >
-          <HeartbeatLoader size={60} />
+          <HeartbeatLoader size={60} variant="full" />
         </View>
       </SafeAreaView>
     );
@@ -3599,7 +3598,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                       ]}
                     >
                       {generatingExercisePlan ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <HeartbeatLoader size={22} variant="inline" />
                       ) : (
                         <Text
                           style={[styles.modalButtonText, { color: "#fff" }]}
@@ -3740,10 +3739,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                           }}
                         >
                           {generatingExercisePlan ? (
-                            <ActivityIndicator
-                              size="small"
-                              color={colors.primary}
-                            />
+                            <HeartbeatLoader size={22} variant="inline" />
                           ) : (
                             <RotateCcw size={18} color={colors.primary} />
                           )}
@@ -4666,11 +4662,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   </View>
                   <View style={styles.settingsSwitchContainer}>
                     {savingWaterReminder ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={colors.primary}
-                        style={{ marginRight: 8 }}
-                      />
+                      <HeartbeatLoader size={22} variant="inline" />
                     ) : null}
                     <Switch
                       value={waterReminderEnabled}
@@ -4824,7 +4816,7 @@ export default function ActiveDietScreen({ navigation }: any) {
             activeOpacity={0.8}
           >
             {savingActivity ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <HeartbeatLoader size={22} variant="inline" />
             ) : (
               <Droplet size={22} color="#fff" />
             )}
@@ -5286,7 +5278,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                       ]}
                     >
                       {savingActivity ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <HeartbeatLoader size={22} variant="inline" />
                       ) : (
                         <Text
                           style={[styles.modalButtonText, { color: "#fff" }]}
@@ -5464,7 +5456,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                     ]}
                   >
                     {calculatingCalories ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <HeartbeatLoader size={22} variant="inline" />
                     ) : (
                       <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                         Hesapla
@@ -5591,7 +5583,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                     ]}
                   >
                     {aiAnalyzing ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <HeartbeatLoader size={22} variant="inline" />
                     ) : (
                       <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                         AI'ye Gönder
@@ -5742,7 +5734,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                     ]}
                   >
                     {calculatingExerciseCalories ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <HeartbeatLoader size={22} variant="inline" />
                     ) : (
                       <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                         AI ile Hesapla
@@ -6206,7 +6198,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   ]}
                 >
                   {savingActivity ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <HeartbeatLoader size={22} variant="inline" />
                   ) : (
                     <Check size={24} color="#fff" strokeWidth={2.5} />
                   )}
@@ -6492,7 +6484,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   ]}
                 >
                   {savingActivity ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <HeartbeatLoader size={22} variant="inline" />
                   ) : (
                     <Check size={24} color="#fff" strokeWidth={2.5} />
                   )}
@@ -6639,7 +6631,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   disabled={saving || !targetWeightInput}
                 >
                   {saving ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <HeartbeatLoader size={22} variant="inline" />
                   ) : (
                     <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                       Kaydet
@@ -6706,7 +6698,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                 disabled={saving || !newWeight}
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <HeartbeatLoader size={22} variant="inline" />
                 ) : (
                   <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                     Kaydet
@@ -6872,7 +6864,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <HeartbeatLoader size={22} variant="inline" />
                 ) : (
                   <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                     Oluştur
@@ -7115,9 +7107,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                 disabled={saving}
               >
                 {extractingIngredients ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <HeartbeatLoader size={22} variant="inline" />
                 ) : saving ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <HeartbeatLoader size={22} variant="inline" />
                 ) : (
                   <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                     Onayla ve Kaydet
@@ -7345,7 +7337,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                       disabled={saving || extractingIngredients}
                     >
                       {saving ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <HeartbeatLoader size={22} variant="inline" />
                       ) : (
                         <Text
                           style={[styles.modalButtonText, { color: "#fff" }]}
@@ -7383,7 +7375,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                       disabled={saving || extractingIngredients}
                     >
                       {saving ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <HeartbeatLoader size={22} variant="inline" />
                       ) : (
                         <Text
                           style={[styles.modalButtonText, { color: "#fff" }]}
@@ -7408,7 +7400,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                     disabled={saving || extractingIngredients}
                   >
                     {saving ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <HeartbeatLoader size={22} variant="inline" />
                     ) : (
                       <Text style={[styles.modalButtonText, { color: "#fff" }]}>
                         Onayla ve Kaydet

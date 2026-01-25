@@ -34,8 +34,13 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPreferences, updatePreferences } from "../../services/settings";
 import SelectionGroup from "../../components/ui/SelectionGroup";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { setupWaterRemindersForFamily } from "../../services/waterReminder";
+import {
+  getNotificationPermissionStatus,
+  requestNotificationPermissions,
+  openAppNotificationSettings,
+} from "../../services/notifications";
 
 export default function SettingsScreen() {
   const { colors, themeMode, setThemeMode } = useTheme();
@@ -53,10 +58,13 @@ export default function SettingsScreen() {
   const [notificationVibration, setNotificationVibration] = useState(true);
   const [notificationBadge, setNotificationBadge] = useState(true);
 
+  const [permissionStatus, setPermissionStatus] = useState<"granted" | "denied" | "undetermined">("undetermined");
   const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    loadPrefs();
-  }, []);
+
+  const loadPermissionStatus = async () => {
+    const s = await getNotificationPermissionStatus();
+    setPermissionStatus(s);
+  };
 
   const loadPrefs = async () => {
     const prefs = await getPreferences();
@@ -74,6 +82,13 @@ export default function SettingsScreen() {
       setNotificationBadge(notifSettings.badge !== false);
     }
   };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadPrefs();
+      loadPermissionStatus();
+    }, []),
+  );
 
 
   const handleSave = async () => {
@@ -99,8 +114,17 @@ export default function SettingsScreen() {
     });
     setLoading(false);
     if (res.success) {
+      await loadPrefs();
       Alert.alert("Başarılı", "Tercihleriniz güncellendi.");
       if (navigation.canGoBack()) navigation.goBack();
+    } else if ((res as any).partialSuccess) {
+      await loadPrefs();
+      Alert.alert(
+        "Kısmi Kayıt",
+        typeof res.error === "string" ? res.error : "Bildirim ayarları kaydedilemedi.",
+      );
+    } else {
+      Alert.alert("Hata", typeof res.error === "string" ? res.error : "Ayarlar kaydedilemedi.");
     }
   };
 
@@ -155,6 +179,98 @@ export default function SettingsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
             BİLDİRİM AYARLARI
           </Text>
+
+          {/* Bildirim izni kartı */}
+          <View
+            style={[
+              styles.permissionCard,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.permissionRow}>
+              <View style={styles.permissionLeft}>
+                <View
+                  style={[
+                    styles.permissionIconWrap,
+                    {
+                      backgroundColor:
+                        permissionStatus === "granted"
+                          ? "#22c55e20"
+                          : permissionStatus === "denied"
+                            ? "#ef444420"
+                            : colors.border + "40",
+                    },
+                  ]}
+                >
+                  <Bell
+                    size={22}
+                    color={
+                      permissionStatus === "granted"
+                        ? "#22c55e"
+                        : permissionStatus === "denied"
+                          ? "#ef4444"
+                          : colors.textMuted
+                    }
+                  />
+                </View>
+                <View>
+                  <Text style={[styles.permissionTitle, { color: colors.text }]}>
+                    Bildirim izni
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.permissionActions}>
+              {permissionStatus !== "granted" && (
+                <TouchableOpacity
+                  onPress={async () => {
+                    const { granted } = await requestNotificationPermissions();
+                    await loadPermissionStatus();
+                    if (granted) {
+                      Alert.alert(
+                        "Başarılı",
+                        "Bildirim izni verildi. Uygulama kapalıyken de önemli bildirimler iletilecektir.",
+                      );
+                    } else {
+                      Alert.alert(
+                        "İzin gerekli",
+                        "Bildirimler için izin verilmedi. Ayarlar üzerinden açabilirsiniz.",
+                        [
+                          { text: "Tamam" },
+                          {
+                            text: "Ayarlara git",
+                            onPress: openAppNotificationSettings,
+                          },
+                        ],
+                      );
+                    }
+                  }}
+                  style={[styles.permissionBtn, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={styles.permissionBtnText}>
+                    {permissionStatus === "undetermined" ? "İzni ver" : "Tekrar dene"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {permissionStatus === "denied" && (
+                <TouchableOpacity
+                  onPress={openAppNotificationSettings}
+                  style={[
+                    styles.permissionBtnOutline,
+                    { borderColor: colors.primary },
+                  ]}
+                >
+                  <ChevronRight size={18} color={colors.primary} />
+                  <Text style={[styles.permissionBtnOutlineText, { color: colors.primary }]}>
+                    Ayarlara git
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
 
           <View style={styles.notificationIconSection}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted, marginBottom: 10 }]}>
@@ -348,6 +464,68 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  permissionCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+  },
+  permissionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  permissionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 12,
+  },
+  permissionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  permissionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  permissionDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.85,
+  },
+  permissionActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 14,
+  },
+  permissionBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  permissionBtnText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  permissionBtnOutline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  permissionBtnOutlineText: {
+    fontWeight: "600",
+    fontSize: 14,
   },
   notificationIconSection: {
     marginBottom: 20,

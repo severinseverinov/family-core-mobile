@@ -7,12 +7,12 @@ import {
   StyleSheet,
   Alert,
   Modal,
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from "react-native";
+import HeartbeatLoader from "../ui/HeartbeatLoader";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { X, Lock, ImageIcon, FileIcon, UploadCloud } from "lucide-react-native";
@@ -327,7 +327,7 @@ export default function AddVaultItemModal({
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator color="#fff" />
+                  <HeartbeatLoader size={22} variant="inline" />
                 ) : (
                   <Text style={styles.actionTextPrimary}>Güvenli Kaydet</Text>
                 )}

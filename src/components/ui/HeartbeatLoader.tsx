@@ -2,25 +2,29 @@ import React, { useEffect, useRef } from "react";
 import { Animated, View, StyleSheet, Image } from "react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 
-interface HeartbeatLoaderProps {
+export interface HeartbeatLoaderProps {
   size?: number;
+  /** "full" = sayfa yükleme (padding, ortalı); "inline" = buton / küçük alan */
+  variant?: "full" | "inline";
 }
 
-export default function HeartbeatLoader({ size = 50 }: HeartbeatLoaderProps) {
+export default function HeartbeatLoader({
+  size = 50,
+  variant = "full",
+}: HeartbeatLoaderProps) {
   const { themeMode } = useTheme();
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Kalp atışı (nabız) animasyonu
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.15, // Hafif büyüme (tasarımı bozmamak için %15 yeterli)
+          toValue: 1.15,
           duration: 500,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
-          toValue: 1, // Eski boyuta dönüş
+          toValue: 1,
           duration: 500,
           useNativeDriver: true,
         }),
@@ -28,7 +32,6 @@ export default function HeartbeatLoader({ size = 50 }: HeartbeatLoaderProps) {
     ).start();
   }, []);
 
-  // Temaya göre assets/icons klasöründen ilgili PNG'yi seçiyoruz
   const getIconSource = () => {
     switch (themeMode) {
       case "dark":
@@ -40,8 +43,14 @@ export default function HeartbeatLoader({ size = 50 }: HeartbeatLoaderProps) {
     }
   };
 
+  const isInline = variant === "inline";
+  const containerStyle = [
+    styles.container,
+    isInline ? styles.inline : styles.full,
+  ];
+
   return (
-    <View style={styles.container}>
+    <View style={containerStyle}>
       <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
         <Image
           source={getIconSource()}
@@ -57,6 +66,11 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: "center",
     alignItems: "center",
-    padding: 10,
+  },
+  full: {
+    padding: 16,
+  },
+  inline: {
+    padding: 4,
   },
 });

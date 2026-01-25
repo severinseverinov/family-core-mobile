@@ -245,7 +245,7 @@ export default function FinanceScreen({ navigation }: any) {
   if (loading)
     return (
       <View style={styles.center}>
-        <HeartbeatLoader size={60} />
+        <HeartbeatLoader size={60} variant="full" />
       </View>
     );
 

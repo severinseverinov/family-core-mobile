@@ -8,11 +8,11 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from "react-native";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   UserPlus,
@@ -237,7 +237,7 @@ export default function FamilyManagementScreen({ navigation }: any) {
                 disabled={!isAdmin || savingFamily}
               >
                 {savingFamily ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <HeartbeatLoader size={20} variant="inline" />
                 ) : (
                   <Text style={styles.primarySmallBtnText}>Kaydet</Text>
                 )}
@@ -312,7 +312,11 @@ export default function FamilyManagementScreen({ navigation }: any) {
   );
 
   if (loading)
-    return <ActivityIndicator style={{ flex: 1 }} color={colors.primary} />;
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background }}>
+        <HeartbeatLoader size={56} variant="full" />
+      </View>
+    );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>

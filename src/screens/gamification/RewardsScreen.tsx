@@ -6,8 +6,8 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
 } from "react-native";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ShoppingBag,
@@ -109,7 +109,11 @@ export default function RewardsScreen() {
   };
 
   if (isLoading)
-    return <ActivityIndicator style={{ flex: 1 }} color="#6366f1" />;
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <HeartbeatLoader size={56} variant="full" />
+      </View>
+    );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

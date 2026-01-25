@@ -9,12 +9,12 @@ import {
   Image,
   Modal,
   RefreshControl,
-  ActivityIndicator,
   TextInput,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -695,7 +695,7 @@ END:VCARD`;
                       onPress={handleUpdatePet}
                     >
                       {uploading ? (
-                        <ActivityIndicator color="#fff" />
+                        <HeartbeatLoader size={22} variant="inline" />
                       ) : (
                         <>
                           <Save size={20} color="#fff" />
@@ -1018,7 +1018,7 @@ END:VCARD`;
                       onPress={handleAddHealthRecord}
                     >
                       {uploading ? (
-                        <ActivityIndicator color="#fff" />
+                        <HeartbeatLoader size={22} variant="inline" />
                       ) : (
                         <Text style={{ color: "#fff", fontWeight: "bold" }}>
                           Kaydet
@@ -1130,7 +1130,7 @@ END:VCARD`;
                   onPress={handleCreateRoutine}
                 >
                   {uploading ? (
-                    <ActivityIndicator color="#fff" />
+                    <HeartbeatLoader size={22} variant="inline" />
                   ) : (
                     <Text style={{ color: "#fff", fontWeight: "bold" }}>
                       Oluştur
@@ -1150,7 +1150,7 @@ END:VCARD`;
               <Text style={{ color: colors.text, marginBottom: 20 }}>
                 Fotoğraf Gönderiliyor...
               </Text>
-              <ActivityIndicator color={colors.primary} size="large" />
+              <HeartbeatLoader size={48} variant="full" />
             </View>
           </View>
         </Modal>

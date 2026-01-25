@@ -9,9 +9,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Dimensions,
 } from "react-native";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { Camera, ChevronLeft, Save, PawPrint } from "lucide-react-native";
@@ -222,7 +222,7 @@ export default function AddPetScreen({ navigation }: any) {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <HeartbeatLoader size={22} variant="inline" />
             ) : (
               <>
                 <Save size={20} color="#fff" />

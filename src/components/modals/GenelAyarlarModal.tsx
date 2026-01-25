@@ -6,10 +6,10 @@ import {
   Modal,
   TouchableOpacity,
   Switch,
-  ActivityIndicator,
   ScrollView,
   Alert,
 } from "react-native";
+import HeartbeatLoader from "../ui/HeartbeatLoader";
 import { X, Droplet, Settings, ChevronRight } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getPreferences, updatePreferences } from "../../services/settings";
@@ -114,10 +114,9 @@ export default function GenelAyarlarModal({
                 </View>
                 <View style={styles.switchWrap}>
                   {savingWaterReminder ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={colors.primary}
-                      style={{ marginRight: 8 }}
+                    <HeartbeatLoader
+                      size={22}
+                      variant="inline"
                     />
                   ) : null}
                   <Switch

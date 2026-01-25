@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Platform,
   Modal,
@@ -916,7 +915,7 @@ export default function KitchenScreen({ navigation, route }: any) {
           backgroundColor: colors.background,
         }}
       >
-        <HeartbeatLoader size={50} />
+        <HeartbeatLoader size={50} variant="full" />
         <Text
           style={{
             textAlign: "center",
@@ -2166,7 +2165,7 @@ export default function KitchenScreen({ navigation, route }: any) {
                         disabled={mealLoading}
                       >
                         {mealLoading ? (
-                          <ActivityIndicator size="small" color="#fff" />
+                          <HeartbeatLoader size={22} variant="inline" />
                         ) : (
                           <>
                             <Sparkles size={18} color="#fff" />
@@ -2373,7 +2372,7 @@ export default function KitchenScreen({ navigation, route }: any) {
             disabled={aiLoading}
           >
             {aiLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
+              <HeartbeatLoader size={22} variant="inline" />
             ) : (
               <Sparkles size={22} color={colors.primary} />
             )}
@@ -2505,7 +2504,7 @@ export default function KitchenScreen({ navigation, route }: any) {
                 disabled={shoppingSaving}
               >
                 {shoppingSaving ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <HeartbeatLoader size={22} variant="inline" />
                 ) : (
                   <Text style={styles.modalButtonTextPrimary}>Ekle</Text>
                 )}
@@ -2591,7 +2590,7 @@ export default function KitchenScreen({ navigation, route }: any) {
                 disabled={inventorySaving}
               >
                 {inventorySaving ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <HeartbeatLoader size={22} variant="inline" />
                 ) : (
                   <Text style={styles.modalButtonTextPrimary}>Ekle</Text>
                 )}

@@ -7,8 +7,8 @@ import {
   FlatList,
   StyleSheet,
   Alert,
-  ActivityIndicator,
 } from "react-native";
+import HeartbeatLoader from "../components/ui/HeartbeatLoader";
 import { getLeaderboard, givePoints } from "../services/gamification"; // Dosya yolunu kontrol edin
 
 const GivePointsScreen = () => {
@@ -52,7 +52,12 @@ const GivePointsScreen = () => {
     }
   };
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} />;
+  if (loading)
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <HeartbeatLoader size={56} variant="full" />
+      </View>
+    );
 
   return (
     <View style={styles.container}>

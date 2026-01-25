@@ -5,8 +5,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
 } from "react-native";
+import HeartbeatLoader from "../components/ui/HeartbeatLoader";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   CheckCircle,
@@ -113,7 +113,7 @@ export default function TaskDetailScreen({ route, navigation }: any) {
         {/* Aksiyon Butonları */}
         <View style={styles.footer}>
           {loading ? (
-            <ActivityIndicator size="large" color="#6366f1" />
+            <HeartbeatLoader size={48} variant="full" />
           ) : (
             <>
               {/* ÇOCUK AKSİYONU: Görev beklemedeyse */}

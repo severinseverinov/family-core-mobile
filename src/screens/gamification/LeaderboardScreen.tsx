@@ -5,9 +5,9 @@ import {
   StyleSheet,
   FlatList,
   Image,
-  ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Trophy, Medal, Star, Crown } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -27,7 +27,7 @@ export default function LeaderboardScreen() {
   if (isLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#6366f1" />
+        <HeartbeatLoader size={56} variant="full" />
       </View>
     );
   }

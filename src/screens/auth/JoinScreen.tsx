@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   Image,
 } from "react-native";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import { useTheme } from "../../contexts/ThemeContext"; // Temanızı kullanıyoruz
 import { createFamily, getUserFamilyProfile } from "../../services/family";
 import { supabase } from "../../services/supabase";
@@ -154,7 +154,7 @@ export default function JoinScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <HeartbeatLoader size={22} variant="inline" />
           ) : (
             <Text style={styles.buttonText}>Aile Oluştur</Text>
           )}

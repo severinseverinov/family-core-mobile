@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   ScrollView,
 } from "react-native";
+import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
@@ -240,7 +240,7 @@ export default function SignUpScreen() {
           activeOpacity={0.7}
         >
           {loading ? (
-            <ActivityIndicator color={colors.buttonText} />
+            <HeartbeatLoader size={22} variant="inline" />
           ) : (
             <Text style={styles.buttonText}>
               {t("Common.signUp") || "Sign Up"}

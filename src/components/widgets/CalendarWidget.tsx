@@ -6,8 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   PanResponder,
-  ActivityIndicator,
 } from "react-native";
+import HeartbeatLoader from "../ui/HeartbeatLoader";
 import {
   format,
   isSameDay,
@@ -499,7 +499,7 @@ export default function CalendarWidget({
       {/* DETAY PANELİ */}
       <View style={[styles.detailsArea, { borderTopColor: colors.border }]}>
         {loadingHolidays ? (
-          <ActivityIndicator size="small" color={colors.primary} />
+          <HeartbeatLoader size={28} variant="inline" />
         ) : (
           <>
             {activeDayData.dayHoliday && (
