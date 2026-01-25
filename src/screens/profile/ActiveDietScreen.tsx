@@ -1572,7 +1572,8 @@ export default function ActiveDietScreen({ navigation }: any) {
           setIsReadingTime(state.isReadingTime || false);
           setReadingTimeLeft(state.readingTimeLeft || 10);
           setReadingTimeNextExerciseIndex(
-            state.isReadingTime && typeof state.readingTimeNextExerciseIndex === "number"
+            state.isReadingTime &&
+              typeof state.readingTimeNextExerciseIndex === "number"
               ? state.readingTimeNextExerciseIndex
               : null,
           );
@@ -1809,8 +1810,8 @@ export default function ActiveDietScreen({ navigation }: any) {
       const mealPrefs = member?.meal_preferences || {};
       const hasDiet = Boolean(
         mealPrefs.diet_active &&
-          mealPrefs.diet_start_date &&
-          String(mealPrefs.diet_start_date).trim() !== "",
+        mealPrefs.diet_start_date &&
+        String(mealPrefs.diet_start_date).trim() !== "",
       );
       const hasExercise = mealPrefs.exercise_enabled !== false;
 
@@ -1819,11 +1820,12 @@ export default function ActiveDietScreen({ navigation }: any) {
         return;
       }
 
-      const continueMessage = hasDiet && hasExercise
-        ? "Bu hafta için kilonuz kaydedildi. Diyet ve egzersiz programı devam etsin mi?"
-        : hasDiet
-          ? "Bu hafta için kilonuz kaydedildi. Diyet programı devam etsin mi?"
-          : "Bu hafta için kilonuz kaydedildi. Egzersiz programı devam etsin mi?";
+      const continueMessage =
+        hasDiet && hasExercise
+          ? "Bu hafta için kilonuz kaydedildi. Diyet ve egzersiz programı devam etsin mi?"
+          : hasDiet
+            ? "Bu hafta için kilonuz kaydedildi. Diyet programı devam etsin mi?"
+            : "Bu hafta için kilonuz kaydedildi. Egzersiz programı devam etsin mi?";
 
       Alert.alert("Kilo Kaydedildi", continueMessage, [
         {
@@ -1842,11 +1844,12 @@ export default function ActiveDietScreen({ navigation }: any) {
             await updateMemberDetails(profile.id, {
               meal_preferences: updatedPrefs,
             });
-            const msg = hasDiet && hasExercise
-              ? "Diyet ve egzersiz programı sonlandırıldı."
-              : hasDiet
-                ? "Diyet programı sonlandırıldı."
-                : "Egzersiz programı sonlandırıldı.";
+            const msg =
+              hasDiet && hasExercise
+                ? "Diyet ve egzersiz programı sonlandırıldı."
+                : hasDiet
+                  ? "Diyet programı sonlandırıldı."
+                  : "Egzersiz programı sonlandırıldı.";
             Alert.alert("Bilgi", msg);
             await loadMember();
           },
@@ -1872,10 +1875,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                   endDate = addDays(today, 7);
                 } else {
                   const daysUntilNextMonday = (8 - todayDay) % 7 || 7;
-                  endDate = startOfWeek(
-                    addDays(today, daysUntilNextMonday),
-                    { weekStartsOn: 1 },
-                  );
+                  endDate = startOfWeek(addDays(today, daysUntilNextMonday), {
+                    weekStartsOn: 1,
+                  });
                 }
                 const planDates = eachDayOfInterval({
                   start: today,
@@ -2401,7 +2403,10 @@ export default function ActiveDietScreen({ navigation }: any) {
                                               borderRadius: 16,
                                               borderWidth: 0,
                                               shadowColor: colors.primary,
-                                              shadowOffset: { width: 0, height: 2 },
+                                              shadowOffset: {
+                                                width: 0,
+                                                height: 2,
+                                              },
                                               shadowOpacity: 0.03,
                                               shadowRadius: 8,
                                               elevation: 1,
@@ -2448,7 +2453,10 @@ export default function ActiveDietScreen({ navigation }: any) {
                                               borderRadius: 16,
                                               borderWidth: 0,
                                               shadowColor: colors.primary,
-                                              shadowOffset: { width: 0, height: 2 },
+                                              shadowOffset: {
+                                                width: 0,
+                                                height: 2,
+                                              },
                                               shadowOpacity: 0.03,
                                               shadowRadius: 8,
                                               elevation: 1,
@@ -2486,18 +2494,25 @@ export default function ActiveDietScreen({ navigation }: any) {
                                           style={[
                                             styles.logItem,
                                             {
-                                              backgroundColor: colors.primary + "20",
+                                              backgroundColor:
+                                                colors.primary + "20",
                                               borderRadius: 16,
                                               borderWidth: 0,
                                               shadowColor: colors.primary,
-                                              shadowOffset: { width: 0, height: 2 },
+                                              shadowOffset: {
+                                                width: 0,
+                                                height: 2,
+                                              },
                                               shadowOpacity: 0.03,
                                               shadowRadius: 8,
                                               elevation: 1,
                                             },
                                           ]}
                                         >
-                                          <Dumbbell size={14} color={colors.primary} />
+                                          <Dumbbell
+                                            size={14}
+                                            color={colors.primary}
+                                          />
                                           <Text
                                             style={[
                                               styles.logText,
@@ -3077,7 +3092,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                               : colors.card,
                             borderRadius: 24,
                             borderWidth: 0, // Kenarlık kaldırıldı
-                            shadowColor: isCompleted ? colors.primary : colors.primary,
+                            shadowColor: isCompleted
+                              ? colors.primary
+                              : colors.primary,
                             shadowOffset: { width: 0, height: 4 },
                             shadowOpacity: isCompleted ? 0.08 : 0.03,
                             shadowRadius: 12,
@@ -3615,7 +3632,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                       borderWidth: 0, // Kenarlık kaldırıldı
                       shadowColor: (() => {
                         const stats = calculateCompletedExerciseStats();
-                        return stats.count > 0 ? colors.primary : colors.primary;
+                        return stats.count > 0
+                          ? colors.primary
+                          : colors.primary;
                       })(),
                       shadowOffset: { width: 0, height: 4 },
                       shadowOpacity: (() => {
@@ -3651,7 +3670,9 @@ export default function ActiveDietScreen({ navigation }: any) {
                           fontWeight: "700",
                           color: (() => {
                             const stats = calculateCompletedExerciseStats();
-                            return stats.count > 0 ? colors.primary : colors.text;
+                            return stats.count > 0
+                              ? colors.primary
+                              : colors.text;
                           })(),
                         }}
                       >
@@ -4460,7 +4481,12 @@ export default function ActiveDietScreen({ navigation }: any) {
             >
               {/* TEMA / GÖRÜNÜM MODU */}
               <View style={{ marginBottom: 16 }}>
-                <Text style={[styles.settingsSectionLabel, { color: colors.textMuted }]}>
+                <Text
+                  style={[
+                    styles.settingsSectionLabel,
+                    { color: colors.textMuted },
+                  ]}
+                >
                   Tema
                 </Text>
                 <SelectionGroup
@@ -4478,178 +4504,178 @@ export default function ActiveDietScreen({ navigation }: any) {
               </View>
 
               {/* SU İÇME HATIRLATICISI */}
-            <View
-              style={[
-                styles.settingsItemContainer,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <View style={styles.settingsItemRow}>
-                <View style={styles.settingsItemLeft}>
-                  <View
-                    style={[
-                      styles.settingsIconCircleSmall,
-                      {
-                        backgroundColor: waterReminderEnabled
-                          ? "#3b82f620"
-                          : colors.border + "40",
-                      },
-                    ]}
-                  >
-                    <Droplet
-                      size={20}
-                      color={
-                        waterReminderEnabled ? "#3b82f6" : colors.textMuted
-                      }
-                    />
-                  </View>
-                  <View style={styles.settingsItemTextContainer}>
-                    <Text
+              <View
+                style={[
+                  styles.settingsItemContainer,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.settingsItemRow}>
+                  <View style={styles.settingsItemLeft}>
+                    <View
                       style={[
-                        styles.settingsItemTitleSmall,
-                        { color: colors.text },
+                        styles.settingsIconCircleSmall,
+                        {
+                          backgroundColor: waterReminderEnabled
+                            ? "#3b82f620"
+                            : colors.border + "40",
+                        },
                       ]}
                     >
-                      Su İçme Hatırlatıcısı
-                    </Text>
-                    <Text
-                      style={[
-                        styles.settingsItemDescriptionSmall,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Günlük su içme hatırlatıcıları
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.settingsSwitchContainer}>
-                  {savingWaterReminder ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={colors.primary}
-                      style={{ marginRight: 8 }}
-                    />
-                  ) : null}
-                  <Switch
-                    value={waterReminderEnabled}
-                    onValueChange={async value => {
-                      setWaterReminderEnabled(value);
-                      setSavingWaterReminder(true);
-                      try {
-                        const result =
-                          await setupWaterRemindersForFamily(value);
-                        if (!result.success && value) {
-                          Alert.alert(
-                            "Uyarı",
-                            result.error ||
-                              "Su içme hatırlatıcısı ayarlanamadı.",
-                          );
-                          setWaterReminderEnabled(false);
-                          return;
+                      <Droplet
+                        size={20}
+                        color={
+                          waterReminderEnabled ? "#3b82f6" : colors.textMuted
                         }
-                        await updatePreferences({
-                          waterReminderEnabled: value,
-                        });
-                        Alert.alert(
-                          "Başarılı",
-                          value
-                            ? "Su içme hatırlatıcısı aktif edildi."
-                            : "Su içme hatırlatıcısı kapatıldı.",
-                        );
-                      } catch (e: any) {
-                        Alert.alert(
-                          "Hata",
-                          e?.message || "Su içme hatırlatıcısı ayarlanamadı.",
-                        );
-                        setWaterReminderEnabled(!value);
-                      } finally {
-                        setSavingWaterReminder(false);
-                      }
-                    }}
-                    disabled={savingWaterReminder}
-                    trackColor={{
-                      false: colors.border,
-                      true: colors.primary,
-                    }}
-                    thumbColor="#fff"
-                    ios_backgroundColor={colors.border}
-                  />
+                      />
+                    </View>
+                    <View style={styles.settingsItemTextContainer}>
+                      <Text
+                        style={[
+                          styles.settingsItemTitleSmall,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Su İçme Hatırlatıcısı
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsItemDescriptionSmall,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Günlük su içme hatırlatıcıları
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.settingsSwitchContainer}>
+                    {savingWaterReminder ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.primary}
+                        style={{ marginRight: 8 }}
+                      />
+                    ) : null}
+                    <Switch
+                      value={waterReminderEnabled}
+                      onValueChange={async value => {
+                        setWaterReminderEnabled(value);
+                        setSavingWaterReminder(true);
+                        try {
+                          const result =
+                            await setupWaterRemindersForFamily(value);
+                          if (!result.success && value) {
+                            Alert.alert(
+                              "Uyarı",
+                              result.error ||
+                                "Su içme hatırlatıcısı ayarlanamadı.",
+                            );
+                            setWaterReminderEnabled(false);
+                            return;
+                          }
+                          await updatePreferences({
+                            waterReminderEnabled: value,
+                          });
+                          Alert.alert(
+                            "Başarılı",
+                            value
+                              ? "Su içme hatırlatıcısı aktif edildi."
+                              : "Su içme hatırlatıcısı kapatıldı.",
+                          );
+                        } catch (e: any) {
+                          Alert.alert(
+                            "Hata",
+                            e?.message || "Su içme hatırlatıcısı ayarlanamadı.",
+                          );
+                          setWaterReminderEnabled(!value);
+                        } finally {
+                          setSavingWaterReminder(false);
+                        }
+                      }}
+                      disabled={savingWaterReminder}
+                      trackColor={{
+                        false: colors.border,
+                        true: colors.primary,
+                      }}
+                      thumbColor="#fff"
+                      ios_backgroundColor={colors.border}
+                    />
+                  </View>
                 </View>
               </View>
-            </View>
 
-            {/* HAFTALIK KİLO GİRİŞİ */}
-            <View
-              style={[
-                styles.settingsItemContainer,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                  marginTop: 12,
-                },
-              ]}
-            >
-              <View style={styles.settingsItemRow}>
-                <View style={styles.settingsItemLeft}>
-                  <View
+              {/* HAFTALIK KİLO GİRİŞİ */}
+              <View
+                style={[
+                  styles.settingsItemContainer,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    marginTop: 12,
+                  },
+                ]}
+              >
+                <View style={styles.settingsItemRow}>
+                  <View style={styles.settingsItemLeft}>
+                    <View
+                      style={[
+                        styles.settingsIconCircleSmall,
+                        {
+                          backgroundColor: isMonday()
+                            ? colors.primary + "20"
+                            : colors.border + "40",
+                        },
+                      ]}
+                    >
+                      <Target
+                        size={20}
+                        color={isMonday() ? colors.primary : colors.textMuted}
+                      />
+                    </View>
+                    <View style={styles.settingsItemTextContainer}>
+                      <Text
+                        style={[
+                          styles.settingsItemTitleSmall,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Haftalık Kilo Girişi
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsItemDescriptionSmall,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        {isMonday()
+                          ? "Bu hafta için kilonuzu girin"
+                          : "Sadece Pazartesi günleri giriş yapılabilir"}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSettingsModalVisible(false);
+                      handleOpenWeightModal();
+                    }}
+                    disabled={!isMonday()}
                     style={[
-                      styles.settingsIconCircleSmall,
+                      styles.settingsActionButton,
                       {
                         backgroundColor: isMonday()
-                          ? colors.primary + "20"
-                          : colors.border + "40",
+                          ? colors.primary
+                          : colors.textMuted,
+                        opacity: isMonday() ? 1 : 0.5,
                       },
                     ]}
                   >
-                    <Target
-                      size={20}
-                      color={isMonday() ? colors.primary : colors.textMuted}
-                    />
-                  </View>
-                  <View style={styles.settingsItemTextContainer}>
-                    <Text
-                      style={[
-                        styles.settingsItemTitleSmall,
-                        { color: colors.text },
-                      ]}
-                    >
-                      Haftalık Kilo Girişi
-                    </Text>
-                    <Text
-                      style={[
-                        styles.settingsItemDescriptionSmall,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      {isMonday()
-                        ? "Bu hafta için kilonuzu girin"
-                        : "Sadece Pazartesi günleri giriş yapılabilir"}
-                    </Text>
-                  </View>
+                    <Plus size={18} color="#fff" />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    setSettingsModalVisible(false);
-                    handleOpenWeightModal();
-                  }}
-                  disabled={!isMonday()}
-                  style={[
-                    styles.settingsActionButton,
-                    {
-                      backgroundColor: isMonday()
-                        ? colors.primary
-                        : colors.textMuted,
-                      opacity: isMonday() ? 1 : 0.5,
-                    },
-                  ]}
-                >
-                  <Plus size={18} color="#fff" />
-                </TouchableOpacity>
               </View>
-            </View>
 
               {/* EKRAN YERLEŞİMİ VE TÜM AYARLAR */}
               <View
@@ -7108,383 +7134,388 @@ export default function ActiveDietScreen({ navigation }: any) {
                   width: "100%",
                 }}
               >
-              {/* BIG TIMER - TOP */}
-              <View style={{ alignItems: "center", marginBottom: 20 }}>
-                <Text
-                  style={{
-                    fontSize: 80,
-                    fontWeight: "900",
-                    color: exerciseTimerPaused
-                      ? colors.textMuted
-                      : isReadingTime
-                        ? "#f59e0b"
-                        : colors.primary,
-                    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-                    textAlign: "center",
-                  }}
-                >
-                  {formatTime(remainingTime)}
-                </Text>
-              </View>
-
-              {/* TWO CIRCLES SIDE BY SIDE - MOVED UNDER TIMER */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  marginBottom: 30,
-                  paddingHorizontal: 20,
-                  gap: 30, // Modern gap between circles
-                }}
-              >
-                {/* PROGRESS CIRCLE - MODERN */}
-                <View
-                  style={{
-                    width: 150,
-                    height: 150,
-                    borderRadius: 75,
-                    backgroundColor: colors.card,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    position: "relative",
-                    shadowColor: colors.primary,
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.15,
-                    shadowRadius: 8,
-                    elevation: 6,
-                    borderWidth: 3,
-                    borderColor: colors.primary + "30",
-                  }}
-                >
-                  {/* Progress Circle SVG */}
-                  <Svg
-                    width="150"
-                    height="150"
-                    style={{ position: "absolute" }}
-                  >
-                    <SvgCircle
-                      cx="75"
-                      cy="75"
-                      r="65"
-                      stroke={colors.border}
-                      strokeWidth="6"
-                      fill="transparent"
-                    />
-                    <SvgCircle
-                      cx="75"
-                      cy="75"
-                      r="65"
-                      stroke={colors.primary}
-                      strokeWidth="6"
-                      fill="transparent"
-                      strokeDasharray={`${2 * Math.PI * 65}`}
-                      strokeDashoffset={`${
-                        2 *
-                        Math.PI *
-                        65 *
-                        (1 -
-                          currentExerciseStep /
-                            (currentExercisePlan?.exercises?.length || 1))
-                      }`}
-                      strokeLinecap="round"
-                      transform="rotate(-90 75 75)"
-                    />
-                  </Svg>
-
-                  {/* Center Content */}
-                  <View style={{ alignItems: "center" }}>
-                    <Text
-                      style={{
-                        fontSize: 20,
-                        fontWeight: "800",
-                        color: colors.text,
-                      }}
-                    >
-                      {Math.round(
-                        (currentExerciseStep /
-                          (currentExercisePlan?.exercises?.length || 1)) *
-                          100,
-                      )}
-                      %
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: colors.textMuted,
-                        marginTop: 2,
-                        textAlign: "center",
-                      }}
-                    >
-                      Egzersiz{"\n"}Tamamlandı
-                    </Text>
-                  </View>
-                </View>
-
-                {/* CALORIES CIRCLE - MODERN */}
-                <View
-                  style={{
-                    width: 150,
-                    height: 150,
-                    borderRadius: 75,
-                    backgroundColor: colors.card,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    position: "relative",
-                    shadowColor: "#ff6b35",
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.15,
-                    shadowRadius: 8,
-                    elevation: 6,
-                    borderWidth: 3,
-                    borderColor: "#ff6b35" + "30",
-                  }}
-                >
-                  {/* Calorie Progress Circle SVG */}
-                  <Svg
-                    width="150"
-                    height="150"
-                    style={{ position: "absolute" }}
-                  >
-                    <SvgCircle
-                      cx="75"
-                      cy="75"
-                      r="65"
-                      stroke={colors.border}
-                      strokeWidth="6"
-                      fill="transparent"
-                    />
-                    <SvgCircle
-                      cx="75"
-                      cy="75"
-                      r="65"
-                      stroke="#ff6b35"
-                      strokeWidth="6"
-                      fill="transparent"
-                      strokeDasharray={`${2 * Math.PI * 65}`}
-                      strokeDashoffset={`${
-                        2 *
-                        Math.PI *
-                        65 *
-                        (1 -
-                          burnedCaloriesInSession /
-                            (currentExercisePlan?.total_calories || 1))
-                      }`}
-                      strokeLinecap="round"
-                      transform="rotate(-90 75 75)"
-                    />
-                  </Svg>
-
-                  {/* Center Content */}
-                  <View style={{ alignItems: "center" }}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginBottom: 2,
-                      }}
-                    >
-                      <Flame size={16} color="#ff6b35" />
-                      <Text
-                        style={{
-                          fontSize: 18,
-                          fontWeight: "800",
-                          color: colors.text,
-                          marginLeft: 4,
-                        }}
-                      >
-                        {burnedCaloriesInSession}
-                      </Text>
-                    </View>
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        color: colors.textMuted,
-                        textAlign: "center",
-                      }}
-                    >
-                      / {currentExercisePlan?.total_calories || 0}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: colors.textMuted,
-                        marginTop: 2,
-                        textAlign: "center",
-                      }}
-                    >
-                      Yakılan{"\n"}Kalori
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* CURRENT EXERCISE - DETAILED - MOVED AFTER CIRCLES */}
-              <Animated.View
-                style={{
-                  alignItems: "center",
-                  marginBottom: 30,
-                  backgroundColor: colors.card,
-                  marginHorizontal: 6,
-                  paddingTop: 12,
-                  paddingBottom: 20,
-                  paddingHorizontal: 20,
-                  borderRadius: 16,
-                  borderWidth: isReadingTime ? 3 : 0,
-                  borderColor: borderOpacity.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ["transparent", "#f59e0b"],
-                  }),
-                  shadowColor: isReadingTime ? "#f59e0b" : "transparent",
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: borderOpacity,
-                  shadowRadius: 8,
-                  elevation: isReadingTime ? 8 : 0,
-                }}
-              >
-                {isReadingTime && (
+                {/* BIG TIMER - TOP */}
+                <View style={{ alignItems: "center", marginBottom: 20 }}>
                   <Text
                     style={{
-                      fontSize: 12,
-                      fontWeight: "600",
-                      color: "#f59e0b",
+                      fontSize: 80,
+                      fontWeight: "900",
+                      color: exerciseTimerPaused
+                        ? colors.textMuted
+                        : isReadingTime
+                          ? "#f59e0b"
+                          : colors.primary,
+                      fontFamily:
+                        Platform.OS === "ios" ? "Courier" : "monospace",
                       textAlign: "center",
-                      marginBottom: 8,
                     }}
                   >
-                    Sıradaki egzersiz • {readingTimeLeft} sn dinlenme
+                    {formatTime(remainingTime)}
                   </Text>
-                )}
-                <Text
+                </View>
+
+                {/* TWO CIRCLES SIDE BY SIDE - MOVED UNDER TIMER */}
+                <View
                   style={{
-                    fontSize: 20,
-                    fontWeight: "800",
-                    color: colors.text,
-                    textAlign: "center",
-                    marginBottom: 12,
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    marginBottom: 30,
+                    paddingHorizontal: 20,
+                    gap: 30, // Modern gap between circles
                   }}
                 >
-                  {(isReadingTime && readingTimeNextExerciseIndex != null
-                    ? currentExercisePlan?.exercises?.[readingTimeNextExerciseIndex]
-                    : currentExercisePlan?.exercises?.[currentExerciseStep]
-                  )?.name?.replace(/\s*\([^)]*\)/g, "") || "Egzersiz"}
-                </Text>
+                  {/* PROGRESS CIRCLE - MODERN */}
+                  <View
+                    style={{
+                      width: 150,
+                      height: 150,
+                      borderRadius: 75,
+                      backgroundColor: colors.card,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      position: "relative",
+                      shadowColor: colors.primary,
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.15,
+                      shadowRadius: 8,
+                      elevation: 6,
+                      borderWidth: 3,
+                      borderColor: colors.primary + "30",
+                    }}
+                  >
+                    {/* Progress Circle SVG */}
+                    <Svg
+                      width="150"
+                      height="150"
+                      style={{ position: "absolute" }}
+                    >
+                      <SvgCircle
+                        cx="75"
+                        cy="75"
+                        r="65"
+                        stroke={colors.border}
+                        strokeWidth="6"
+                        fill="transparent"
+                      />
+                      <SvgCircle
+                        cx="75"
+                        cy="75"
+                        r="65"
+                        stroke={colors.primary}
+                        strokeWidth="6"
+                        fill="transparent"
+                        strokeDasharray={`${2 * Math.PI * 65}`}
+                        strokeDashoffset={`${
+                          2 *
+                          Math.PI *
+                          65 *
+                          (1 -
+                            currentExerciseStep /
+                              (currentExercisePlan?.exercises?.length || 1))
+                        }`}
+                        strokeLinecap="round"
+                        transform="rotate(-90 75 75)"
+                      />
+                    </Svg>
 
-                {/* Exercise Type & Details */}
-                {(() => {
-                  const exercise =
-                    isReadingTime && readingTimeNextExerciseIndex != null
-                      ? currentExercisePlan?.exercises?.[readingTimeNextExerciseIndex]
-                      : currentExercisePlan?.exercises?.[currentExerciseStep];
-                  if (!exercise) return null;
+                    {/* Center Content */}
+                    <View style={{ alignItems: "center" }}>
+                      <Text
+                        style={{
+                          fontSize: 20,
+                          fontWeight: "800",
+                          color: colors.text,
+                        }}
+                      >
+                        {Math.round(
+                          (currentExerciseStep /
+                            (currentExercisePlan?.exercises?.length || 1)) *
+                            100,
+                        )}
+                        %
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: colors.textMuted,
+                          marginTop: 2,
+                          textAlign: "center",
+                        }}
+                      >
+                        Egzersiz{"\n"}Tamamlandı
+                      </Text>
+                    </View>
+                  </View>
 
-                  const typeLabel =
-                    exercise.type === "cardio"
-                      ? "Kardiyovasküler"
-                      : exercise.type === "strength"
-                        ? "Güç"
-                        : exercise.type === "flexibility"
-                          ? "Esneklik"
-                          : exercise.type === "balance"
-                            ? "Denge"
-                            : "Diğer";
+                  {/* CALORIES CIRCLE - MODERN */}
+                  <View
+                    style={{
+                      width: 150,
+                      height: 150,
+                      borderRadius: 75,
+                      backgroundColor: colors.card,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      position: "relative",
+                      shadowColor: "#ff6b35",
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.15,
+                      shadowRadius: 8,
+                      elevation: 6,
+                      borderWidth: 3,
+                      borderColor: "#ff6b35" + "30",
+                    }}
+                  >
+                    {/* Calorie Progress Circle SVG */}
+                    <Svg
+                      width="150"
+                      height="150"
+                      style={{ position: "absolute" }}
+                    >
+                      <SvgCircle
+                        cx="75"
+                        cy="75"
+                        r="65"
+                        stroke={colors.border}
+                        strokeWidth="6"
+                        fill="transparent"
+                      />
+                      <SvgCircle
+                        cx="75"
+                        cy="75"
+                        r="65"
+                        stroke="#ff6b35"
+                        strokeWidth="6"
+                        fill="transparent"
+                        strokeDasharray={`${2 * Math.PI * 65}`}
+                        strokeDashoffset={`${
+                          2 *
+                          Math.PI *
+                          65 *
+                          (1 -
+                            burnedCaloriesInSession /
+                              (currentExercisePlan?.total_calories || 1))
+                        }`}
+                        strokeLinecap="round"
+                        transform="rotate(-90 75 75)"
+                      />
+                    </Svg>
 
-                  return (
-                    <>
-                      {/* Type & Duration/Reps */}
+                    {/* Center Content */}
+                    <View style={{ alignItems: "center" }}>
                       <View
                         style={{
                           flexDirection: "row",
                           alignItems: "center",
-                          marginBottom: 12,
-                          flexWrap: "wrap",
-                          justifyContent: "center",
+                          marginBottom: 2,
                         }}
                       >
-                        <View
+                        <Flame size={16} color="#ff6b35" />
+                        <Text
                           style={{
-                            backgroundColor: colors.primary + "20",
-                            paddingHorizontal: 12,
-                            paddingVertical: 4,
-                            borderRadius: 12,
-                            marginRight: 8,
-                            marginBottom: 4,
+                            fontSize: 18,
+                            fontWeight: "800",
+                            color: colors.text,
+                            marginLeft: 4,
                           }}
                         >
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: colors.primary,
-                              fontWeight: "600",
-                            }}
-                          >
-                            {typeLabel}
-                          </Text>
-                        </View>
+                          {burnedCaloriesInSession}
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: colors.textMuted,
+                          textAlign: "center",
+                        }}
+                      >
+                        / {currentExercisePlan?.total_calories || 0}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: colors.textMuted,
+                          marginTop: 2,
+                          textAlign: "center",
+                        }}
+                      >
+                        Yakılan{"\n"}Kalori
+                      </Text>
+                    </View>
+                  </View>
+                </View>
 
+                {/* CURRENT EXERCISE - DETAILED - MOVED AFTER CIRCLES */}
+                <Animated.View
+                  style={{
+                    alignItems: "center",
+                    marginBottom: 30,
+                    backgroundColor: colors.card,
+                    marginHorizontal: 6,
+                    paddingTop: 12,
+                    paddingBottom: 20,
+                    paddingHorizontal: 20,
+                    borderRadius: 16,
+                    borderWidth: isReadingTime ? 3 : 0,
+                    borderColor: borderOpacity.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ["transparent", "#f59e0b"],
+                    }),
+                    shadowColor: isReadingTime ? "#f59e0b" : "transparent",
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: borderOpacity,
+                    shadowRadius: 8,
+                    elevation: isReadingTime ? 8 : 0,
+                  }}
+                >
+                  {isReadingTime && (
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "600",
+                        color: "#f59e0b",
+                        textAlign: "center",
+                        marginBottom: 8,
+                      }}
+                    >
+                      Sıradaki egzersiz • {readingTimeLeft} sn dinlenme
+                    </Text>
+                  )}
+                  <Text
+                    style={{
+                      fontSize: 20,
+                      fontWeight: "800",
+                      color: colors.text,
+                      textAlign: "center",
+                      marginBottom: 12,
+                    }}
+                  >
+                    {(isReadingTime && readingTimeNextExerciseIndex != null
+                      ? currentExercisePlan?.exercises?.[
+                          readingTimeNextExerciseIndex
+                        ]
+                      : currentExercisePlan?.exercises?.[currentExerciseStep]
+                    )?.name?.replace(/\s*\([^)]*\)/g, "") || "Egzersiz"}
+                  </Text>
+
+                  {/* Exercise Type & Details */}
+                  {(() => {
+                    const exercise =
+                      isReadingTime && readingTimeNextExerciseIndex != null
+                        ? currentExercisePlan?.exercises?.[
+                            readingTimeNextExerciseIndex
+                          ]
+                        : currentExercisePlan?.exercises?.[currentExerciseStep];
+                    if (!exercise) return null;
+
+                    const typeLabel =
+                      exercise.type === "cardio"
+                        ? "Kardiyovasküler"
+                        : exercise.type === "strength"
+                          ? "Güç"
+                          : exercise.type === "flexibility"
+                            ? "Esneklik"
+                            : exercise.type === "balance"
+                              ? "Denge"
+                              : "Diğer";
+
+                    return (
+                      <>
+                        {/* Type & Duration/Reps */}
                         <View
                           style={{
-                            backgroundColor: colors.border + "40",
-                            paddingHorizontal: 12,
-                            paddingVertical: 4,
-                            borderRadius: 12,
-                            marginRight: 8,
-                            marginBottom: 4,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            marginBottom: 12,
+                            flexWrap: "wrap",
+                            justifyContent: "center",
                           }}
                         >
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: colors.text,
-                              fontWeight: "600",
-                            }}
-                          >
-                            {exercise.duration} dk
-                          </Text>
-                        </View>
-
-                        {exercise.sets && exercise.reps && (
                           <View
                             style={{
-                              backgroundColor: "#ff6b35" + "20",
+                              backgroundColor: colors.primary + "20",
                               paddingHorizontal: 12,
                               paddingVertical: 4,
                               borderRadius: 12,
+                              marginRight: 8,
                               marginBottom: 4,
                             }}
                           >
                             <Text
                               style={{
                                 fontSize: 12,
-                                color: "#ff6b35",
+                                color: colors.primary,
                                 fontWeight: "600",
                               }}
                             >
-                              {exercise.sets} set × {exercise.reps} tekrar
+                              {typeLabel}
                             </Text>
                           </View>
-                        )}
-                      </View>
 
-                      {/* Instructions */}
-                      {exercise.instructions && (
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            color: colors.textMuted,
-                            textAlign: "center",
-                            lineHeight: 20,
-                            fontStyle: "italic",
-                          }}
-                        >
-                          "{exercise.instructions}"
-                        </Text>
-                      )}
-                    </>
-                  );
-                })()}
-              </Animated.View>
-            </View>
+                          <View
+                            style={{
+                              backgroundColor: colors.border + "40",
+                              paddingHorizontal: 12,
+                              paddingVertical: 4,
+                              borderRadius: 12,
+                              marginRight: 8,
+                              marginBottom: 4,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: colors.text,
+                                fontWeight: "600",
+                              }}
+                            >
+                              {exercise.duration} dk
+                            </Text>
+                          </View>
+
+                          {exercise.sets && exercise.reps && (
+                            <View
+                              style={{
+                                backgroundColor: "#ff6b35" + "20",
+                                paddingHorizontal: 12,
+                                paddingVertical: 4,
+                                borderRadius: 12,
+                                marginBottom: 4,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  color: "#ff6b35",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                {exercise.sets} set × {exercise.reps} tekrar
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* Instructions */}
+                        {exercise.instructions && (
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              color: colors.textMuted,
+                              textAlign: "center",
+                              lineHeight: 20,
+                              fontStyle: "italic",
+                            }}
+                          >
+                            "{exercise.instructions}"
+                          </Text>
+                        )}
+                      </>
+                    );
+                  })()}
+                </Animated.View>
+              </View>
             </ScrollView>
 
             {/* ALTTA SABİT: her buton kendi gölgesiyle, sarmalayan kutu yok */}
