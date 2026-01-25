@@ -6,12 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   Alert,
   Platform,
   Modal,
   KeyboardAvoidingView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import {
   ShoppingBasket,
@@ -27,7 +27,6 @@ import {
   Store,
   Filter,
   ChevronDown,
-  Settings,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -63,14 +62,12 @@ import { getFamilyMembers } from "../../services/family";
 import { getPreferences } from "../../services/settings";
 import HeartbeatLoader from "../../components/ui/HeartbeatLoader";
 import ModernInput from "../../components/ui/ModernInput";
-import GenelAyarlarModal from "../../components/modals/GenelAyarlarModal";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function KitchenScreen({ navigation, route }: any) {
   const { colors, themeMode } = useTheme();
   const { profile, user } = useAuth();
   const isLight = themeMode === "light";
-  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<"inventory" | "shopping" | "meal">(
     "inventory"
   );
@@ -937,23 +934,11 @@ export default function KitchenScreen({ navigation, route }: any) {
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
     >
-      {/* BAŞLIK BÖLÜMÜ + AYARLAR */}
+      {/* BAŞLIK BÖLÜMÜ */}
       <View style={[styles.header, styles.headerRow]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
           Stok • Liste • Yemek Önerileri
         </Text>
-        <TouchableOpacity
-          onPress={() => setSettingsModalVisible(true)}
-          style={[
-            styles.settingsButton,
-            {
-              backgroundColor: colors.background,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Settings size={20} color={colors.text} />
-        </TouchableOpacity>
       </View>
 
       {/* TABLAR */}
@@ -3883,12 +3868,6 @@ export default function KitchenScreen({ navigation, route }: any) {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
-
-      <GenelAyarlarModal
-        visible={settingsModalVisible}
-        onClose={() => setSettingsModalVisible(false)}
-        navigation={navigation}
-      />
     </SafeAreaView>
   );
 }
@@ -3903,14 +3882,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 20, fontWeight: "700", letterSpacing: 0.2 },
   headerSubtitle: { marginTop: 4, fontSize: 12, fontWeight: "600" },
-  settingsButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-  },
   tabContainer: {
     flexDirection: "row",
     marginHorizontal: 8, // Genişletildi

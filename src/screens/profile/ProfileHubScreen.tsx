@@ -6,9 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  SafeAreaView,
   Modal,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Lock,
   Settings,
@@ -29,7 +29,7 @@ export default function ProfileHubScreen({ navigation }: any) {
   const isLight = themeMode === "light";
   const { profile } = useAuth();
   const [qrVisible, setQrVisible] = useState(false);
-  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+
   const isParent = ["owner", "admin"].includes(profile?.role || "");
 
   const vCardData = `BEGIN:VCARD
@@ -43,28 +43,18 @@ END:VCARD`;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <TouchableOpacity
-        onPress={() => setSettingsModalVisible(true)}
-        style={[
-          styles.settingsFloatingBtn,
-          { backgroundColor: colors.card, borderColor: colors.border },
-        ]}
-      >
-        <Settings size={22} color={colors.text} />
-      </TouchableOpacity>
-
       <ScrollView contentContainerStyle={styles.container}>
         {/* ÜST PROFİL BÖLÜMÜ */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-          <Image
+            <Image
               source={{
                 uri:
                   profile?.avatar_url ||
                   `https://api.dicebear.com/7.x/avataaars/png?seed=${profile?.id}`,
               }}
-            style={[styles.mainAvatar, { borderColor: colors.primary }]}
-          />
+              style={[styles.mainAvatar, { borderColor: colors.primary }]}
+            />
             <TouchableOpacity
               style={[
                 styles.qrShortcut,
@@ -131,7 +121,11 @@ END:VCARD`;
           style={[
             styles.listCard,
             isLight && styles.surfaceLift,
-            { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 },
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              marginTop: 10,
+            },
           ]}
         >
           <TouchableOpacity
@@ -146,9 +140,9 @@ END:VCARD`;
                   // Profil verisini tam olarak çek
                   const memberRes = await getMemberById(profile.id);
                   if (memberRes.member) {
-                    navigation.navigate("MemberDetail", { 
+                    navigation.navigate("MemberDetail", {
                       member: memberRes.member,
-                      isMemberEdit: true // Üye kendi bilgilerini düzenliyor
+                      isMemberEdit: true, // Üye kendi bilgilerini düzenliyor
                     });
                   }
                 }
@@ -156,7 +150,10 @@ END:VCARD`;
             }}
           >
             <View
-              style={[styles.iconCircleSmall, { backgroundColor: colors.primary + "20" }]}
+              style={[
+                styles.iconCircleSmall,
+                { backgroundColor: colors.primary + "20" },
+              ]}
             >
               <Users size={24} color={colors.primary} />
             </View>
@@ -165,11 +162,13 @@ END:VCARD`;
                 {isParent ? "Aileyi Yönet" : "Kişisel Bilgilerimi Değiştir"}
               </Text>
               <Text style={{ fontSize: 12, color: colors.textMuted }}>
-                {isParent ? "Üyelere roller, izinler, kendi kişisel bilgileriniz gibi" : "Genel bilgilerinizi düzenleyin"}
+                {isParent
+                  ? "Üyelere roller, izinler, kendi kişisel bilgileriniz gibi"
+                  : "Genel bilgilerinizi düzenleyin"}
               </Text>
             </View>
-              <ChevronRight size={18} color={colors.border} />
-            </TouchableOpacity>
+            <ChevronRight size={18} color={colors.border} />
+          </TouchableOpacity>
         </View>
 
         {/* YENİ: AİLE FİNANS MERKEZİ (Buraya Taşındı) */}
@@ -177,7 +176,11 @@ END:VCARD`;
           style={[
             styles.listCard,
             isLight && styles.surfaceLift,
-            { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 },
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              marginTop: 10,
+            },
           ]}
         >
           <TouchableOpacity
@@ -197,8 +200,8 @@ END:VCARD`;
                 Bütçe, Raporlar ve Kumbara
               </Text>
             </View>
-              <ChevronRight size={18} color={colors.border} />
-            </TouchableOpacity>
+            <ChevronRight size={18} color={colors.border} />
+          </TouchableOpacity>
         </View>
 
         {/* ACİL DURUM QR MODAL */}
@@ -230,16 +233,10 @@ END:VCARD`;
                 Acil bir durumda bu kod taranarak kan grubunuza, alerjilerinize
                 ve iletişim bilgilerinize ulaşılabilir.
               </Text>
-          </View>
+            </View>
           </View>
         </Modal>
       </ScrollView>
-
-      <GenelAyarlarModal
-        visible={settingsModalVisible}
-        onClose={() => setSettingsModalVisible(false)}
-        navigation={navigation}
-      />
     </SafeAreaView>
   );
 }

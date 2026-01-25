@@ -1,5 +1,6 @@
 import React from "react";
-import { SafeAreaView, KeyboardAvoidingView, Platform } from "react-native";
+import { KeyboardAvoidingView, Platform } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AddTaskModal from "../../components/modals/AddTaskModal";
 
 export default function AddTaskScreen({ navigation }: any) {

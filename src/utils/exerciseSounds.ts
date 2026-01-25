@@ -1,14 +1,14 @@
 /**
- * Egzersiz ekranı sesleri: başlangıç/bitiş uzun düdük, egzersiz geçişleri kısa düdük, dinlenme süresi her saniye tik.
- * Yerel assets (assets/sounds/*.wav) kullanılıyor; izin/onay sonrası çalınır.
+ * Egzersiz ekranı sesleri: başlangıç/bitiş uzun düdük, egzersiz geçişleri kısa düdük, dinlenme süresi tik (bir kez çal → bitince tekrar).
+ * Yerel assets (assets/sounds/*.wav, tick.mp3) kullanılıyor; izin/onay sonrası çalınır.
+ * expo-audio kullanır (expo-av yerine).
  */
 
-import { Audio } from "expo-av";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 
-// Yerel WAV dosyaları (static require — Metro bundler için gerekli)
-const LONG_WHISTLE = require("../../assets/sounds/long_whistle.wav");
-const SHORT_WHISTLE = require("../../assets/sounds/short_whistle.wav");
-const TICK = require("../../assets/sounds/tick.wav");
+const LONG_WHISTLE = require("../../assets/sounds/long_whistle.mp3");
+const SHORT_WHISTLE = require("../../assets/sounds/short_whistle.mp3");
+const TICK = require("../../assets/sounds/tick.mp3");
 
 let audioModeSet = false;
 let soundsEnabled = false;
@@ -24,21 +24,16 @@ export function getSoundsEnabled(): boolean {
 /** Audio mode ayarla + sesleri etkinleştir. Egzersiz başlamadan önce onay (Evet) sonrası çağrılmalı. */
 export async function initAudioAndRequestPermission(): Promise<boolean> {
   try {
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-      allowsRecordingIOS: false,
-      interruptionModeIOS: 1,
-      interruptionModeAndroid: 1,
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: "duckOthers",
     });
     audioModeSet = true;
     soundsEnabled = true;
-    if (typeof __DEV__ !== "undefined" && __DEV__) console.log("[exerciseSounds] init OK, soundsEnabled=true");
     return true;
   } catch (e) {
-    if (typeof __DEV__ !== "undefined" && __DEV__) console.warn("[exerciseSounds] init failed", e);
+    if (typeof __DEV__ !== "undefined" && __DEV__)
+      console.warn("[exerciseSounds] init failed", e);
     return false;
   }
 }
@@ -46,54 +41,45 @@ export async function initAudioAndRequestPermission(): Promise<boolean> {
 async function ensureAudioMode(): Promise<void> {
   if (audioModeSet) return;
   try {
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-      allowsRecordingIOS: false,
-      interruptionModeIOS: 1,
-      interruptionModeAndroid: 1,
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: "duckOthers",
     });
     audioModeSet = true;
   } catch (e) {
-    if (typeof __DEV__ !== "undefined" && __DEV__) console.warn("[exerciseSounds] ensureAudioMode failed", e);
+    if (typeof __DEV__ !== "undefined" && __DEV__)
+      console.warn("[exerciseSounds] ensureAudioMode failed", e);
   }
 }
 
-let lastTickAt = 0;
-const TICK_DEBOUNCE_MS = 200;
-
-async function playLocal(
-  source: number,
-  unloadAfterMs: number,
-): Promise<void> {
+async function playLocal(source: number, unloadAfterMs: number): Promise<void> {
   if (!soundsEnabled) {
-    if (typeof __DEV__ !== "undefined" && __DEV__) console.log("[exerciseSounds] skip play: soundsEnabled=false");
+    if (typeof __DEV__ !== "undefined" && __DEV__)
+      console.log("[exerciseSounds] skip play: soundsEnabled=false");
     return;
   }
   try {
     await ensureAudioMode();
-    const { sound } = await Audio.Sound.createAsync(
-      source,
-      {
-        shouldPlay: true,
-        volume: 1.0,
-        isMuted: false,
+    const player = createAudioPlayer(source);
+    let removed = false;
+    const doRemove = () => {
+      if (removed) return;
+      removed = true;
+      try {
+        player.remove();
+      } catch (_) {}
+    };
+    player.addListener(
+      "playbackStatusUpdate",
+      (status: { didJustFinish?: boolean }) => {
+        if (status?.didJustFinish) doRemove();
       },
     );
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status?.isLoaded && (status as { didJustFinish?: boolean }).didJustFinish) {
-        sound.unloadAsync().catch(() => {});
-      }
-    });
-    setTimeout(() => {
-      sound.getStatusAsync().then((s) => {
-        if (s?.isLoaded) sound.unloadAsync().catch(() => {});
-      });
-    }, unloadAfterMs);
+    player.play();
+    setTimeout(() => doRemove(), unloadAfterMs);
   } catch (e) {
-    if (typeof __DEV__ !== "undefined" && __DEV__) console.warn("[exerciseSounds] playLocal failed", e);
+    if (typeof __DEV__ !== "undefined" && __DEV__)
+      console.warn("[exerciseSounds] playLocal failed", e);
   }
 }
 
@@ -107,10 +93,58 @@ export async function playShortWhistle(): Promise<void> {
   await playLocal(SHORT_WHISTLE, 800);
 }
 
-/** Dinlenme süresinde her saniye tik */
-export async function playTick(): Promise<void> {
-  const now = Date.now();
-  if (now - lastTickAt < TICK_DEBOUNCE_MS) return;
-  lastTickAt = now;
-  await playLocal(TICK, 400);
+/** Tik sesi bir kez çal, **sadece** didJustFinish ile bittiğinde döner. Erken resolve = üst üste çalma. */
+export async function playTickOnce(): Promise<void> {
+  if (!soundsEnabled) return;
+  try {
+    await ensureAudioMode();
+    await new Promise<void>(resolve => {
+      const player = createAudioPlayer(TICK);
+      let resolved = false;
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        try {
+          player.remove();
+        } catch (_) {}
+        resolve();
+      };
+      player.addListener(
+        "playbackStatusUpdate",
+        (status: { didJustFinish?: boolean }) => {
+          if (status?.didJustFinish) finish();
+        },
+      );
+      player.play();
+      // Yalnızca didJustFinish hiç gelmezse kullan; ses bitmeden resolve etme
+      setTimeout(finish, 3000);
+    });
+  } catch (_) {}
+}
+
+let tickLoopCancelled = true;
+let tickLoopRunning = false;
+
+async function runTickLoop(): Promise<void> {
+  if (tickLoopCancelled) return;
+  await playTickOnce();
+  if (tickLoopCancelled) return;
+  await runTickLoop();
+}
+
+/** Okuma süresinde tik döngüsünü başlat (bir kez çal → bitince tekrar). Tek loop, çok seslilik yok. */
+export function startTickLoop(): void {
+  if (tickLoopRunning) return;
+  tickLoopCancelled = false;
+  tickLoopRunning = true;
+  runTickLoop()
+    .catch(() => {})
+    .finally(() => {
+      tickLoopRunning = false;
+    });
+}
+
+/** Tik döngüsünü durdur. */
+export function stopTickLoop(): void {
+  tickLoopCancelled = true;
 }

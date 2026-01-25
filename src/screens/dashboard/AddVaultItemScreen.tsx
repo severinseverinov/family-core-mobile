@@ -1,5 +1,6 @@
 import React from "react";
-import { SafeAreaView, KeyboardAvoidingView, Platform } from "react-native";
+import { KeyboardAvoidingView, Platform } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AddVaultItemModal from "../../components/modals/AddVaultItemModal";
 
 export default function AddVaultItemScreen({ navigation }: any) {

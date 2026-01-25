@@ -6,9 +6,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  SafeAreaView,
   Modal,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Check, Trash2, Save, ShoppingCart } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import ModernInput from "../../components/ui/ModernInput";

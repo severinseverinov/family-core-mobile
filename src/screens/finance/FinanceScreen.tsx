@@ -12,9 +12,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  SafeAreaView,
   Dimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Plus,
   ShoppingCart,
@@ -32,12 +32,10 @@ import {
   Edit2,
   Check,
   X,
-  Layout,
 } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import ModernInput from "../../components/ui/ModernInput";
 import SelectionGroup from "../../components/ui/SelectionGroup";
-import GenelAyarlarModal from "../../components/modals/GenelAyarlarModal";
 import {
   getExpenses,
   addExpense,
@@ -54,7 +52,6 @@ export default function FinanceScreen({ navigation }: any) {
   const { colors, themeMode } = useTheme();
   const isLight = themeMode === "light";
   const scrollRef = useRef<ScrollView>(null);
-  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState("owner");
@@ -272,14 +269,8 @@ export default function FinanceScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => changeMonth(1)}>
           <ChevronRight color={colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.settingsBtn}
-            onPress={() => setSettingsModalVisible(true)}
-          >
-            <Layout size={22} color={colors.text} />
-          </TouchableOpacity>
-          {isParent && (
+        {isParent && (
+          <View style={styles.headerRight}>
             <TouchableOpacity
               style={styles.settingsBtn}
               onPress={() =>
@@ -290,15 +281,9 @@ export default function FinanceScreen({ navigation }: any) {
             >
               <Settings size={22} color={colors.text} />
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
       </View>
-
-      <GenelAyarlarModal
-        visible={settingsModalVisible}
-        onClose={() => setSettingsModalVisible(false)}
-        navigation={navigation}
-      />
 
       <ScrollView
         ref={scrollRef}

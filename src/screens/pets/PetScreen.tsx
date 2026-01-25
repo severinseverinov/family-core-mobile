@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   Image,
   Modal,
@@ -16,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import QRCode from "react-native-qrcode-svg"; // QR KOD KÜTÜPHANESİ
@@ -30,7 +30,6 @@ import {
   Ruler,
   Syringe,
   Calendar,
-  Settings,
   ChevronRight,
   Edit2,
   Save,
@@ -56,7 +55,6 @@ import {
   updatePet, // YENİ EKLENDİ
 } from "../../services/pets";
 import { getFamilyMembers } from "../../services/family";
-import GenelAyarlarModal from "../../components/modals/GenelAyarlarModal";
 
 const { width } = Dimensions.get("window");
 
@@ -77,7 +75,6 @@ export default function PetScreen({ navigation }: any) {
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
 
   // --- MODAL STATES ---
-  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [addRoutineVisible, setAddRoutineVisible] = useState(false);
   const [healthModalVisible, setHealthModalVisible] = useState(false);
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
@@ -329,15 +326,6 @@ END:VCARD`;
                 Bakım ve Sağlık Rutinleri
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => setSettingsModalVisible(true)}
-              style={[
-                styles.settingsBtn,
-                { backgroundColor: colors.background, borderColor: colors.border },
-              ]}
-            >
-              <Settings size={20} color={colors.text} />
-            </TouchableOpacity>
           </View>
 
           <ScrollView
@@ -1206,12 +1194,6 @@ END:VCARD`;
             </View>
           </View>
         </Modal>
-
-        <GenelAyarlarModal
-          visible={settingsModalVisible}
-          onClose={() => setSettingsModalVisible(false)}
-          navigation={navigation}
-        />
     </ScrollView>
     </SafeAreaView>
   );
@@ -1228,14 +1210,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   textHeader: { flex: 1, paddingHorizontal: 0 },
-  settingsBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-  },
   mainTitle: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5 },
   subTitle: { fontSize: 14, fontWeight: "500" },
   storiesContainer: { paddingHorizontal: 20, gap: 15 },

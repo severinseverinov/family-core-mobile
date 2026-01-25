@@ -94,7 +94,7 @@ export default function MainNavigator() {
                   ...string[],
                 ]
               }
-              locations={[0, 0.5, 1]}
+              locations={[0, 0.3, 1]}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
               style={StyleSheet.absoluteFill}

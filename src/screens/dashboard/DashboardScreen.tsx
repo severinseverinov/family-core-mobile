@@ -6,12 +6,11 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   Platform,
   StatusBar,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Plus } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -27,7 +26,6 @@ export default function DashboardScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { profile, user } = useAuth();
   const { data } = useDashboardData();
-  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [taskModalVisible, setTaskModalVisible] = React.useState(false);
   const [selectedDate, setSelectedDate] = React.useState(new Date());
@@ -42,18 +40,10 @@ export default function DashboardScreen({ navigation }: any) {
   const tasks = events.filter((item: any) => item.type === "task") || [];
 
   return (
-    <SafeAreaView
-      style={[
-        styles.safeArea,
-        {
-          backgroundColor: colors.background,
-          paddingTop: insets.top,
-        },
-      ]}
-    >
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar animated translucent backgroundColor={colors.background} />
 
-      <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={styles.contentWrapper}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -144,7 +134,7 @@ export default function DashboardScreen({ navigation }: any) {
         <TouchableOpacity
           style={[styles.mainFab, { backgroundColor: colors.primary }]}
           onPress={() => setTaskModalVisible(true)}
-          >
+        >
           <Plus size={26} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -162,6 +152,7 @@ export default function DashboardScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
+  contentWrapper: { flex: 1 },
   scrollContent: {
     paddingHorizontal: 12,
     paddingTop: 20,

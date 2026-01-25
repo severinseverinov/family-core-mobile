@@ -7,12 +7,12 @@ import {
   Image,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Dimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { Camera, ChevronLeft, Save, PawPrint } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";

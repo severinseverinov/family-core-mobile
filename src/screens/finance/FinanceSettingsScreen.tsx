@@ -6,11 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   TextInput, // ModernInput yerine saf TextInput kullanacağız (Layout kontrolü için)
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Save,
   ChevronLeft,

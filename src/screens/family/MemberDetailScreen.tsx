@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  SafeAreaView,
   Switch,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import QRCode from "react-native-qrcode-svg";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";

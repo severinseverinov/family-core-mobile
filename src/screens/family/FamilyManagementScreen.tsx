@@ -7,13 +7,13 @@ import {
   Image,
   TouchableOpacity,
   Alert,
-  SafeAreaView,
   Modal,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   UserPlus,
   Shield,

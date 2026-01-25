@@ -5,11 +5,11 @@ import {
   Text,
   StyleSheet,
   Alert,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { ChevronLeft, Package } from "lucide-react-native";
 import { useTheme } from "../../contexts/ThemeContext";
 import ModernInput from "../../components/ui/ModernInput";

@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   ActivityIndicator,
   Modal,
@@ -106,11 +105,14 @@ import {
 import {
   playStartWhistle,
   playShortWhistle,
-  playTick,
+  playTickOnce,
   initAudioAndRequestPermission,
   setSoundsEnabled,
 } from "../../utils/exerciseSounds";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  useSafeAreaInsets,
+  SafeAreaView,
+} from "react-native-safe-area-context";
 
 export default function ActiveDietScreen({ navigation }: any) {
   const { colors, themeMode, setThemeMode } = useTheme();
@@ -1278,7 +1280,6 @@ export default function ActiveDietScreen({ navigation }: any) {
             setReadingTimeLeft(10); // Sıfırla
             return 10;
           }
-          playTick().catch(() => {});
           return prev - 1;
         });
       }, 1000);
@@ -1294,6 +1295,23 @@ export default function ActiveDietScreen({ navigation }: any) {
     totalExerciseTime,
     remainingTime,
   ]);
+
+  // Okuma süresinde tik: her saniye yeniden başlat (ses dosyası 1 saniyeden kısa)
+  useEffect(() => {
+    if (!isReadingTime) return;
+    
+    // İlk tick'i hemen başlat
+    playTickOnce().catch(() => {});
+    
+    // Sonra her saniye tekrar başlat
+    const tickInterval = setInterval(() => {
+      playTickOnce().catch(() => {});
+    }, 1000);
+    
+    return () => {
+      clearInterval(tickInterval);
+    };
+  }, [isReadingTime]);
 
   // Okuma süresi animasyonu
   useEffect(() => {
@@ -7108,6 +7126,7 @@ export default function ActiveDietScreen({ navigation }: any) {
                   width: "100%",
                   flexDirection: "row",
                   justifyContent: "flex-end",
+                  paddingTop: 24,
                   marginBottom: 20,
                 }}
               >
