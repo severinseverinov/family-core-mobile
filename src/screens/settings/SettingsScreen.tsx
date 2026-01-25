@@ -128,6 +128,25 @@ export default function SettingsScreen() {
     }
   };
 
+  const permissionStatusLabel =
+    permissionStatus === "granted"
+      ? "Açık"
+      : permissionStatus === "denied"
+        ? "Kapalı"
+        : "İstenmedi";
+  const permissionStatusColor =
+    permissionStatus === "granted"
+      ? "#22c55e"
+      : permissionStatus === "denied"
+        ? "#ef4444"
+        : colors.textMuted;
+  const permissionStatusBg =
+    permissionStatus === "granted"
+      ? "#22c55e20"
+      : permissionStatus === "denied"
+        ? "#ef444420"
+        : colors.border + "40";
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -206,7 +225,7 @@ export default function SettingsScreen() {
                   ]}
                 >
                   <Bell
-                    size={22}
+                    size={18}
                     color={
                       permissionStatus === "granted"
                         ? "#22c55e"
@@ -216,10 +235,25 @@ export default function SettingsScreen() {
                     }
                   />
                 </View>
-                <View>
+                <View style={styles.permissionTitleRow}>
                   <Text style={[styles.permissionTitle, { color: colors.text }]}>
                     Bildirim izni
                   </Text>
+                  <View
+                    style={[
+                      styles.permissionStatusPill,
+                      { backgroundColor: permissionStatusBg },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.permissionStatusText,
+                        { color: permissionStatusColor },
+                      ]}
+                    >
+                      {permissionStatusLabel}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -263,7 +297,7 @@ export default function SettingsScreen() {
                     { borderColor: colors.primary },
                   ]}
                 >
-                  <ChevronRight size={18} color={colors.primary} />
+                  <ChevronRight size={16} color={colors.primary} />
                   <Text style={[styles.permissionBtnOutlineText, { color: colors.primary }]}>
                     Ayarlara git
                   </Text>
@@ -466,32 +500,45 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   permissionCard: {
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 20,
+    padding: 12,
+    marginBottom: 12,
   },
   permissionRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
   },
   permissionLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    gap: 12,
+    gap: 10,
   },
   permissionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
   permissionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
-    marginBottom: 4,
+  },
+  permissionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  permissionStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  permissionStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   permissionDesc: {
     fontSize: 13,
@@ -501,31 +548,31 @@ const styles = StyleSheet.create({
   permissionActions: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginTop: 14,
+    gap: 8,
+    marginTop: 10,
   },
   permissionBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   permissionBtnText: {
     color: "#fff",
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: 13,
   },
   permissionBtnOutline: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: 1,
   },
   permissionBtnOutlineText: {
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: 13,
   },
   notificationIconSection: {
     marginBottom: 20,
