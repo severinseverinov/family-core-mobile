@@ -114,7 +114,7 @@ export async function sendPushToFamily(params: {
   try {
     const { data: members } = await supabase
       .from("profiles")
-      .select("id, push_token")
+      .select("id, push_token, notification_settings")
       .eq("family_id", familyId);
 
     const filtered = (members || []).filter((m: any) => {
@@ -124,16 +124,34 @@ export async function sendPushToFamily(params: {
       return true;
     });
 
-    const tokens = filtered.map((m: any) => m.push_token);
-    if (tokens.length === 0) return;
+    if (filtered.length === 0) return;
 
-    const messages = tokens.map((token: string) => ({
-      to: token,
-      sound: "default",
-      title,
-      body,
-      data: { type: dataType },
-    }));
+    const messages = filtered.map((member: any) => {
+      const notifSettings = member.notification_settings || {};
+      const sound = notifSettings.sound === "silent" ? null : (notifSettings.sound || "default");
+      
+      const message: any = {
+        to: member.push_token,
+        title,
+        body,
+        data: {
+          type: dataType,
+          icon: notifSettings.icon || "users",
+          vibration: notifSettings.vibration !== false,
+        },
+      };
+
+      if (sound !== null) {
+        message.sound = sound;
+      }
+
+      // Badge ayarı
+      if (notifSettings.badge !== false) {
+        message.badge = 1;
+      }
+
+      return message;
+    });
 
     await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",

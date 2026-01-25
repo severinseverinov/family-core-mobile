@@ -4616,30 +4616,6 @@ export default function ActiveDietScreen({ navigation }: any) {
               style={{ maxHeight: "80%" }}
               showsVerticalScrollIndicator={false}
             >
-              {/* TEMA / GÖRÜNÜM MODU */}
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={[
-                    styles.settingsSectionLabel,
-                    { color: colors.textMuted },
-                  ]}
-                >
-                  Tema
-                </Text>
-                <SelectionGroup
-                  label="Görünüm Modu"
-                  options={[
-                    { label: "Aydınlık", value: "light" },
-                    { label: "Karanlık", value: "dark" },
-                    { label: "Renkli", value: "colorful" },
-                  ]}
-                  selectedValue={themeMode}
-                  onSelect={(val: string) =>
-                    setThemeMode(val as "light" | "dark" | "colorful")
-                  }
-                />
-              </View>
-
               {/* SU İÇME HATIRLATICISI */}
               <View
                 style={[
@@ -4810,61 +4786,6 @@ export default function ActiveDietScreen({ navigation }: any) {
                     ]}
                   >
                     <Plus size={18} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* EKRAN YERLEŞİMİ VE TÜM AYARLAR */}
-              <View
-                style={[
-                  styles.settingsItemContainer,
-                  {
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    marginTop: 12,
-                  },
-                ]}
-              >
-                <View style={styles.settingsItemRow}>
-                  <View style={styles.settingsItemLeft}>
-                    <View
-                      style={[
-                        styles.settingsIconCircleSmall,
-                        { backgroundColor: colors.primary + "20" },
-                      ]}
-                    >
-                      <Settings size={20} color={colors.primary} />
-                    </View>
-                    <View style={styles.settingsItemTextContainer}>
-                      <Text
-                        style={[
-                          styles.settingsItemTitleSmall,
-                          { color: colors.text },
-                        ]}
-                      >
-                        Ekran yerleşimi ve tüm ayarlar
-                      </Text>
-                      <Text
-                        style={[
-                          styles.settingsItemDescriptionSmall,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        Dil, para birimi, tema ve diğer tercihler
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setSettingsModalVisible(false);
-                      navigation.navigate("Settings");
-                    }}
-                    style={[
-                      styles.settingsActionButton,
-                      { backgroundColor: colors.primary },
-                    ]}
-                  >
-                    <ChevronRight size={20} color="#fff" />
                   </TouchableOpacity>
                 </View>
               </View>

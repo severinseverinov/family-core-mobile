@@ -262,7 +262,7 @@ export async function approveEvent(eventId: string) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, family_id")
     .eq("id", user.id)
     .single();
 
@@ -305,12 +305,6 @@ export async function approveEvent(eventId: string) {
   }
 
   // Tamamlayan kişiye bildirim gönder (onaylayan hariç)
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("family_id")
-    .eq("id", user.id)
-    .single();
-
   if (profile?.family_id && event.completed_by && event.completed_by !== user.id) {
     const { data: completer } = await supabase
       .from("profiles")
