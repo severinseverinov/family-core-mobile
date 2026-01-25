@@ -713,6 +713,8 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         options={[
           { label: "Dünya", value: "world" },
           { label: "Türk", value: "turkish" },
+          { label: "Kürt", value: "kurdish" },
+          { label: "Arap", value: "arab" },
           { label: "İtalyan", value: "italian" },
           { label: "Meksika", value: "mexican" },
           { label: "Asya", value: "asian" },

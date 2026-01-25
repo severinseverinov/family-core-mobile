@@ -69,8 +69,14 @@ export default function SettingsScreen() {
   const loadPrefs = async () => {
     const prefs = await getPreferences();
     if (prefs) {
-      setLang(prefs.preferred_language || "tr");
-      setCurrency(prefs.preferred_currency || "TL");
+      const defaultLang = "tr";
+      const defaultCurrency = "TL";
+
+      const nextLang = prefs.preferred_language || defaultLang;
+      const nextCurrency = prefs.preferred_currency || defaultCurrency;
+
+      setLang(nextLang);
+      setCurrency(nextCurrency);
       setThemeColor(prefs.theme_color || "blue");
       setWaterReminderEnabled(prefs.water_reminder_enabled || false);
       
@@ -80,6 +86,13 @@ export default function SettingsScreen() {
       setNotificationIcon(notifSettings.icon || "users");
       setNotificationVibration(notifSettings.vibration !== false);
       setNotificationBadge(notifSettings.badge !== false);
+
+      if (!prefs.preferred_language || !prefs.preferred_currency) {
+        updatePreferences({
+          language: nextLang,
+          currency: nextCurrency,
+        });
+      }
     }
   };
 
