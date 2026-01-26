@@ -93,6 +93,11 @@ export async function playShortWhistle(): Promise<void> {
   await playLocal(SHORT_WHISTLE, 800);
 }
 
+/** Geriye dönük uyum: tek tik sesi */
+export async function playTick(): Promise<void> {
+  await playTickOnce();
+}
+
 /** Tik sesi bir kez çal, **sadece** didJustFinish ile bittiğinde döner. Erken resolve = üst üste çalma. */
 export async function playTickOnce(): Promise<void> {
   if (!soundsEnabled) return;

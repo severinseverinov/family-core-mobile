@@ -50,7 +50,7 @@ export async function generateExercisePlan(input: {
     }
 
     const lang = input.language === "en" ? "English" : input.language === "de" ? "Deutsch" : "Türkçe";
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     // Ekipman tipi çevirisi
     const equipmentLabel = 
@@ -259,5 +259,25 @@ export async function deleteExercisePlan(planId: string): Promise<{ success: boo
     return { success: true, error: null };
   } catch (error: any) {
     return { success: false, error: error.message || "Egzersiz planı silinemedi" };
+  }
+}
+
+// Profile'a ait tüm egzersiz planlarını sil
+export async function deleteExercisePlansForProfile(
+  profileId: string
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from("exercise_plans")
+      .delete()
+      .eq("profile_id", profileId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || "Egzersiz planları silinemedi",
+    };
   }
 }

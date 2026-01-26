@@ -158,7 +158,7 @@ export async function ensureNotificationChannels(): Promise<void> {
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: "#FF231F7C",
-    enableVibration: true,
+    enableVibrate: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
   channelsCreated = true;

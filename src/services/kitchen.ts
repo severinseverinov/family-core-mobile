@@ -24,6 +24,38 @@ export function normalizeProductName(value: string) {
     .trim();
 }
 
+function parseQuantityValue(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const cleaned = String(value).replace(",", ".").replace(/[^0-9.]/g, "");
+  const num = parseFloat(cleaned);
+  return Number.isNaN(num) ? null : num;
+}
+
+function normalizeUnit(value?: string | null): string {
+  const unit = String(value || "").toLowerCase().trim();
+  if (!unit) return "";
+  if (unit === "kg" || unit === "kilogram") return "kg";
+  if (unit === "gr" || unit === "g" || unit === "gram") return "g";
+  if (unit === "lt" || unit === "l" || unit === "litre") return "l";
+  if (unit === "ml") return "ml";
+  if (unit === "adet" || unit === "ad" || unit === "pcs" || unit === "piece")
+    return "adet";
+  return unit;
+}
+
+function convertQuantity(
+  value: number,
+  fromUnit: string,
+  toUnit: string
+): number | null {
+  if (!fromUnit || !toUnit || fromUnit === toUnit) return value;
+  if (fromUnit === "g" && toUnit === "kg") return value * 0.001;
+  if (fromUnit === "kg" && toUnit === "g") return value * 1000;
+  if (fromUnit === "ml" && toUnit === "l") return value * 0.001;
+  if (fromUnit === "l" && toUnit === "ml") return value * 1000;
+  return null;
+}
+
 export function isProductMatch(source: string, target: string) {
   const a = normalizeProductName(source);
   const b = normalizeProductName(target);
@@ -59,7 +91,7 @@ async function updateKitchenBudget(familyId: string, amount: number) {
       month_key: monthKey,
       spent_amount: newSpent,
     },
-    { onConflict: "family_id, month_key" }
+    { onConflict: "family_id, month_key" },
   );
 }
 
@@ -84,8 +116,8 @@ export async function getInventoryAndBudget() {
 
   const [inv, shop, bud] = await Promise.all([
     supabase
-    .from("inventory")
-    .select("*")
+      .from("inventory")
+      .select("*")
       .eq("family_id", profile.family_id)
       .order("created_at", { ascending: false }),
     supabase
@@ -213,7 +245,7 @@ export async function approveInventoryItem(itemId: string) {
       .from("inventory")
       .update({ is_approved: true })
       .eq("id", itemId)
-    .eq("family_id", profile.family_id);
+      .eq("family_id", profile.family_id);
 
     if (error) return { success: false, error: error?.message };
 
@@ -258,7 +290,7 @@ async function notifyFamilyMembers(
   body: string,
   audience: "parents" | "members" = "parents",
   memberIds: string[] = [],
-  excludeUserId?: string // Kendi yaptığı işlemden bildirim almasın
+  excludeUserId?: string, // Kendi yaptığı işlemden bildirim almasın
 ) {
   try {
     const { data: members } = await supabase
@@ -333,7 +365,7 @@ export async function notifyMealPollPublished(payload: {
       payload.summary,
       payload.audience || "parents",
       payload.memberIds || [],
-      user.id // Yayınlayan kişi bildirim almasın
+      user.id, // Yayınlayan kişi bildirim almasın
     );
     return { success: true };
   } catch (error: any) {
@@ -365,21 +397,25 @@ export async function createMealPoll(input: {
 
     if (!profile?.family_id) return { error: "Aile bilgisi bulunamadı." };
 
-    const { data: newPoll, error } = await supabase.from("meal_polls").insert({
-      family_id: profile.family_id,
-      created_by: user.id,
-      title: input.title,
-      suggestions: input.suggestions,
-      missing_items: input.missingItems,
-      extra_notes: input.extraNotes || null,
-      end_at: input.endAt || null,
-      audience: input.audience,
-      member_ids: input.audience === "members" ? input.memberIds || [] : null,
-      meal_type: input.mealType || "cook",
-      is_approved: false,
-      is_active: true,
-      votes: {},
-    }).select().single();
+    const { data: newPoll, error } = await supabase
+      .from("meal_polls")
+      .insert({
+        family_id: profile.family_id,
+        created_by: user.id,
+        title: input.title,
+        suggestions: input.suggestions,
+        missing_items: input.missingItems,
+        extra_notes: input.extraNotes || null,
+        end_at: input.endAt || null,
+        audience: input.audience,
+        member_ids: input.audience === "members" ? input.memberIds || [] : null,
+        meal_type: input.mealType || "cook",
+        is_approved: false,
+        is_active: true,
+        votes: {},
+      })
+      .select()
+      .single();
 
     if (!error && newPoll) {
       await notifyFamilyMembers(
@@ -388,7 +424,7 @@ export async function createMealPoll(input: {
         "Yeni yemek anketi hazır.",
         input.audience,
         input.memberIds || [],
-        user.id // Anketi oluşturan kişi bildirim almasın
+        user.id, // Anketi oluşturan kişi bildirim almasın
       );
     }
 
@@ -414,11 +450,11 @@ export async function getActiveMealPoll() {
     if (!profile?.family_id) return { poll: null, error: "Aile bulunamadı." };
 
     const nowIso = new Date().toISOString();
-    
+
     // Önce aktif anketleri getir (onaylanmış veya onaylanmamış)
     const { data, error: queryError } = await supabase
       .from("meal_polls")
-    .select("*")
+      .select("*")
       .eq("family_id", profile.family_id)
       .eq("is_active", true)
       .or(`end_at.is.null,end_at.gte.${nowIso}`)
@@ -496,7 +532,9 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
 
     const { data: poll } = await supabase
       .from("meal_polls")
-      .select("id, family_id, audience, member_ids, votes, suggestions, created_by, is_active")
+      .select(
+        "id, family_id, audience, member_ids, votes, suggestions, created_by, is_active",
+      )
       .eq("id", pollId)
       .eq("family_id", profile.family_id)
       .single();
@@ -516,7 +554,7 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
     }
 
     const options = (poll.suggestions || []).map(
-      (item: any) => item.title || item
+      (item: any) => item.title || item,
     );
     if (!options.includes(optionTitle)) {
       return { error: "Seçenek bulunamadı." };
@@ -537,7 +575,7 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
     if (previousOption && previousOption !== optionTitle) {
       const prevEntry = votes[previousOption] || { count: 0, memberIds: [] };
       const filtered = (prevEntry.memberIds || []).filter(
-        (id: string) => id !== userId
+        (id: string) => id !== userId,
       );
       votes[previousOption] = {
         count: Math.max(0, (prevEntry.count || 0) - 1),
@@ -547,9 +585,7 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
 
     if (!previousOption || previousOption !== optionTitle) {
       const entry = votes[optionTitle] || { count: 0, memberIds: [] };
-      const nextIds = Array.from(
-        new Set([...(entry.memberIds || []), userId])
-      );
+      const nextIds = Array.from(new Set([...(entry.memberIds || []), userId]));
       votes[optionTitle] = {
         count: (entry.count || 0) + 1,
         memberIds: nextIds,
@@ -560,7 +596,7 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
       .from("meal_polls")
       .update({ votes })
       .eq("id", pollId)
-    .eq("family_id", profile.family_id);
+      .eq("family_id", profile.family_id);
 
     if (error) {
       return { success: false, error: error.message };
@@ -569,7 +605,7 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
     // Oy verdikten sonra herkes oy verdi mi kontrol et
     if (poll.is_active) {
       let targetMemberIds: string[] = [];
-      
+
       if (poll.audience === "parents") {
         // Ebeveynlerin ID'lerini al
         const { data: parents } = await supabase
@@ -591,7 +627,8 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
       });
 
       // Herkes oy verdi mi kontrol et
-      const allVoted = targetMemberIds.length > 0 && 
+      const allVoted =
+        targetMemberIds.length > 0 &&
         targetMemberIds.every(id => votedMemberIds.has(id));
 
       if (allVoted) {
@@ -608,7 +645,7 @@ export async function submitMealPollVote(pollId: string, optionTitle: string) {
           "Ankette herkes oy verdi. Sonuçları onaylayabilirsiniz.",
           "members",
           [poll.created_by],
-          profile.id // Oy veren kişi bildirim almasın
+          profile.id, // Oy veren kişi bildirim almasın
         );
       }
     }
@@ -636,9 +673,9 @@ export async function approveMealPoll(pollId: string) {
 
     const { data: poll } = await supabase
       .from("meal_polls")
-    .select("*")
+      .select("*")
       .eq("id", pollId)
-    .eq("family_id", profile.family_id)
+      .eq("family_id", profile.family_id)
       .single();
 
     if (!poll) return { error: "Anket bulunamadı." };
@@ -670,10 +707,10 @@ export async function approveMealPoll(pollId: string) {
     }
 
     let matchedSuggestion = (poll.suggestions || []).find(
-      (item: any) => (item.title || item) === winningTitle
+      (item: any) => (item.title || item) === winningTitle,
     );
     let missingItems = matchedSuggestion?.missing || [];
-    
+
     // Eğer manuel anketten geliyorsa (missing array boş), AI ile tarif ve eksik malzemeleri bul
     if (missingItems.length === 0 && geminiApiKey) {
       try {
@@ -684,30 +721,30 @@ export async function approveMealPoll(pollId: string) {
           .eq("family_id", profile.family_id)
           .eq("is_approved", true)
           .limit(80);
-        
+
         const inventoryItems = (inventoryData || []).map((item: any) => ({
           product_name: item.product_name,
           quantity: item.quantity,
           unit: item.unit,
           category: item.category,
         }));
-        
+
         // Kullanıcı dilini al
         const { data: userProfile } = await supabase
           .from("profiles")
           .select("language")
           .eq("id", user.id)
           .single();
-        
+
         const aiResult = await getMealRecipeAndMissingItems(
           winningTitle,
           inventoryItems,
-          userProfile?.language || "tr"
+          userProfile?.language || "tr",
         );
-        
+
         if (!aiResult.error) {
           missingItems = aiResult.missing || [];
-          
+
           // Anketi güncelle - suggestions array'inde bu yemeğin missing ve recipe bilgilerini ekle
           const updatedSuggestions = (poll.suggestions || []).map((s: any) => {
             const sTitle = s.title || s;
@@ -720,7 +757,7 @@ export async function approveMealPoll(pollId: string) {
             }
             return s;
           });
-          
+
           // Anketi güncelle (missing ve recipe bilgileriyle)
           await supabase
             .from("meal_polls")
@@ -732,7 +769,7 @@ export async function approveMealPoll(pollId: string) {
         console.warn("AI ile eksik malzeme bulunamadı:", aiError);
       }
     }
-    
+
     for (const name of missingItems) {
       await supabase.from("shopping_list").insert({
         family_id: profile.family_id,
@@ -768,7 +805,7 @@ export async function approveMealPoll(pollId: string) {
         `Eksik ürünler listeye eklendi: ${missingItems.join(", ")}`,
         poll.audience === "members" ? "members" : "parents",
         poll.member_ids || [],
-        user.id // Onaylayan kişi bildirim almasın
+        user.id, // Onaylayan kişi bildirim almasın
       );
     }
 
@@ -778,7 +815,10 @@ export async function approveMealPoll(pollId: string) {
   }
 }
 
-export async function deleteMealPoll(pollId: string, skipOwnerCheck: boolean = false) {
+export async function deleteMealPoll(
+  pollId: string,
+  skipOwnerCheck: boolean = false,
+) {
   try {
     const {
       data: { user },
@@ -801,12 +841,14 @@ export async function deleteMealPoll(pollId: string, skipOwnerCheck: boolean = f
       .single();
 
     if (!poll) return { error: "Anket bulunamadı." };
-    
-    // Eğer skipOwnerCheck false ise ve kullanıcı anketi oluşturan kişi değilse, 
+
+    // Eğer skipOwnerCheck false ise ve kullanıcı anketi oluşturan kişi değilse,
     // sadece owner/admin ise silme izni ver
     if (!skipOwnerCheck && poll.created_by !== user.id) {
       if (!["owner", "admin"].includes(profile.role || "")) {
-        return { error: "Bu anketi sadece oluşturan kişi veya yönetici silebilir." };
+        return {
+          error: "Bu anketi sadece oluşturan kişi veya yönetici silebilir.",
+        };
       }
     }
 
@@ -865,7 +907,7 @@ export async function endMealPoll(pollId: string) {
 export async function reduceInventoryQuantity(
   productName: string,
   usedQuantity: number,
-  usedUnit: string
+  usedUnit: string,
 ) {
   try {
     const {
@@ -894,7 +936,7 @@ export async function reduceInventoryQuantity(
 
     // Ürün adına göre eşleşen ürünleri bul
     const matchedItems = inventoryItems.filter((item: any) =>
-      isProductMatch(item.product_name, productName)
+      isProductMatch(item.product_name, productName),
     );
 
     if (matchedItems.length === 0) {
@@ -902,7 +944,8 @@ export async function reduceInventoryQuantity(
     }
 
     // Kullanılan miktarı birimlere göre dönüştür (basit dönüşüm)
-    const results: Array<{ id: string; reduced: number; remaining: number }> = [];
+    const results: Array<{ id: string; reduced: number; remaining: number }> =
+      [];
 
     for (const item of matchedItems) {
       const currentQty = Number(item.quantity) || 0;
@@ -911,28 +954,48 @@ export async function reduceInventoryQuantity(
 
       // Birim dönüşümü: kullanılan miktarı envanter birimine dönüştür
       let convertedUsedQty = usedQuantity;
-      
+
       if (usedUnitLower !== itemUnit) {
         // Gram -> Kilogram (1 gr = 0.001 kg)
-        if ((usedUnitLower === "gr" || usedUnitLower === "g") && (itemUnit === "kg" || itemUnit === "kilogram")) {
+        if (
+          (usedUnitLower === "gr" || usedUnitLower === "g") &&
+          (itemUnit === "kg" || itemUnit === "kilogram")
+        ) {
           convertedUsedQty = usedQuantity * 0.001;
         }
         // Kilogram -> Gram (1 kg = 1000 gr)
-        else if ((usedUnitLower === "kg" || usedUnitLower === "kilogram") && (itemUnit === "gr" || itemUnit === "g")) {
+        else if (
+          (usedUnitLower === "kg" || usedUnitLower === "kilogram") &&
+          (itemUnit === "gr" || itemUnit === "g")
+        ) {
           convertedUsedQty = usedQuantity * 1000;
         }
         // Mililitre -> Litre (1 ml = 0.001 lt)
-        else if ((usedUnitLower === "ml") && (itemUnit === "lt" || itemUnit === "litre" || itemUnit === "l")) {
+        else if (
+          usedUnitLower === "ml" &&
+          (itemUnit === "lt" || itemUnit === "litre" || itemUnit === "l")
+        ) {
           convertedUsedQty = usedQuantity * 0.001;
         }
         // Litre -> Mililitre (1 lt = 1000 ml)
-        else if ((usedUnitLower === "lt" || usedUnitLower === "litre" || usedUnitLower === "l") && (itemUnit === "ml")) {
+        else if (
+          (usedUnitLower === "lt" ||
+            usedUnitLower === "litre" ||
+            usedUnitLower === "l") &&
+          itemUnit === "ml"
+        ) {
           convertedUsedQty = usedQuantity * 1000;
         }
         // Aynı birimler farklı yazılmışsa (adet, ad, piece, pcs) - dönüşüm yok
         else if (
-          (usedUnitLower === "adet" || usedUnitLower === "ad" || usedUnitLower === "piece" || usedUnitLower === "pcs") &&
-          (itemUnit === "adet" || itemUnit === "ad" || itemUnit === "piece" || itemUnit === "pcs")
+          (usedUnitLower === "adet" ||
+            usedUnitLower === "ad" ||
+            usedUnitLower === "piece" ||
+            usedUnitLower === "pcs") &&
+          (itemUnit === "adet" ||
+            itemUnit === "ad" ||
+            itemUnit === "piece" ||
+            itemUnit === "pcs")
         ) {
           convertedUsedQty = usedQuantity;
         }
@@ -953,7 +1016,7 @@ export async function reduceInventoryQuantity(
           .update({ quantity: newQty })
           .eq("id", item.id)
           .eq("family_id", profile.family_id);
-        
+
         results.push({
           id: item.id,
           reduced: reduceAmount,
@@ -966,7 +1029,7 @@ export async function reduceInventoryQuantity(
           .delete()
           .eq("id", item.id)
           .eq("family_id", profile.family_id);
-        
+
         results.push({
           id: item.id,
           reduced: currentQty,
@@ -992,7 +1055,7 @@ export async function updateMealPoll(
     audience: "parents" | "members";
     memberIds?: string[];
     mealType?: "cook" | "delivery" | "restaurant";
-  }
+  },
 ) {
   try {
     const {
@@ -1039,7 +1102,11 @@ export async function updateMealPoll(
       .select()
       .single();
 
-    return { success: !error, poll: updatedPoll || null, error: error?.message };
+    return {
+      success: !error,
+      poll: updatedPoll || null,
+      error: error?.message,
+    };
   } catch (error: any) {
     return { error: error.message };
   }
@@ -1053,7 +1120,7 @@ export async function updateInventoryItem(
     price: string | number;
     category?: string;
     unit?: string;
-  }
+  },
 ) {
   try {
     const {
@@ -1101,7 +1168,7 @@ export async function updateInventoryItem(
 // 1.d Stoktaki ürünü sil
 export async function deleteInventoryItem(
   itemId: string,
-  reason: "consumed" | "mistake" = "consumed"
+  reason: "consumed" | "mistake" = "consumed",
 ) {
   try {
     const {
@@ -1122,7 +1189,7 @@ export async function deleteInventoryItem(
       .select("quantity, last_price")
       .eq("id", itemId)
       .eq("family_id", profile.family_id)
-    .maybeSingle();
+      .maybeSingle();
 
     if (reason === "mistake" && item) {
       const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
@@ -1151,7 +1218,7 @@ export async function addShoppingItem(
   quantity: number,
   unit: string,
   marketName?: string,
-  isUrgent: boolean = false
+  isUrgent: boolean = false,
 ) {
   try {
     const {
@@ -1260,9 +1327,9 @@ export async function generateMealSuggestionsAI(input: {
         language === "English"
           ? "Inventory is empty. Please add items to get suggestions."
           : language === "Deutsch"
-          ? "Der Bestand ist leer. Bitte fügen Sie Produkte hinzu."
-          : "Stok boş. Öneri için önce ürün ekleyin.";
-  return {
+            ? "Der Bestand ist leer. Bitte fügen Sie Produkte hinzu."
+            : "Stok boş. Öneri için önce ürün ekleyin.";
+      return {
         groups: input.groups.map(group => ({
           label: group.label,
           suggestions: [emptyMessage],
@@ -1270,7 +1337,7 @@ export async function generateMealSuggestionsAI(input: {
       };
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
     const prompt = `You are a meal suggestion assistant.
 Respond strictly in ${language}.
 
@@ -1335,7 +1402,7 @@ export async function getMealRecipeAndMissingItems(
     unit?: string;
     category?: string;
   }>,
-  language?: string
+  language?: string,
 ) {
   try {
     if (!geminiApiKey) {
@@ -1353,7 +1420,7 @@ export async function getMealRecipeAndMissingItems(
       })
       .join("\n");
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
     const prompt = `You are a meal assistant. Respond strictly in ${lang}.
 
 Meal name: "${mealTitle}"
@@ -1380,9 +1447,11 @@ Return ONLY the JSON, no other text.`;
       .replace(/```json|```/g, "")
       .trim();
     const parsed = JSON.parse(text);
-    
+
     return {
-      missing: Array.isArray(parsed?.missing) ? parsed.missing.map((m: any) => String(m)) : [],
+      missing: Array.isArray(parsed?.missing)
+        ? parsed.missing.map((m: any) => String(m))
+        : [],
       recipe: String(parsed?.recipe || ""),
     };
   } catch (error: any) {
@@ -1413,26 +1482,33 @@ export async function generateDietPlan(input: {
     if (!geminiApiKey) {
       return { error: "Gemini API key tanımlı değil." };
     }
-    
+
     const lang = resolveMealLanguage(input.language);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
     // BMI'ye göre hedef belirle
     let goal = "";
     let calorieTarget = "";
     let dietType = "";
-    
+
     if (input.bmi < 18.5) {
-      goal = lang === "English" ? "weight gain" : lang === "Deutsch" ? "Gewichtszunahme" : "kilo alma";
+      goal =
+        lang === "English"
+          ? "weight gain"
+          : lang === "Deutsch"
+            ? "Gewichtszunahme"
+            : "kilo alma";
       // Yaş ve cinsiyete göre bazal metabolizma hızı (BMR) hesapla
       let baseCalories = 2000; // Varsayılan
       if (input.age && input.gender) {
         if (input.gender === "female" || input.gender === "kadın") {
           // Kadınlar için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş - 161
-          baseCalories = 10 * input.weight + 6.25 * input.height - 5 * input.age - 161;
+          baseCalories =
+            10 * input.weight + 6.25 * input.height - 5 * input.age - 161;
         } else if (input.gender === "male" || input.gender === "erkek") {
           // Erkekler için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş + 5
-          baseCalories = 10 * input.weight + 6.25 * input.height - 5 * input.age + 5;
+          baseCalories =
+            10 * input.weight + 6.25 * input.height - 5 * input.age + 5;
         }
         // Orta seviye aktivite için TDEE = BMR × 1.55
         baseCalories = baseCalories * 1.55;
@@ -1443,16 +1519,23 @@ export async function generateDietPlan(input: {
       calorieTarget = String(Math.round(baseCalories + 400));
       dietType = "weight_gain";
     } else if (input.bmi >= 25) {
-      goal = lang === "English" ? "weight loss" : lang === "Deutsch" ? "Gewichtsverlust" : "kilo verme";
+      goal =
+        lang === "English"
+          ? "weight loss"
+          : lang === "Deutsch"
+            ? "Gewichtsverlust"
+            : "kilo verme";
       // Yaş ve cinsiyete göre bazal metabolizma hızı (BMR) hesapla
       let baseCalories = 2000; // Varsayılan
       if (input.age && input.gender) {
         if (input.gender === "female" || input.gender === "kadın") {
           // Kadınlar için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş - 161
-          baseCalories = 10 * input.weight + 6.25 * input.height - 5 * input.age - 161;
+          baseCalories =
+            10 * input.weight + 6.25 * input.height - 5 * input.age - 161;
         } else if (input.gender === "male" || input.gender === "erkek") {
           // Erkekler için: BMR = 10 × kilo + 6.25 × boy - 5 × yaş + 5
-          baseCalories = 10 * input.weight + 6.25 * input.height - 5 * input.age + 5;
+          baseCalories =
+            10 * input.weight + 6.25 * input.height - 5 * input.age + 5;
         }
         // Orta seviye aktivite için TDEE = BMR × 1.55
         baseCalories = baseCalories * 1.55;
@@ -1464,38 +1547,73 @@ export async function generateDietPlan(input: {
       dietType = "weight_loss";
     } else {
       // Normal BMI - diyet gerekmez
-      return { 
-        needsDiet: false, 
-        message: lang === "English" 
-          ? "Your BMI is in the healthy range. No special diet plan needed. Maintain your current eating habits."
-          : lang === "Deutsch"
-          ? "Ihr BMI liegt im gesunden Bereich. Kein spezieller Diätplan erforderlich. Behalten Sie Ihre aktuellen Essgewohnheiten bei."
-          : "BMI değeriniz sağlıklı aralıkta. Özel bir diyet programına gerek yok. Mevcut beslenme alışkanlıklarınızı sürdürün."
+      return {
+        needsDiet: false,
+        message:
+          lang === "English"
+            ? "Your BMI is in the healthy range. No special diet plan needed. Maintain your current eating habits."
+            : lang === "Deutsch"
+              ? "Ihr BMI liegt im gesunden Bereich. Kein spezieller Diätplan erforderlich. Behalten Sie Ihre aktuellen Essgewohnheiten bei."
+              : "BMI değeriniz sağlıklı aralıkta. Özel bir diyet programına gerek yok. Mevcut beslenme alışkanlıklarınızı sürdürün.",
       };
     }
-    
+
     // Başlangıç ve bitiş tarihlerini hesapla
     let startDate = input.startDate ? new Date(input.startDate) : new Date();
     let endDate = input.endDate ? new Date(input.endDate) : null;
-    
+
     // Eğer endDate yoksa, başlangıç tarihinden itibaren bir sonraki Pazartesi'yi bul
     if (!endDate) {
-      const nextMonday = startOfWeek(addDays(startDate, 7), { weekStartsOn: 1 });
+      const nextMonday = startOfWeek(addDays(startDate, 7), {
+        weekStartsOn: 1,
+      });
       endDate = nextMonday;
     }
-    
+
     // Gün sayısını hesapla
-    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const numDays = Math.min(7, Math.max(1, daysDiff)); // En az 1, en fazla 7 gün
-    
+    const daysDiff =
+      Math.ceil(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+      ) + 1;
+    const numDays = Math.min(8, Math.max(1, daysDiff)); // En az 1, en fazla 8 gün (bugün + gelecek Pazartesi dahil)
+
     // Gün isimlerini oluştur
-    const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-    const dayNamesTR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
-    const dayNamesDE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
-    
-    const dayNameList = lang === "English" ? dayNames : lang === "Deutsch" ? dayNamesDE : dayNamesTR;
+    const dayNames = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+    const dayNamesTR = [
+      "Pazartesi",
+      "Salı",
+      "Çarşamba",
+      "Perşembe",
+      "Cuma",
+      "Cumartesi",
+      "Pazar",
+    ];
+    const dayNamesDE = [
+      "Montag",
+      "Dienstag",
+      "Mittwoch",
+      "Donnerstag",
+      "Freitag",
+      "Samstag",
+      "Sonntag",
+    ];
+
+    const dayNameList =
+      lang === "English"
+        ? dayNames
+        : lang === "Deutsch"
+          ? dayNamesDE
+          : dayNamesTR;
     const startDayIndex = startDate.getDay() === 0 ? 6 : startDate.getDay() - 1; // Pazartesi = 0
-    
+
     // Günlük program için gün listesi oluştur
     const daysList = [];
     for (let i = 0; i < numDays; i++) {
@@ -1505,22 +1623,46 @@ export async function generateDietPlan(input: {
         date: format(addDays(startDate, i), "yyyy-MM-dd"),
       });
     }
-    
+
     // Masraf tercihi çevirisi
-    const budgetLabel = 
-      input.budgetPreference === "affordable" 
-        ? (lang === "English" ? "affordable" : lang === "Deutsch" ? "günstig" : "uygun")
+    const budgetLabel =
+      input.budgetPreference === "affordable"
+        ? lang === "English"
+          ? "affordable"
+          : lang === "Deutsch"
+            ? "günstig"
+            : "uygun"
         : input.budgetPreference === "expensive"
-        ? (lang === "English" ? "expensive" : lang === "Deutsch" ? "teuer" : "pahalı")
-        : (lang === "English" ? "moderate" : lang === "Deutsch" ? "mittel" : "orta");
-    
+          ? lang === "English"
+            ? "expensive"
+            : lang === "Deutsch"
+              ? "teuer"
+              : "pahalı"
+          : lang === "English"
+            ? "moderate"
+            : lang === "Deutsch"
+              ? "mittel"
+              : "orta";
+
     // Zorluk tercihi çevirisi
-    const difficultyLabel = 
+    const difficultyLabel =
       input.difficultyPreference === "easy"
-        ? (lang === "English" ? "easy" : lang === "Deutsch" ? "einfach" : "kolay")
+        ? lang === "English"
+          ? "easy"
+          : lang === "Deutsch"
+            ? "einfach"
+            : "kolay"
         : input.difficultyPreference === "difficult"
-        ? (lang === "English" ? "difficult" : lang === "Deutsch" ? "schwierig" : "zor")
-        : (lang === "English" ? "moderate" : lang === "Deutsch" ? "mittel" : "orta");
+          ? lang === "English"
+            ? "difficult"
+            : lang === "Deutsch"
+              ? "schwierig"
+              : "zor"
+          : lang === "English"
+            ? "moderate"
+            : lang === "Deutsch"
+              ? "mittel"
+              : "orta";
 
     const prompt = `You are a nutritionist and dietitian. Respond strictly in ${lang}.
 
@@ -1567,7 +1709,9 @@ Return ONLY a JSON object in this exact format:
     "start_date": "${format(startDate, "yyyy-MM-dd")}",
     "end_date": "${format(endDate, "yyyy-MM-dd")}",
     "daily_meal_plans": [
-${daysList.map((day, index) => `      {
+${daysList
+  .map(
+    (day, index) => `      {
         "date": "${day.date}",
         "day": "${day.day}",
         "meals": [
@@ -1602,7 +1746,9 @@ ${daysList.map((day, index) => `      {
             "calories": approximate calories for this meal
           }
         ]
-      }${index < daysList.length - 1 ? "," : ""}`).join("\n")}
+      }${index < daysList.length - 1 ? "," : ""}`,
+  )
+  .join("\n")}
     ]
   },
   "updated_preferences": {
@@ -1623,7 +1769,7 @@ Return ONLY the JSON, no other text.`;
       .replace(/```json|```/g, "")
       .trim();
     const parsed = JSON.parse(text);
-    
+
     return {
       needsDiet: true,
       dietPlan: parsed.diet_plan || null,
@@ -1653,7 +1799,7 @@ export async function getShoppingListItems() {
     const { data } = await supabase
       .from("shopping_list")
       .select(
-        "id, product_name, quantity, unit, market_name, is_urgent, is_completed, is_checked"
+        "id, product_name, quantity, unit, market_name, is_urgent, is_completed, is_checked",
       )
       .eq("family_id", profile.family_id)
       .eq("is_completed", false)
@@ -1679,7 +1825,8 @@ export async function checkDietShoppingNeeds() {
       .eq("id", user.id)
       .single();
 
-    if (!profile?.family_id) return { success: false, error: "Aile bilgisi bulunamadı." };
+    if (!profile?.family_id)
+      return { success: false, error: "Aile bilgisi bulunamadı." };
 
     // Ailedeki tüm üyeleri getir
     const { data: members } = await supabase
@@ -1712,7 +1859,9 @@ export async function checkDietShoppingNeeds() {
       .eq("is_completed", false);
 
     const existingProductNames = new Set(
-      (existingShopping || []).map((item: any) => normalizeProductName(item.product_name))
+      (existingShopping || []).map((item: any) =>
+        normalizeProductName(item.product_name),
+      ),
     );
 
     let totalAdded = 0;
@@ -1720,7 +1869,7 @@ export async function checkDietShoppingNeeds() {
     // Her üye için kontrol et
     for (const member of members) {
       const mealPrefs = member.meal_preferences || {};
-      
+
       // Diyet aktif mi kontrol et
       if (!mealPrefs.diet_active || !mealPrefs.diet_start_date) {
         continue; // Diyet aktif değilse atla
@@ -1741,11 +1890,14 @@ export async function checkDietShoppingNeeds() {
 
       try {
         const lang = resolveMealLanguage(mealPrefs.language);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        
-        const goal = bmi < 18.5 ? "weight gain" : bmi >= 25 ? "weight loss" : "maintain";
+        const model = genAI.getGenerativeModel({
+          model: "gemini-3-flash-preview",
+        });
+
+        const goal =
+          bmi < 18.5 ? "weight gain" : bmi >= 25 ? "weight loss" : "maintain";
         const calorieTarget = mealPrefs.calories || "2000";
-        
+
         const prompt = `You are a nutritionist. Respond strictly in ${lang}.
 
 User profile:
@@ -1773,11 +1925,11 @@ Return ONLY the JSON array, no other text.`;
           .text()
           .replace(/```json|```/g, "")
           .trim();
-        
+
         let neededProducts: string[] = [];
         try {
           const parsed = JSON.parse(text);
-          neededProducts = Array.isArray(parsed) 
+          neededProducts = Array.isArray(parsed)
             ? parsed.map((p: any) => String(p).trim()).filter(Boolean)
             : [];
         } catch (parseError) {
@@ -1791,7 +1943,7 @@ Return ONLY the JSON array, no other text.`;
         // Shopping list'e ekle (sadece listede olmayanlar)
         for (const productName of neededProducts) {
           const normalizedName = normalizeProductName(productName);
-          
+
           // Zaten listede var mı kontrol et
           if (existingProductNames.has(normalizedName)) {
             continue;
@@ -1799,9 +1951,9 @@ Return ONLY the JSON array, no other text.`;
 
           // Envanterde var mı kontrol et
           const inInventory = inventoryItems.some((item: any) =>
-            isProductMatch(item.product_name, productName)
+            isProductMatch(item.product_name, productName),
           );
-          
+
           if (inInventory) {
             continue; // Envanterde varsa ekleme
           }
@@ -1825,7 +1977,10 @@ Return ONLY the JSON array, no other text.`;
           totalAdded++;
         }
       } catch (aiError: any) {
-        console.warn(`AI ile malzeme listesi oluşturulamadı (${member.full_name}):`, aiError);
+        console.warn(
+          `AI ile malzeme listesi oluşturulamadı (${member.full_name}):`,
+          aiError,
+        );
         continue;
       }
     }
@@ -1846,7 +2001,7 @@ export async function analyzeReceiptMobile(base64Image: string) {
     if (!geminiApiKey) {
       return { error: "Gemini API key tanımlı değil." };
     }
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Not: gemini-2.5-flash henüz genel erişimde olmayabilir, stabilite için 1.5-flash önerilir.
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" }); // Not: gemini-3-flash-preview henüz genel erişimde olmayabilir, stabilite için 1.5-flash önerilir.
     const prompt = `Bu bir market fişi. Lütfen fişteki ürünleri, fiyatları ve toplam tutarı analiz et.
       Sadece saf JSON formatında şu yapıda veri döndür:
       {
@@ -1941,7 +2096,6 @@ export async function saveReceiptFinal(receiptData: any) {
           last_price_currency: currency,
         });
       }
-
     }
 
     return { success: true };
@@ -1974,7 +2128,7 @@ export async function findMatchingShoppingItems(productNames: string[]) {
 
     const matches =
       (shopping || []).filter((item: any) =>
-        productNames.some(name => isProductMatch(name, item.product_name))
+        productNames.some(name => isProductMatch(name, item.product_name)),
       ) || [];
 
     return { matches };
@@ -2059,7 +2213,7 @@ export async function extractIngredientsFromDietPlan(dietPlan: any): Promise<{
       return { ingredients: [], error: "Gemini API key tanımlı değil." };
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     // Tüm yemekleri topla
     const allMeals: string[] = [];
@@ -2104,7 +2258,10 @@ Sadece JSON formatında döndür, başka bir şey yazma:
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const text = response.text().replace(/```json|```/g, "").trim();
+    const text = response
+      .text()
+      .replace(/```json|```/g, "")
+      .trim();
     const parsed = JSON.parse(text);
 
     return {
@@ -2112,15 +2269,22 @@ Sadece JSON formatında döndür, başka bir şey yazma:
       error: null,
     };
   } catch (error: any) {
-    return { ingredients: [], error: error.message || "Malzemeler çıkarılamadı." };
+    return {
+      ingredients: [],
+      error: error.message || "Malzemeler çıkarılamadı.",
+    };
   }
 }
 
 // Malzemeleri envanter ve market listesi ile karşılaştır
 export async function compareIngredientsWithInventory(
-  ingredients: Array<{ name: string; quantity: string; unit: string }>
+  ingredients: Array<{ name: string; quantity: string; unit: string }>,
 ): Promise<{
-  matched: Array<{ ingredient: any; inventoryItem: any }>;
+  matched: Array<{
+    ingredient: any;
+    inventoryItem: any;
+    source: "inventory" | "shopping";
+  }>;
   unmatched: Array<{ ingredient: any; reason: string }>;
   error: string | null;
 }> {
@@ -2157,33 +2321,76 @@ export async function compareIngredientsWithInventory(
     const inventoryItems = inventory || [];
     const shoppingItems = shoppingList || [];
 
-    const matched: Array<{ ingredient: any; inventoryItem: any }> = [];
+    const matched: Array<{
+      ingredient: any;
+      inventoryItem: any;
+      source: "inventory" | "shopping";
+    }> = [];
     const unmatched: Array<{ ingredient: any; reason: string }> = [];
 
     for (const ingredient of ingredients) {
       // Önce envanterde ara
       const inventoryMatch = inventoryItems.find((item: any) =>
-        isProductMatch(ingredient.name, item.product_name)
+        isProductMatch(ingredient.name, item.product_name),
       );
 
       if (inventoryMatch) {
-        matched.push({
+      const neededQty = parseQuantityValue(ingredient.quantity);
+      const invQty = parseQuantityValue(inventoryMatch.quantity);
+      const neededUnit = normalizeUnit(ingredient.unit);
+      const invUnit = normalizeUnit(inventoryMatch.unit);
+
+      if (neededQty !== null && invQty !== null && neededUnit && invUnit) {
+        const neededInInvUnit =
+          convertQuantity(neededQty, neededUnit, invUnit) ?? neededQty;
+        if (neededInInvUnit <= invQty) {
+          matched.push({
+            ingredient,
+            inventoryItem: inventoryMatch,
+            source: "inventory",
+          });
+          continue;
+        }
+
+        // Miktar yetersizse market listesinde var mı kontrol et
+        const shoppingMatch = shoppingItems.find((item: any) =>
+          isProductMatch(ingredient.name, item.product_name),
+        );
+        if (shoppingMatch) {
+          matched.push({
+            ingredient,
+            inventoryItem: shoppingMatch,
+            source: "shopping",
+          });
+          continue;
+        }
+
+        unmatched.push({
           ingredient,
-          inventoryItem: inventoryMatch,
+          reason: `Miktar yetersiz (mevcut: ${inventoryMatch.quantity} ${inventoryMatch.unit || ""})`,
         });
         continue;
       }
 
+      matched.push({
+        ingredient,
+        inventoryItem: inventoryMatch,
+        source: "inventory",
+      });
+      continue;
+      }
+
       // Sonra market listesinde ara
       const shoppingMatch = shoppingItems.find((item: any) =>
-        isProductMatch(ingredient.name, item.product_name)
+        isProductMatch(ingredient.name, item.product_name),
       );
 
-      if (shoppingMatch) {
-        matched.push({
-          ingredient,
-          inventoryItem: shoppingMatch,
-        });
+    if (shoppingMatch) {
+      matched.push({
+        ingredient,
+        inventoryItem: shoppingMatch,
+        source: "shopping",
+      });
         continue;
       }
 
@@ -2207,7 +2414,7 @@ export async function compareIngredientsWithInventory(
 // Market listesine malzeme ekle
 export async function addIngredientsToShoppingList(
   ingredients: Array<{ name: string; quantity: string; unit: string }>,
-  isUrgent: boolean = false
+  isUrgent: boolean = false,
 ): Promise<{ success: boolean; error: string | null; added: number }> {
   try {
     const {
@@ -2234,8 +2441,8 @@ export async function addIngredientsToShoppingList(
 
     const existingProductNames = new Set(
       (existingShopping || []).map((item: any) =>
-        normalizeProductName(item.product_name)
-      )
+        normalizeProductName(item.product_name),
+      ),
     );
 
     const isParent = ["owner", "admin"].includes(profile?.role || "");

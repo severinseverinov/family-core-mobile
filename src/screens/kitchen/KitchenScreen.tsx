@@ -36,7 +36,6 @@ import {
   addInventoryItem,
   updateInventoryItem,
   deleteInventoryItem,
-  toggleShoppingItem,
   analyzeReceiptMobile,
   findMatchingShoppingItems,
   isProductMatch,
@@ -384,6 +383,24 @@ export default function KitchenScreen({ navigation, route }: any) {
       parts.push(item.market_name);
     }
     return parts.join(" • ");
+  };
+
+  const getVisibleShoppingItems = () => {
+    return (data?.shoppingList || [])
+      .filter((item: any) => canSeeShoppingItem(item))
+      .filter((item: any) => {
+        const query = shoppingFilter.trim().toLowerCase();
+        if (!query) return true;
+        const name = String(item.product_name || "").toLowerCase();
+        const market = String(item.market_name || "").toLowerCase();
+        return name.includes(query) || market.includes(query);
+      })
+      .filter((item: any) => {
+        if (shoppingStatus === "all") return true;
+        if (shoppingStatus === "active") return !item.is_completed;
+        return item.is_completed;
+      })
+      .filter((item: any) => (shoppingUrgentOnly ? !!item.is_urgent : true));
   };
 
   const canSeeShoppingItem = (item: any) => {
@@ -1248,12 +1265,55 @@ export default function KitchenScreen({ navigation, route }: any) {
         </View>
 
             {/* Toplu işlem butonları */}
-            {shoppingSelectionMode && selectedShoppingItems.size > 0 && (
+            {shoppingSelectionMode && (
               <View style={{
                 marginBottom: 12,
                 paddingHorizontal: 8,
                 gap: 8,
               }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      borderRadius: 12,
+                      paddingVertical: 10,
+                      alignItems: "center",
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.card,
+                    }}
+                    onPress={() => {
+                      const visibleItems = getVisibleShoppingItems();
+                      setSelectedShoppingItems(
+                        new Set(visibleItems.map((item: any) => item.id)),
+                      );
+                    }}
+                  >
+                    <Text
+                      style={{ color: colors.text, fontWeight: "700", fontSize: 13 }}
+                    >
+                      Tümünü Seç
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      borderRadius: 12,
+                      paddingVertical: 10,
+                      alignItems: "center",
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.card,
+                    }}
+                    onPress={() => setSelectedShoppingItems(new Set())}
+                  >
+                    <Text
+                      style={{ color: colors.textMuted, fontWeight: "700", fontSize: 13 }}
+                    >
+                      Seçimi Temizle
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 <View style={{
                   flexDirection: "row",
                   gap: 8,
@@ -1261,35 +1321,16 @@ export default function KitchenScreen({ navigation, route }: any) {
                   <TouchableOpacity
                     style={{
                       flex: 1,
-                      backgroundColor: colors.primary,
+                      backgroundColor:
+                        selectedShoppingItems.size > 0
+                          ? colors.success || "#10b981"
+                          : colors.border,
                       borderRadius: 12,
                       paddingVertical: 12,
                       alignItems: "center",
                     }}
                     onPress={async () => {
-                      const itemIds = Array.from(selectedShoppingItems);
-                      for (const itemId of itemIds) {
-                        await toggleShoppingItem(itemId, true);
-                      }
-                      await loadData();
-                      setSelectedShoppingItems(new Set());
-                      setShoppingSelectionMode(false);
-                      Alert.alert("Başarılı", `${itemIds.length} ürün onaylandı.`);
-                    }}
-                  >
-                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>
-                      Onayla ({selectedShoppingItems.size})
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={{
-                      flex: 1,
-                      backgroundColor: colors.success || "#10b981",
-                      borderRadius: 12,
-                      paddingVertical: 12,
-                      alignItems: "center",
-                    }}
-                    onPress={async () => {
+                      if (selectedShoppingItems.size === 0) return;
                       const itemIds = Array.from(selectedShoppingItems);
                       const selectedItems = data?.shoppingList?.filter((item: any) => 
                         itemIds.includes(item.id)
@@ -1312,20 +1353,32 @@ export default function KitchenScreen({ navigation, route }: any) {
                       setShoppingSelectionMode(false);
                       Alert.alert("Başarılı", `${itemIds.length} ürün envantere eklendi.`);
                     }}
+                    disabled={selectedShoppingItems.size === 0}
                   >
-                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>
+                    <Text
+                      style={{
+                        color:
+                          selectedShoppingItems.size > 0 ? "#fff" : colors.textMuted,
+                        fontWeight: "700",
+                        fontSize: 13,
+                      }}
+                    >
                       Envantere Ekle
                     </Text>
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity
                   style={{
-                    backgroundColor: colors.error || "#ef4444",
+                    backgroundColor:
+                      selectedShoppingItems.size > 0
+                        ? colors.error || "#ef4444"
+                        : colors.border,
                     borderRadius: 12,
                     paddingVertical: 12,
                     alignItems: "center",
                   }}
                   onPress={async () => {
+                    if (selectedShoppingItems.size === 0) return;
                     Alert.alert(
                       "Ürünleri sil",
                       `Seçilen ${selectedShoppingItems.size} ürün listeden kaldırılsın mı?`,
@@ -1346,32 +1399,23 @@ export default function KitchenScreen({ navigation, route }: any) {
                       ]
                     );
                   }}
+                  disabled={selectedShoppingItems.size === 0}
                 >
-                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>
+                  <Text
+                    style={{
+                      color:
+                        selectedShoppingItems.size > 0 ? "#fff" : colors.textMuted,
+                      fontWeight: "700",
+                      fontSize: 13,
+                    }}
+                  >
                     Listeden Çıkar ({selectedShoppingItems.size})
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
             
-            {data?.shoppingList
-              .filter((item: any) => canSeeShoppingItem(item))
-              .filter((item: any) => {
-                const query = shoppingFilter.trim().toLowerCase();
-                if (!query) return true;
-                const name = String(item.product_name || "").toLowerCase();
-                const market = String(item.market_name || "").toLowerCase();
-                return name.includes(query) || market.includes(query);
-              })
-              .filter((item: any) => {
-                if (shoppingStatus === "all") return true;
-                if (shoppingStatus === "active") return !item.is_completed;
-                return item.is_completed;
-              })
-              .filter((item: any) =>
-                shoppingUrgentOnly ? !!item.is_urgent : true
-              )
-              .map((item: any) => (
+            {getVisibleShoppingItems().map((item: any) => (
                 <View
                   key={item.id}
                   style={[
@@ -1387,38 +1431,17 @@ export default function KitchenScreen({ navigation, route }: any) {
                 >
                   <TouchableOpacity
                     style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
-                    onPress={async () => {
-                      if (shoppingSelectionMode) {
-                        // Seçim modunda: checkbox'ı toggle et
-                        setSelectedShoppingItems(prev => {
-                          const next = new Set(prev);
-                          if (next.has(item.id)) {
-                            next.delete(item.id);
-                          } else {
-                            next.add(item.id);
-                          }
-                          return next;
-                        });
-                      } else {
-                        // Normal modda: onayla/onayı kaldır
-                        const result = await toggleShoppingItem(item.id, !item.is_completed);
-                        if (result?.success) {
-                          // State'i hemen güncelle
-                          setData((prev: any) => {
-                            if (!prev) return prev;
-                            return {
-                              ...prev,
-                              items: (prev.items || []).map((i: any) =>
-                                i.id === item.id
-                                  ? { ...i, is_completed: !item.is_completed }
-                                  : i
-                              ),
-                            };
-                          });
-                          // Veriyi yeniden yükle
-                          await loadData();
+                    onPress={() => {
+                      if (!shoppingSelectionMode) return;
+                      setSelectedShoppingItems(prev => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) {
+                          next.delete(item.id);
+                        } else {
+                          next.add(item.id);
                         }
-                      }
+                        return next;
+                      });
                     }}
                   >
                     {shoppingSelectionMode ? (
@@ -1427,12 +1450,13 @@ export default function KitchenScreen({ navigation, route }: any) {
                       ) : (
                         <Circle size={22} color={colors.border} />
                       )
-                    ) : item.is_completed ? (
-                      <CheckCircle2 size={22} color={colors.primary} />
-                    ) : (
-                      <Circle size={22} color={colors.border} />
-                    )}
-                    <View style={[styles.itemInfo, { marginLeft: 12, flex: 1 }]}>
+                    ) : null}
+                    <View
+                      style={[
+                        styles.itemInfo,
+                        { marginLeft: shoppingSelectionMode ? 12 : 0, flex: 1 },
+                      ]}
+                    >
                       <Text
                         style={[
                           styles.itemName,

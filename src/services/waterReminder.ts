@@ -1,6 +1,8 @@
 import { supabase } from "./supabase";
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+import { ensureNotificationChannels } from "./notifications";
 
 // Yaşa göre günlük su ihtiyacı hesapla (ml cinsinden)
 export function calculateDailyWaterNeed(age: number, weight?: number): number {
@@ -93,6 +95,7 @@ export async function scheduleWaterReminders(memberId: string, memberName: strin
           title: "💧 Su İçme Zamanı",
           body: `${memberName}, ${timeSlot.amount}ml su içmeyi unutma!`,
           sound: "default",
+          ...(Platform.OS === "android" ? { channelId: "important" } : {}),
           data: {
             type: "water_reminder",
             memberId,
@@ -124,6 +127,7 @@ export async function scheduleWaterReminders(memberId: string, memberName: strin
             title: "💧 Su İçme Zamanı",
             body: `${memberName}, ${timeSlot.amount}ml su içmeyi unutma!`,
             sound: "default",
+            ...(Platform.OS === "android" ? { channelId: "important" } : {}),
             data: {
               type: "water_reminder",
               memberId,
@@ -248,6 +252,10 @@ export async function setupWaterRemindersForFamily(enabled: boolean) {
     }
     if (finalStatus !== "granted") {
       return { success: false, error: "Bildirim izni gerekli." };
+    }
+
+    if (Platform.OS === "android") {
+      await ensureNotificationChannels();
     }
 
     // Her üye için bildirimleri ayarla

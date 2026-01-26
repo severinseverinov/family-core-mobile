@@ -21,7 +21,11 @@ import {
 } from "../../services/family";
 import { generateDietPlan } from "../../services/kitchen";
 import { saveDietPlan } from "../../services/dietPlans";
-import { generateExercisePlan, saveExercisePlan } from "../../services/exercisePlans";
+import {
+  generateExercisePlan,
+  saveExercisePlan,
+  deleteExercisePlansForProfile,
+} from "../../services/exercisePlans";
 import {
   ShieldAlert,
   Save,
@@ -550,7 +554,7 @@ export default function MemberDetailScreen({ route, navigation }: any) {
                 if (!value) {
                   Alert.alert(
                     "Egzersiz Programını Kapat",
-                    "Egzersiz programı özelliğini kapatmak istediğinizden emin misiniz?",
+                    "Egzersiz kapatılırsa mevcut egzersiz programları silinecektir.",
                     [
                       {
                         text: "İptal",
@@ -563,6 +567,16 @@ export default function MemberDetailScreen({ route, navigation }: any) {
                         text: "Kapat",
                         style: "destructive",
                         onPress: async () => {
+                          const deleteResult =
+                            await deleteExercisePlansForProfile(member.id);
+                          if (!deleteResult.success) {
+                            Alert.alert(
+                              "Hata",
+                              deleteResult.error ||
+                                "Egzersiz planları silinemedi.",
+                            );
+                            return;
+                          }
                           const updatedPrefs = {
                             ...mealPreferences,
                             exercise_enabled: false,
@@ -633,46 +647,6 @@ export default function MemberDetailScreen({ route, navigation }: any) {
             />
           </View>
 
-          {/* DİYET / EGZERSİZ PROGRAMI OLUŞTUR BUTONLARI */}
-          {mealPreferences.diet_enabled !== false && (
-            <TouchableOpacity
-              onPress={() => setDietModalVisible(true)}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 12,
-                backgroundColor: colors.primary + "20",
-                marginBottom: 8,
-              }}
-            >
-              <Apple size={18} color={colors.primary} style={{ marginRight: 8 }} />
-              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.primary }}>
-                7 Günlük Diyet Programı Oluştur
-              </Text>
-            </TouchableOpacity>
-          )}
-          {mealPreferences.exercise_enabled !== false && (
-            <TouchableOpacity
-              onPress={() => setExerciseModalVisible(true)}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 12,
-                backgroundColor: colors.primary + "20",
-              }}
-            >
-              <Activity size={18} color={colors.primary} style={{ marginRight: 8 }} />
-              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.primary }}>
-                Egzersiz Programı Oluştur
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
       )}
 

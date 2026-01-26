@@ -40,7 +40,7 @@ export interface DailyTrackingData {
 
 // Günlük takip verisini getir veya oluştur
 export async function getOrCreateDailyTracking(
-  date: string
+  date: string,
 ): Promise<{ data: DailyTracking | null; error: string | null }> {
   const {
     data: { user },
@@ -102,7 +102,7 @@ export async function getOrCreateDailyTracking(
 // Günlük takip verisini güncelle
 export async function updateDailyTracking(
   date: string,
-  updates: Partial<DailyTrackingData>
+  updates: Partial<DailyTrackingData>,
 ): Promise<{ success: boolean; error: string | null }> {
   const {
     data: { user },
@@ -146,7 +146,7 @@ export async function updateDailyTracking(
 // Günlük takip verisini direkt olarak set et (toplam değerler)
 export async function setDailyTracking(
   date: string,
-  data: DailyTrackingData
+  data: DailyTrackingData,
 ): Promise<{ success: boolean; error: string | null }> {
   const {
     data: { user },
@@ -181,7 +181,7 @@ export async function addDailyTrackingLog(
   type: "water" | "calories" | "exercise",
   amount: number,
   caloriesBurned?: number,
-  notes?: string
+  notes?: string,
 ): Promise<{ success: boolean; error: string | null; logId?: string }> {
   const {
     data: { user },
@@ -242,7 +242,7 @@ export async function addDailyTrackingLog(
 // Belirli bir tarih aralığındaki logları getir
 export async function getDailyTrackingLogs(
   startDate: string,
-  endDate: string
+  endDate: string,
 ): Promise<{ data: DailyTrackingLog[]; error: string | null }> {
   const {
     data: { user },
@@ -260,7 +260,7 @@ export async function getDailyTrackingLogs(
   if (error) return { data: [], error: error.message };
 
   return {
-    data: (data || []).map((log) => ({
+    data: (data || []).map(log => ({
       ...log,
       amount: Number(log.amount) || 0,
       calories_burned: Number(log.calories_burned) || 0,
@@ -272,7 +272,7 @@ export async function getDailyTrackingLogs(
 // Belirli bir tarih aralığındaki tracking verilerini getir
 export async function getDailyTrackingRange(
   startDate: string,
-  endDate: string
+  endDate: string,
 ): Promise<{ data: DailyTracking[]; error: string | null }> {
   const {
     data: { user },
@@ -290,7 +290,7 @@ export async function getDailyTrackingRange(
   if (error) return { data: [], error: error.message };
 
   return {
-    data: (data || []).map((tracking) => ({
+    data: (data || []).map(tracking => ({
       ...tracking,
       water: Number(tracking.water) || 0,
       calories: Number(tracking.calories) || 0,
@@ -305,7 +305,7 @@ export async function getDailyTrackingRange(
 export async function logWaterIntake(
   amount: number, // ml
   date?: string,
-  notes?: string
+  notes?: string,
 ): Promise<{ success: boolean; error: string | null }> {
   const targetDate = date || new Date().toISOString().split("T")[0];
   const result = await addDailyTrackingLog(
@@ -313,7 +313,7 @@ export async function logWaterIntake(
     "water",
     amount,
     undefined,
-    notes
+    notes,
   );
   return { success: result.success, error: result.error };
 }
@@ -322,7 +322,7 @@ export async function logWaterIntake(
 export async function logCalories(
   amount: number, // kcal
   date?: string,
-  notes?: string
+  notes?: string,
 ): Promise<{ success: boolean; error: string | null }> {
   const targetDate = date || new Date().toISOString().split("T")[0];
   const result = await addDailyTrackingLog(
@@ -330,7 +330,7 @@ export async function logCalories(
     "calories",
     amount,
     undefined,
-    notes
+    notes,
   );
   return { success: result.success, error: result.error };
 }
@@ -340,7 +340,7 @@ export async function logExercise(
   duration: number, // dakika
   caloriesBurned: number, // kcal
   date?: string,
-  notes?: string
+  notes?: string,
 ): Promise<{ success: boolean; error: string | null }> {
   const targetDate = date || new Date().toISOString().split("T")[0];
   const result = await addDailyTrackingLog(
@@ -348,7 +348,7 @@ export async function logExercise(
     "exercise",
     duration,
     caloriesBurned,
-    notes
+    notes,
   );
   return { success: result.success, error: result.error };
 }
@@ -356,7 +356,7 @@ export async function logExercise(
 // AI ile egzersiz kalori hesapla
 export async function getExerciseCalories(
   exerciseName: string,
-  durationMinutes: number
+  durationMinutes: number,
 ): Promise<{
   caloriesBurned: number | null;
   error: string | null;
@@ -377,7 +377,7 @@ export async function getExerciseCalories(
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const prompt = `Bir egzersiz verildi: "${exerciseName.trim()}" - ${durationMinutes} dakika süreyle yapıldı.
 
@@ -438,7 +438,7 @@ Sadece sayıyı ver, başka bir şey yazma.`;
 export async function getFoodDetailsWithCalories(
   foodName: string,
   isDrink: boolean = false,
-  userDetails?: string
+  userDetails?: string,
 ): Promise<{
   details: string | null;
   calories: number | null;
@@ -457,7 +457,7 @@ export async function getFoodDetailsWithCalories(
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     let prompt = "";
     if (isDrink) {
@@ -567,16 +567,14 @@ Eğer sadece bir seçenek varsa, o seçeneği ver.`;
 // AI ile yemek/içecek kalori hesapla (basit versiyon - geriye dönük uyumluluk için)
 export async function calculateCaloriesFromFoodName(
   foodName: string,
-  isDrink: boolean = false
+  isDrink: boolean = false,
 ): Promise<{ calories: number | null; error: string | null }> {
   const result = await getFoodDetailsWithCalories(foodName, isDrink);
   return { calories: result.calories, error: result.error };
 }
 
 // AI ile resimden yemek/içecek analizi yap
-export async function analyzeFoodFromImage(
-  imageBase64: string
-): Promise<{
+export async function analyzeFoodFromImage(imageBase64: string): Promise<{
   name: string | null;
   isDrink: boolean;
   details: string | null;
@@ -604,7 +602,7 @@ export async function analyzeFoodFromImage(
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const prompt = `Bu resimde bir yemek veya içecek görüyorum. Lütfen şunları belirle:
 
