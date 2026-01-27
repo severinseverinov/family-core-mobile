@@ -132,29 +132,31 @@ export default function DashboardScreen({ navigation }: any) {
           </View>
           {/* 1. HAVA DURUMU WIDGET */}
           <View style={styles.fullWidthWidget}>
-            <WeatherWidget selectedDate={selectedDate} />
             <View
               style={[
-                styles.sectionSeparator,
-                { backgroundColor: (colors.border || "#e5e7eb") + "50" },
+                styles.sectionCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
               ]}
-            />
+            >
+              <WeatherWidget selectedDate={selectedDate} />
+            </View>
           </View>
 
           {/* 2. TAKVİM WIDGET (GENİŞ) */}
           <View style={styles.fullWidthWidget}>
-            <CalendarWidget
-              events={events}
-              routines={routines}
-              selectedDate={selectedDate}
-              onDateChange={setSelectedDate}
-            />
             <View
               style={[
-                styles.sectionSeparator,
-                { backgroundColor: (colors.border || "#e5e7eb") + "50" },
+                styles.sectionCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
               ]}
-            />
+            >
+              <CalendarWidget
+                events={events}
+                routines={routines}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+              />
+            </View>
           </View>
 
           {/* 4. GÜNLÜK GÖREVLER BÖLÜMÜ */}
@@ -189,7 +191,10 @@ export default function DashboardScreen({ navigation }: any) {
             </View>
 
             <View
-              style={[styles.tasksContainer, { backgroundColor: colors.card }]}
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
             >
               <TasksWidget
                 initialItems={tasks}
@@ -215,12 +220,15 @@ export default function DashboardScreen({ navigation }: any) {
                     fontSize: 13,
                   }}
                 >
-                  Ekle
+                  Hatırlat
                 </Text>
               </TouchableOpacity>
             </View>
             <View
-              style={[styles.simpleContainer, { backgroundColor: colors.card }]}
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
             >
               {todoPreview.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>
@@ -322,12 +330,6 @@ export default function DashboardScreen({ navigation }: any) {
                 ))
               )}
             </View>
-            <View
-              style={[
-                styles.sectionSeparator,
-                { backgroundColor: (colors.border || "#e5e7eb") + "50" },
-              ]}
-            />
           </View>
 
           {/* 4. GÜNLÜK RUTİNLER / PROGRAM */}
@@ -344,7 +346,7 @@ export default function DashboardScreen({ navigation }: any) {
                     fontSize: 13,
                   }}
                 >
-                  Ekle
+                  Hatırlat
                 </Text>
               </TouchableOpacity>
             </View>
@@ -379,7 +381,10 @@ export default function DashboardScreen({ navigation }: any) {
               })}
             </View>
             <View
-              style={[styles.simpleContainer, { backgroundColor: colors.card }]}
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
             >
               {sortedRoutines.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>
@@ -407,12 +412,6 @@ export default function DashboardScreen({ navigation }: any) {
                 ))
               )}
             </View>
-            <View
-              style={[
-                styles.sectionSeparator,
-                { backgroundColor: (colors.border || "#e5e7eb") + "50" },
-              ]}
-            />
           </View>
 
         </ScrollView>
@@ -466,21 +465,24 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   fullWidthWidget: {
-    marginBottom: 18,
+    marginBottom: 16,
     paddingHorizontal: 0,
     width: "100%",
   },
-  sectionSeparator: {
-    height: 1,
-    marginTop: 14,
+  sectionCard: {
+    borderRadius: 24,
+    padding: 12,
+    borderWidth: 1,
     width: "100%",
   },
   tasksSection: {
-    marginTop: 5,
+    marginTop: 0,
+    marginBottom: 16,
     paddingHorizontal: 0,
   },
   simpleSection: {
-    marginTop: 4,
+    marginTop: 0,
+    marginBottom: 16,
     paddingHorizontal: 0,
   },
   sectionHeader: {
@@ -488,6 +490,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
+    marginTop: 6,
     paddingHorizontal: 0,
   },
   titleRow: {

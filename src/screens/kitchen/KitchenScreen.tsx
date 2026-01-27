@@ -85,6 +85,12 @@ export default function KitchenScreen({ navigation, route }: any) {
   const [shoppingSaving, setShoppingSaving] = useState(false);
   const [inventoryFilter, setInventoryFilter] = useState("");
   const [inventoryCategory, setInventoryCategory] = useState("Tümü");
+  const [inventorySelectionMode, setInventorySelectionMode] = useState(false);
+  const [selectedInventoryItems, setSelectedInventoryItems] = useState<
+    Set<string>
+  >(new Set());
+  const [inventoryFilterModalVisible, setInventoryFilterModalVisible] =
+    useState(false);
   const [shoppingFilter, setShoppingFilter] = useState("");
   const [shoppingStatus, setShoppingStatus] = useState<
     "all" | "active" | "done"
@@ -401,6 +407,21 @@ export default function KitchenScreen({ navigation, route }: any) {
         return item.is_completed;
       })
       .filter((item: any) => (shoppingUrgentOnly ? !!item.is_urgent : true));
+  };
+
+  const getVisibleInventoryItems = () => {
+    return (data?.items || [])
+      .filter((item: any) => {
+        const query = inventoryFilter.trim().toLowerCase();
+        if (!query) return true;
+        const name = String(item.product_name || "").toLowerCase();
+        const category = String(item.category || "").toLowerCase();
+        return name.includes(query) || category.includes(query);
+      })
+      .filter((item: any) => {
+        if (inventoryCategory === "Tümü") return true;
+        return item.category === inventoryCategory;
+      });
   };
 
   const canSeeShoppingItem = (item: any) => {
@@ -1067,64 +1088,280 @@ export default function KitchenScreen({ navigation, route }: any) {
                   onChangeText={setInventoryFilter}
                   placeholder="Ürün adı veya kategori"
                 />
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterRow}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginBottom: 12,
+                    paddingHorizontal: 8,
+                    gap: 8,
+                  }}
                 >
-                  {(
-                    [
-                      "Tümü",
-                      ...Array.from(
-                        new Set(
-                          (data?.items || [])
-                            .map((item: any) => item.category)
-                            .filter((value: any) => !!value)
-                        )
-                      ),
-                    ] as string[]
-                  ).map(category => {
-                    const isActive = inventoryCategory === category;
-                    return (
-          <TouchableOpacity
-                        key={category}
-                        style={[
-                          styles.filterChip,
-                          isActive && styles.filterChipActive,
-                          {
-                            backgroundColor: isActive
+                  <TouchableOpacity
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 10,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: inventorySelectionMode
+                        ? colors.primary
+                        : colors.border,
+                      backgroundColor: inventorySelectionMode
+                        ? colors.primary + "20"
+                        : colors.card,
+                      minWidth: 70,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    onPress={() => {
+                      if (inventorySelectionMode) {
+                        setSelectedInventoryItems(new Set());
+                      }
+                      setInventorySelectionMode(prev => !prev);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: inventorySelectionMode
+                          ? colors.primary
+                          : colors.text,
+                        fontWeight: "700",
+                        fontSize: 13,
+                      }}
+                    >
+                      {inventorySelectionMode ? "İptal" : "Seç"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingHorizontal: 16,
+                      paddingVertical: 10,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor:
+                        inventoryCategory !== "Tümü"
+                          ? colors.primary
+                          : colors.border,
+                      backgroundColor:
+                        inventoryCategory !== "Tümü"
+                          ? colors.primary + "20"
+                          : colors.card,
+                    }}
+                    onPress={() => setInventoryFilterModalVisible(true)}
+                  >
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                    >
+                      <Filter
+                        size={16}
+                        color={
+                          inventoryCategory !== "Tümü"
+                            ? colors.primary
+                            : colors.text
+                        }
+                      />
+                      <Text
+                        style={{
+                          color:
+                            inventoryCategory !== "Tümü"
                               ? colors.primary
-                              : colors.card,
-                            borderColor: isActive ? colors.primary : colors.border,
-                          },
-                        ]}
-                        onPress={() => setInventoryCategory(category)}
+                              : colors.text,
+                          fontWeight: "700",
+                          fontSize: 13,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {inventoryCategory === "Tümü"
+                          ? "Kategori"
+                          : inventoryCategory}
+                      </Text>
+                    </View>
+                    <ChevronDown
+                      size={16}
+                      color={
+                        inventoryCategory !== "Tümü"
+                          ? colors.primary
+                          : colors.text
+                      }
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {inventorySelectionMode && (
+                  <View
+                    style={{
+                      marginBottom: 12,
+                      paddingHorizontal: 8,
+                      gap: 8,
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          borderRadius: 12,
+                          paddingVertical: 10,
+                          alignItems: "center",
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          backgroundColor: colors.card,
+                        }}
+                        onPress={() => {
+                          const visibleItems = getVisibleInventoryItems();
+                          setSelectedInventoryItems(
+                            new Set(visibleItems.map((item: any) => item.id)),
+                          );
+                        }}
                       >
                         <Text
-                          style={[
-                            styles.filterChipText,
-                            { color: isActive ? "#fff" : colors.text },
-                          ]}
+                          style={{
+                            color: colors.text,
+                            fontWeight: "700",
+                            fontSize: 13,
+                          }}
                         >
-                          {category}
+                          Tümünü Seç
                         </Text>
-          </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                {data?.items
-                  .filter((item: any) => {
-                    const query = inventoryFilter.trim().toLowerCase();
-                    if (!query) return true;
-                    const name = String(item.product_name || "").toLowerCase();
-                    const category = String(item.category || "").toLowerCase();
-                    return name.includes(query) || category.includes(query);
-                  })
-                  .filter((item: any) => {
-                    if (inventoryCategory === "Tümü") return true;
-                    return item.category === inventoryCategory;
-                  })
-                  .map((item: any) => {
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          borderRadius: 12,
+                          paddingVertical: 10,
+                          alignItems: "center",
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          backgroundColor: colors.card,
+                        }}
+                        onPress={() => setSelectedInventoryItems(new Set())}
+                      >
+                        <Text
+                          style={{
+                            color: colors.textMuted,
+                            fontWeight: "700",
+                            fontSize: 13,
+                          }}
+                        >
+                          Seçimi Temizle
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          backgroundColor:
+                            selectedInventoryItems.size > 0
+                              ? colors.error || "#ef4444"
+                              : colors.border,
+                          borderRadius: 12,
+                          paddingVertical: 12,
+                          alignItems: "center",
+                        }}
+                        onPress={async () => {
+                          if (selectedInventoryItems.size === 0) return;
+                          Alert.alert(
+                            "Ürünleri sil",
+                            "Seçili ürünler tüketildi olarak işaretlensin mi?",
+                            [
+                              { text: "Vazgeç", style: "cancel" },
+                              {
+                                text: "Tüketildi",
+                                style: "destructive",
+                                onPress: async () => {
+                                  const ids = Array.from(selectedInventoryItems);
+                                  for (const id of ids) {
+                                    await deleteInventoryItem(id, "consumed");
+                                  }
+                                  await loadData();
+                                  setSelectedInventoryItems(new Set());
+                                  setInventorySelectionMode(false);
+                                  Alert.alert(
+                                    "Başarılı",
+                                    `${ids.length} ürün tüketildi.`,
+                                  );
+                                },
+                              },
+                            ],
+                          );
+                        }}
+                        disabled={selectedInventoryItems.size === 0}
+                      >
+                        <Text
+                          style={{
+                            color:
+                              selectedInventoryItems.size > 0
+                                ? "#fff"
+                                : colors.textMuted,
+                            fontWeight: "700",
+                            fontSize: 13,
+                          }}
+                        >
+                          Tüketildi
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          backgroundColor:
+                            selectedInventoryItems.size > 0
+                              ? colors.primary
+                              : colors.border,
+                          borderRadius: 12,
+                          paddingVertical: 12,
+                          alignItems: "center",
+                        }}
+                        onPress={async () => {
+                          if (selectedInventoryItems.size === 0) return;
+                          Alert.alert(
+                            "Ürünleri sil",
+                            "Seçili ürünler yanlışlıkla eklendi olarak kaldırılsın mı?",
+                            [
+                              { text: "Vazgeç", style: "cancel" },
+                              {
+                                text: "Yanlış eklendi",
+                                style: "destructive",
+                                onPress: async () => {
+                                  const ids = Array.from(selectedInventoryItems);
+                                  for (const id of ids) {
+                                    await deleteInventoryItem(id, "mistake");
+                                  }
+                                  await loadData();
+                                  setSelectedInventoryItems(new Set());
+                                  setInventorySelectionMode(false);
+                                  Alert.alert(
+                                    "Başarılı",
+                                    `${ids.length} ürün kaldırıldı.`,
+                                  );
+                                },
+                              },
+                            ],
+                          );
+                        }}
+                        disabled={selectedInventoryItems.size === 0}
+                      >
+                        <Text
+                          style={{
+                            color:
+                              selectedInventoryItems.size > 0
+                                ? "#fff"
+                                : colors.textMuted,
+                            fontWeight: "700",
+                            fontSize: 13,
+                          }}
+                        >
+                          Yanlış Eklendi
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {getVisibleInventoryItems().map((item: any) => {
                     const pending = item.is_approved === false;
                     return (
                       <View
@@ -1135,56 +1372,89 @@ export default function KitchenScreen({ navigation, route }: any) {
                           { backgroundColor: colors.card },
                         ]}
                       >
-                        <View style={styles.itemInfo}>
-                          <Text style={[styles.itemName, { color: colors.text }]}>
-                            {item.product_name}
-                          </Text>
-                          <Text
-                            style={[styles.itemDetail, { color: colors.textMuted }]}
-                          >
-                            {item.category}
-                          </Text>
-                          {pending ? (
-                            <View style={styles.pendingBadge}>
-                              <Text style={styles.pendingText}>Onay Bekliyor</Text>
-        </View>
+                        <TouchableOpacity
+                          style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+                          onPress={() => {
+                            if (!inventorySelectionMode) return;
+                            setSelectedInventoryItems(prev => {
+                              const next = new Set(prev);
+                              if (next.has(item.id)) {
+                                next.delete(item.id);
+                              } else {
+                                next.add(item.id);
+                              }
+                              return next;
+                            });
+                          }}
+                        >
+                          {inventorySelectionMode ? (
+                            selectedInventoryItems.has(item.id) ? (
+                              <CheckCircle2 size={22} color={colors.primary} />
+                            ) : (
+                              <Circle size={22} color={colors.border} />
+                            )
                           ) : null}
-                        </View>
+                          <View
+                            style={[
+                              styles.itemInfo,
+                              { marginLeft: inventorySelectionMode ? 12 : 0 },
+                            ]}
+                          >
+                            <Text style={[styles.itemName, { color: colors.text }]}>
+                              {item.product_name}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.itemDetail,
+                                { color: colors.textMuted },
+                              ]}
+                            >
+                              {item.category}
+                            </Text>
+                            {pending ? (
+                              <View style={styles.pendingBadge}>
+                                <Text style={styles.pendingText}>Onay Bekliyor</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        </TouchableOpacity>
                         <View style={styles.itemRight}>
                           <Text style={[styles.qtyText, { color: colors.primary }]}>
                             {item.quantity} {item.unit}
                           </Text>
-                          <View style={styles.itemActions}>
-                            {pending ? (
+                          {!inventorySelectionMode && (
+                            <View style={styles.itemActions}>
+                              {pending ? (
+                                <TouchableOpacity
+                                  style={[
+                                    styles.iconButton,
+                                    { borderColor: colors.primary },
+                                  ]}
+                                  onPress={() => handleApproveInventoryItem(item)}
+                                >
+                                  <CheckCircle2 size={16} color={colors.primary} />
+                                </TouchableOpacity>
+                              ) : null}
                               <TouchableOpacity
                                 style={[
                                   styles.iconButton,
-                                  { borderColor: colors.primary },
+                                  { borderColor: colors.border },
                                 ]}
-                                onPress={() => handleApproveInventoryItem(item)}
+                                onPress={() => handleEditInventoryItem(item)}
                               >
-                                <CheckCircle2 size={16} color={colors.primary} />
+                                <Edit2 size={16} color={colors.textMuted} />
                               </TouchableOpacity>
-                            ) : null}
-                            <TouchableOpacity
-                              style={[
-                                styles.iconButton,
-                                { borderColor: colors.border },
-                              ]}
-                              onPress={() => handleEditInventoryItem(item)}
-                            >
-                              <Edit2 size={16} color={colors.textMuted} />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[
-                                styles.iconButton,
-                                { borderColor: colors.border },
-                              ]}
-                              onPress={() => handleDeleteInventoryItem(item)}
-                            >
-                              <Trash2 size={16} color={colors.error} />
-                            </TouchableOpacity>
-                          </View>
+                              <TouchableOpacity
+                                style={[
+                                  styles.iconButton,
+                                  { borderColor: colors.border },
+                                ]}
+                                onPress={() => handleDeleteInventoryItem(item)}
+                              >
+                                <Trash2 size={16} color={colors.error} />
+                              </TouchableOpacity>
+                            </View>
+                          )}
                         </View>
                       </View>
                     );
@@ -3804,6 +4074,107 @@ export default function KitchenScreen({ navigation, route }: any) {
                   { backgroundColor: colors.primary },
                 ]}
                 onPress={() => setShoppingFilterModalVisible(false)}
+              >
+                <Text style={styles.modalButtonTextPrimary}>Tamam</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={inventoryFilterModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInventoryFilterModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 20,
+          }}
+          activeOpacity={1}
+          onPress={() => setInventoryFilterModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[
+              styles.modalCard,
+              isLight && styles.surfaceLift,
+              { backgroundColor: colors.card, width: "100%", maxWidth: 400 },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Kategori
+            </Text>
+            <Text
+              style={[
+                styles.modalHint,
+                { color: colors.textMuted, marginBottom: 8 },
+              ]}
+            >
+              Stok kategorisi seç
+            </Text>
+            <View
+              style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}
+            >
+              {(
+                [
+                  "Tümü",
+                  ...Array.from(
+                    new Set(
+                      (data?.items || [])
+                        .map((item: any) => item.category)
+                        .filter((value: any) => !!value),
+                    ),
+                  ),
+                ] as string[]
+              ).map(category => {
+                const isActive = inventoryCategory === category;
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    style={[
+                      styles.filterChip,
+                      isActive && styles.filterChipActive,
+                      {
+                        backgroundColor: isActive
+                          ? colors.primary
+                          : colors.card,
+                        borderColor: isActive ? colors.primary : colors.border,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minHeight: 44,
+                        paddingHorizontal: 10,
+                      },
+                    ]}
+                    onPress={() => setInventoryCategory(category)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        { color: isActive ? "#fff" : colors.text, textAlign: "center" },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {category}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.modalButtonPrimary,
+                  { backgroundColor: colors.primary },
+                ]}
+                onPress={() => setInventoryFilterModalVisible(false)}
               >
                 <Text style={styles.modalButtonTextPrimary}>Tamam</Text>
               </TouchableOpacity>
